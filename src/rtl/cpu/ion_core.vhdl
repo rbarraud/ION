@@ -1,20 +1,16 @@
 --------------------------------------------------------------------------------
 -- ion_core.vhdl -- MIPS32r2(tm) compatible CPU core
 --------------------------------------------------------------------------------
--- project:       ION (http://www.opencores.org/project,ion_cpu)
--- author:        Jose A. Ruiz (ja_rd@hotmail.com)
--- created:       Jan/11/2011
--- last modified: Jan/31/2014 (ja_rd@hotmail.com)
+-- This is the main project module. It contains the CPU plus the TCMs and caches
+-- if it is configured to have any. 
+-- The user does not need to tinker wth any modules at or below this level.
 --------------------------------------------------------------------------------
--- FIXME refactor comments!
---
--- Please read file /doc/ion_project.txt for usage instructions.
+-- FIXME add brief usge instructions.
+-- FIXME add reference to datasheet.
 --------------------------------------------------------------------------------
 --
---
---------------------------------------------------------------------------------
--- KNOWN BUGS:
---
+-- This is halffinished stuff; it should have at least one wishbone bridge for
+-- uncached data, necessary to hang peripherals on.
 --
 --------------------------------------------------------------------------------
 -- Copyright (C) 2014 Jose A. Ruiz
@@ -43,28 +39,26 @@
 
 library ieee;
 use ieee.std_logic_1164.all;
---use ieee.numeric_std.all;
 use ieee.std_logic_arith.all;
 use ieee.std_logic_unsigned.all;
 
-
 use work.ION_MAIN_PKG.all;
 
-use work.sim_params_pkg.all;
+
 
 entity ion_core is
     generic(
         -- Size of code TCM block in bytes. 
         -- Set to a power of 2 or to zero to disable code TCM.
-        TCM_CODE_SIZE : integer := 4096;
+        TCM_CODE_SIZE : integer := 2048;
         -- Contents of code TCM.
-        TCM_CODE_INIT : t_obj_code := obj_code; --zero_objcode(2048);
+        TCM_CODE_INIT : t_obj_code := zero_objcode(2048);
         
         -- Size of data TCM block in bytes.
         -- Set to a power of 2 or to zero to disable data TCM.
-        TCM_DATA_SIZE : integer := 512;
+        TCM_DATA_SIZE : integer := 2048;
         -- Contents of data TCM.
-        TCM_DATA_INIT : t_obj_code := zero_objcode(512);
+        TCM_DATA_INIT : t_obj_code := zero_objcode(2048);
         
         -- Size of data cache in lines. 
         -- Set to a power of 2 or 0 to disable the data cache.
@@ -83,14 +77,9 @@ entity ion_core is
         -- FIXME cache refill ports missing
         -- FIXME uncached wishbone ports missing
         
-        -- FIXME dummy port
-        MEM_MOSI_O          : out t_cpumem_mosi;
-        MEM_MISO_I          : in t_cpumem_miso;
-
-        -- Fixme this should be a Wishbone port
+        -- Fixme this should be a Wishbone port, not an ION port.
         DATA_WB_MOSI_O      : out t_cpumem_mosi;
         DATA_WB_MISO_I      : in t_cpumem_miso;
-
         
         IRQ_I               : in std_logic_vector(7 downto 0)
     );
@@ -339,18 +328,7 @@ begin
     -- FIXME Data uncached wishbone port missing.
     -- This needs to go to an arbiter.
     data_uc_wbone_miso.mwait <= '0';
-
-
-    -- FIXME there hould be a Wishbone bridge module here.
-    dummy_wbone_interface:
-    process(CLK_I)
-    begin
-        if CLK_I'event and CLK_I='1' then
-            wbone_mem_miso <= MEM_MISO_I;
-        end if;
-    end process dummy_wbone_interface;
-
-    MEM_MOSI_O <= data_cpu_mosi;
+    data_uc_wbone_miso.rd_data <= (others => '0');
 
 
 end architecture rtl;
