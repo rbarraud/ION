@@ -43,6 +43,7 @@ use ieee.std_logic_arith.all;
 use ieee.std_logic_unsigned.all;
 
 use work.ION_MAIN_PKG.all;
+use work.ION_WISHBONE_PKG.all;
 
 
 
@@ -78,8 +79,8 @@ entity ion_core is
         -- FIXME uncached wishbone ports missing
         
         -- Fixme this should be a Wishbone port, not an ION port.
-        DATA_WB_MOSI_O      : out t_cpumem_mosi;
-        DATA_WB_MISO_I      : in t_cpumem_miso;
+        DATA_WB_MOSI_O      : out t_wishbone_mosi;
+        DATA_WB_MISO_I      : in t_wishbone_miso;
         
         IRQ_I               : in std_logic_vector(7 downto 0)
     );
