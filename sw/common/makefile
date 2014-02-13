@@ -88,7 +88,7 @@ XRAM_ADDRESS = 0x80000000
 # Root test code source directory, where python script and vhdl templates are
 SRC_DIR = ..
 # VHDL test bench directory, where VHDL output files will be created
-TB_DIR = ../../rtl/testbench
+TB_DIR = ../../src/testbench
 # VHDL DE-1 board demo root directory, for vhdl output
 DEMO_DIR = ../../vhdl/demo
 # Path to local libraries

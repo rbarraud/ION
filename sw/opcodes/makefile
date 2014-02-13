@@ -35,7 +35,7 @@ sim: opcodes
 		--bin opcodes.bin --name obj_code --bram_size $(CODE_BRAM_SIZE) \
 		--bin opcodes.data --name sram_init --xram_size $(XRAM_SIZE) \
 		--name prom_init --flash_size 0 \
-		--output $(TB_DIR)/sim_params_pkg.vhdl \
+		--output $(TB_DIR)/common/sim_params_pkg.vhdl \
 		-s $(SIM_LENGTH) --log_trigger=0xbfc00000 \
 
         

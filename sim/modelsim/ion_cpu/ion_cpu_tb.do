@@ -10,10 +10,10 @@ vcom -reportprogress 300 -work work ../../../src/rtl/cpu/ion_muldiv.vhdl
 vcom -reportprogress 300 -work work ../../../src/rtl/cpu/ion_cop0.vhdl
 vcom -reportprogress 300 -work work ../../../src/rtl/cpu/ion_cpu.vhdl
 
-vcom -reportprogress 300 -work work ../../../src/testbench/txt_util.vhdl
-vcom -reportprogress 300 -work work ../../../src/testbench/ion_tb_pkg.vhdl
-#vlog -reportprogress 300 -work work ../../../src/testbench/models/mt48lc4m16a2.v
-vcom -reportprogress 300 -work work ../../../src/testbench/sim_params_pkg.vhdl
+vcom -reportprogress 300 -work work ../../../src/testbench/common/txt_util.vhdl
+vcom -reportprogress 300 -work work ../../../src/testbench/common/ion_tb_pkg.vhdl
+#vlog -reportprogress 300 -work work ../../../src/testbench/common/models/mt48lc4m16a2.v
+vcom -reportprogress 300 -work work ../../../src/testbench/common/sim_params_pkg.vhdl
 vcom -reportprogress 300 -work work ../../../src/testbench/ion_cpu_tb.vhdl
 
 vsim -t ps work.ion_cpu_tb(testbench)
