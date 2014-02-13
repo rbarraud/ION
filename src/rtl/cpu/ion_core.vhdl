@@ -43,8 +43,6 @@ use ieee.std_logic_arith.all;
 use ieee.std_logic_unsigned.all;
 
 use work.ION_MAIN_PKG.all;
-use work.ION_WISHBONE_PKG.all;
-
 
 
 entity ion_core is
@@ -79,8 +77,8 @@ entity ion_core is
         -- FIXME uncached wishbone ports missing
         
         -- Fixme this should be a Wishbone port, not an ION port.
-        DATA_WB_MOSI_O      : out t_wishbone_mosi;
-        DATA_WB_MISO_I      : in t_wishbone_miso;
+        DATA_UC_WB_MOSI_O   : out t_wishbone_mosi;
+        DATA_UC_WB_MISO_I   : in t_wishbone_miso;
         
         IRQ_I               : in std_logic_vector(7 downto 0)
     );
@@ -211,7 +209,7 @@ begin
 
         data_mux_0: entity work.ION_BUS_MUX
         generic map (
-            SLAVE_0_AREA_SIZE   => TCM_DATA_SIZE
+            SLAVE_0_AREA_SIZE   => TCM_CODE_SIZE
         )
         port map (
             CLK_I               => CLK_I,
@@ -231,7 +229,8 @@ begin
         
         code_tcm: entity work.ION_TCM_CODE
         generic map (
-            SIZE                => TCM_CODE_SIZE
+            SIZE                => TCM_CODE_SIZE,
+            INIT_DATA           => TCM_CODE_INIT
         )
         port map (
             CLK_I               => CLK_I,
