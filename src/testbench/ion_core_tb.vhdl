@@ -63,8 +63,6 @@ file con_file: TEXT open write_mode is "hw_sim_console_log.txt";
 -- All the info needed by the logger is here
 signal log_info :           t_log_info;
 
--- Dummy address decode signal for console output pseudoport.
-signal console_we :         std_logic;
 
 --------------------------------------------------------------------------------
 
@@ -125,7 +123,7 @@ begin
     begin
         log_cpu_activity(clk, reset, done, 
                          "ION_CORE_TB", "core/cpu",
-                         log_info, "log_info", "console_we",
+                         log_info, "log_info",
                          LOG_TRIGGER_ADDRESS, log_file, con_file);
         wait;
     end process log_execution;

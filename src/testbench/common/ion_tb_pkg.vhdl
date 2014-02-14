@@ -49,6 +49,9 @@ use work.txt_util.all;
 
 package ION_TB_PKG is
 
+-- Address of the simulated UART; a single TxB register.
+constant TB_UART_ADDRESS : t_word := X"20000000";
+
 -- Maximum line size of for console output log. Lines longer than this will be
 -- truncated.
 constant CONSOLE_LOG_LINE_SIZE : integer := 1024*4;
@@ -81,7 +84,7 @@ type t_log_info is record
     data_rd_en :            std_logic;
     p1_rbank_we :           std_logic;
     code_rd_en :            std_logic;
-    data_byte_we :          std_logic_vector(3 downto 0);
+    wr_be :          std_logic_vector(3 downto 0);
 
     present_data_wr_addr :  t_word;
     present_data_wr :       t_word;
@@ -97,7 +100,6 @@ type t_log_info is record
     
     word_loaded :           t_word;
     
-    uart_tx :               std_logic;
     io_wr_data :            t_word;
     
     mdiv_address :          t_word;
@@ -132,7 +134,6 @@ procedure log_cpu_activity(
                 cpu_name :      string;
                 signal info :   inout t_log_info; 
                 signal_name :   string;
-                con_en_signal : string;
                 trigger_addr :  in t_word;
                 file l_file :   TEXT;
                 file con_file : TEXT);
@@ -152,6 +153,7 @@ variable full_pc, temp, temp2 : t_word;
 variable k : integer := 2;
 variable log_trap_status :      boolean := false;
 variable uart_data : integer;
+variable uart_we : std_logic;
 begin
     
     -- Trigger logging if the CPU fetches from trigger address
@@ -351,12 +353,12 @@ begin
         info.exception_pc <= info.pc_m(1);
     end if;
 
-    if info.data_byte_we/="0000" then
+    if info.wr_be/="0000" then
         --assert 1=0
         --report "write"
         --severity note;
         info.write_pending <= true;
-        info.pending_data_wr_we <= info.data_byte_we;
+        info.pending_data_wr_we <= info.wr_be;
         info.pending_data_wr_addr <= info.present_data_wr_addr;
         info.pending_data_wr_pc <= info.pc_m(k-1);
         info.pending_data_wr <= info.present_data_wr;
@@ -374,12 +376,18 @@ begin
 
     info.prev_count_reg <= info.mdiv_count_reg;
 
-    -- Log data sent to UART ---------------------------------------------------
+    -- Log data sent to simulated UART -----------------------------------------
     
+    -- Decode the simulated UART single TX register at address 0x20000000.
+    -- TODO this should be parameterizable.
+    if info.present_data_wr_addr = TB_UART_ADDRESS and info.wr_be /= "0000" then 
+        uart_we := '1';
+    else
+        uart_we := '0';
+    end if;
     
-    -- TX data may come from the high or low byte (opcodes.s
-    -- uses high byte, no_op.c uses low)
-    if info.uart_tx = '1' then
+    -- TX data comes from the low byte.
+    if uart_we = '1' then
         uart_data := conv_integer(unsigned(info.io_wr_data(7 downto 0)));
     
         -- UART TX data goes to output after a bit of line-buffering
@@ -413,7 +421,6 @@ procedure log_cpu_activity(
                 cpu_name :      string;
                 signal info :   inout t_log_info; 
                 signal_name :   string;
-                con_en_signal : string;
                 trigger_addr :  in t_word;
                 file l_file :   TEXT;
                 file con_file : TEXT) is
@@ -437,21 +444,12 @@ begin
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/p2_do_load", signal_name&".load", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/data_mosi_o.addr", signal_name&".present_data_wr_addr", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/data_mosi_o.wr_data", signal_name&".present_data_wr", 0);
-    init_signal_spy("/"&base_entity&"/"&cpu_name&"/data_mosi_o.wr_be", signal_name&".data_byte_we", 0);
+    init_signal_spy("/"&base_entity&"/"&cpu_name&"/data_mosi_o.wr_be", signal_name&".wr_be", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/p2_data_word_rd", signal_name&".word_loaded", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/data_mosi_o.addr", signal_name&".present_data_rd_addr", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/p1_exception", signal_name&".exception", 0);
-    init_signal_spy("/"&base_entity&"/"&con_en_signal, signal_name&".uart_tx", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/data_mosi_o.wr_data", signal_name&".io_wr_data", 0);
     
-    -- FIXME UART stuff should be skippable for CPU standalone TB
-    -- We force both 'rdy' uart outputs to speed up the simulation (since the
-    -- UART operation is not simulated, just logged).
-    --signal_force("/"&base_entity&"/uart/rx_rdy_flag", "1", 0 ms, freeze, -1 ms, 0);
-    --signal_force("/"&base_entity&"/uart/tx_busy", "0", 0 ms, freeze, -1 ms, 0);
-    -- And we force the UART RX data to a predictable value until we implement
-    -- UART RX simulation, eventually.
-    --signal_force("/"&base_entity&"/uart/rx_buffer", "00000000", 0 ms, freeze, -1 ms, 0);
     
     while done='0' loop
         wait until clk'event and clk='1';

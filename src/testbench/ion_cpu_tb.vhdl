@@ -142,8 +142,6 @@ file con_file: TEXT open write_mode is "hw_sim_console_log.txt";
 -- All the info needed by the logger is here
 signal log_info :           t_log_info;
 
--- Dummy address decode signal for console output pseudoport.
-signal console_we :         std_logic;
 
 --------------------------------------------------------------------------------
 
@@ -323,12 +321,6 @@ begin
             end if;
         end if;
     end process debug_register_writes;
-    
-    -- Decode a fake console output port to be used in the test code.
-    console_we <= '1' when 
-        data_mosi.addr = X"20000000" and
-        data_mosi.wr_be /= "0000"
-        else '0';
 
     
     -- Placeholder signals, to be completed ------------------------------------
@@ -342,7 +334,7 @@ begin
     begin
         log_cpu_activity(clk_delayed, reset, done, 
                          "ION_CPU_TB", "cpu",
-                         log_info, "log_info", "console_we",
+                         log_info, "log_info",
                          LOG_TRIGGER_ADDRESS, log_file, con_file);
         wait;
     end process log_execution;
