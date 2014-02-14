@@ -73,7 +73,8 @@ begin
     core: entity work.ION_CORE
     generic map (
         TCM_CODE_SIZE => BRAM_SIZE,
-        TCM_CODE_INIT => obj_code
+        TCM_CODE_INIT => obj_code,
+        TCM_DATA_SIZE => 2048
     )
     port map (
         CLK_I               => clk,
