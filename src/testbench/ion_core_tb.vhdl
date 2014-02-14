@@ -1,10 +1,32 @@
 --##############################################################################
--- Simulation test bench -- not synthesizable.
+-- ion_core_tb.vhdl -- Test bench for full ION core.
 --
+-- Simulates the full ION core, which includes TCM and caches.
+-- FIXME no simulated external memory yet.
+-- The size and contents of the simulated memory are defined in package 
+-- sim_params_pkg.
+--------------------------------------------------------------------------------
+-- FIXME no support for simulating external IRQs.
+--------------------------------------------------------------------------------
+-- SIMULATED IO DEVICES:
+-- Apart from the fake UART implemented in package ion_tb_pkg, this test bench 
+-- simulates the following ports:
+--
+-- 20010020: Debug register 0 (R/W).    -- FIXME unimplemented
+-- 20010024: Debug register 1 (R/W).    -- FIXME unimplemented
+-- 20010028: Debug register 2 (R/W).    -- FIXME unimplemented
+-- 2001002c: Debug register 3 (R/W).    -- FIXME unimplemented
+--
+-- NOTE: these addresses are for write accesses only. for read accesses, the 
+-- debug registers 0..3 are mirrored over all the io address range 2001xxxxh.
+--
+-- The debug registers 0 to 3 can only be used to test 32-bit i/o.
+-- All of these registers can only be addressed as 32-bit words. Any other type
+-- of access will yield undefined results.
 --------------------------------------------------------------------------------
 -- Console logging:
 --
--- Console output (at addresses compatible to Plasma's) is logged to text file
+-- Console output (at address 0x20000000) is logged to text file
 -- "hw_sim_console_log.txt".
 --
 -- IMPORTANT: The code that echoes UART TX data to the simulation console does
@@ -70,9 +92,9 @@ begin
 
     core: entity work.ION_CORE
     generic map (
-        TCM_CODE_SIZE => BRAM_SIZE,
-        TCM_CODE_INIT => obj_code,
-        TCM_DATA_SIZE => 2048
+        TCM_CODE_SIZE => 8192,
+        TCM_CODE_INIT => OBJ_CODE,
+        TCM_DATA_SIZE => BRAM_SIZE
     )
     port map (
         CLK_I               => clk,

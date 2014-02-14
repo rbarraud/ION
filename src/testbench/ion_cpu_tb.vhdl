@@ -1,34 +1,25 @@
 --##############################################################################
--- Simulation test bench -- not synthesizable.
+-- ion_cpu_tb.vhdl -- Test bench for standalone CPU.
 --
--- Simulates the MCU core connected to a simulated external static RAM on a 
--- 16-bit bus, plus an optional 8-bit static ROM. This setup is more or less 
--- that of develoment board DE-1 from Terasic.
+-- Simulates the CPU connected to fake memory on both buses. 
+-- The size and contents of the simulated memory are defined in package 
+-- sim_params_pkg.
 --------------------------------------------------------------------------------
--- Simulated I/O
--- Apart from the io devices within the SoC module, this test bench simulates
--- the following ports:
+-- FIXME no support for simulating external IRQs.
+--------------------------------------------------------------------------------
+-- SIMULATED IO DEVICES:
+-- Apart from the fake UART implemented in package ion_tb_pkg, this test bench 
+-- simulates the following ports:
 --
--- 20010000: HW IRQ 0 countdown register (W/o).
--- 20010004: HW IRQ 1 countdown register (W/o).
--- 20010008: HW IRQ 2 countdown register (W/o).
--- 2001000c: HW IRQ 3 countdown register (W/o).
--- 20010010: HW IRQ 4 countdown register (W/o).
--- 20010014: HW IRQ 5 countdown register (W/o).
--- 20010018: HW IRQ 6 countdown register (W/o).
--- 2001001c: HW IRQ 7 countdown register (W/o).
--- 20010020: Debug register 0 (R/W).
--- 20010024: Debug register 1 (R/W).
--- 20010028: Debug register 2 (R/W).
--- 2001002c: Debug register 3 (R/W).
+-- 20010020: Debug register 0 (R/W).    -- FIXME unimplemented
+-- 20010024: Debug register 1 (R/W).    -- FIXME unimplemented
+-- 20010028: Debug register 2 (R/W).    -- FIXME unimplemented
+-- 2001002c: Debug register 3 (R/W).    -- FIXME unimplemented
 -- 20010030: Wait states for simulated code memory accesses (W/o).
 -- 20010030: Wait states for simulated data memory accesses (W/o).
 --
 -- NOTE: these addresses are for write accesses only. for read accesses, the 
 -- debug registers 0..3 are mirrored over all the io address range 2001xxxxh.
---
--- Writing N to an IRQ X countdown register will trigger hardware interrupt X
--- N clock cycles later. The interrupt line will be asserted for 1 clock cycle.
 --
 -- The debug registers 0 to 3 can only be used to test 32-bit i/o.
 -- All of these registers can only be addressed as 32-bit words. Any other type
@@ -36,7 +27,7 @@
 --------------------------------------------------------------------------------
 -- Console logging:
 --
--- Console output (at addresses compatible to Plasma's) is logged to text file
+-- Console output (at address 0x20000000) is logged to text file
 -- "hw_sim_console_log.txt".
 --
 -- IMPORTANT: The code that echoes UART TX data to the simulation console does
