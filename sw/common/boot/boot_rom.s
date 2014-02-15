@@ -1,13 +1,14 @@
 ################################################################################
-# bootstrap.s -- Reset code and trap handlers.
+# boot_rom.s -- Bootstrap code for booting from internal ROM.
 #
-# This is the boot code for all applications, includes reset code and basic trap 
-# handler with calls for all the trap causes.
+# Includes reset code and basic trap handler with calls for all the trap causes.
 #
 # Initializes the caches and jumps to 'entry' in kernel mode and with interrupts
 # disabled.
 #
 # This code is meant to be placed at the reset vector address (0xbfc00000).
+#-------------------------------------------------------------------------------
+# FIXME The code still has plenty of remnants from the original ION, refactor!
 #-------------------------------------------------------------------------------
 # FIXME: exception handling is incomplete (nothing is done on exception).
 ################################################################################

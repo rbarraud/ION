@@ -1,5 +1,5 @@
 #-------------------------------------------------------------------------------
-# startup.s -- C startup code common to all C programs.
+# crt0.s -- Standard crt0 for ION core.
 #
 # This code does the following:
 # 1.- Initialize the stack at the end of the bss area
@@ -11,7 +11,7 @@
 # The code does not initialize the caches or the hardware and does not include
 # the reset or trap vectors.
 #
-# This code was inherited from OpenCores' Plasma project.
+# This code was partially inherited from OpenCores' Plasma project.
 #-------------------------------------------------------------------------------
 
     # The stack size can be defined from the assembler command line
