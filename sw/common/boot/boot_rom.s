@@ -94,8 +94,8 @@ start_boot:
     andi    $a0,$a0,0xfffe
     mtc0    $a0,$12             # disable interrupts, disable cache
 
-    jal     setup_cache         # Initialize the caches
-    nop
+    #jal     setup_cache         # Initialize the caches
+    #nop
 
     # Hardware initialization done. Now we should jump to the main program.
     # Note that if this file was linked separately from the main program (for

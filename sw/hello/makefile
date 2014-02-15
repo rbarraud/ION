@@ -2,7 +2,7 @@
 include ../common/makefile
 
 # Link script to be used: run from BRAM
-LINK_SCRIPT = $(SRC_DIR)/common/bram.lds
+LINK_SCRIPT = $(SRC_DIR)/common/link/internal.lds
 
 #-- Configure the application --------------------------------------------------
 
@@ -22,9 +22,8 @@ XRAM_START = 0x00000000
 
 LFLAGS = -T$(LINK_SCRIPT) -L $(LIB_PATH) \
          -Ttext $(BRAM_START) -Tdata $(XRAM_START) \
-         -nodefaultlibs -nostdlib -ereset -I elf32-big
-CFLAGS = -O2 -Wall -c -s -fno-builtin -nodefaultlibs -nostdlib \
-         -msoft-float -mips1 -G0
+         -ereset -I elf32-big
+CFLAGS = -O2 -Wall -c -s -msoft-float -mips1 -G0
 AFLAGS = --defsym XRAM_BASE=$(XRAM_START)
 
 
@@ -37,7 +36,7 @@ OBJS = bootstrap.o opcode_emu.o c_startup.o hello.o
 program: hello.code hello.data
 
 hello.axf: $(OBJS)
-	$(LD) $(LFLAGS) -Map hello.map -s -N -o hello.axf $(OBJS) -lsoc
+	$(LD) $(LFLAGS) -Map hello.map -s -N -o hello.axf $(OBJS)
 	-@$(DUMP) -m mips --disassemble hello.axf > hello.lst
 
 hello.code: hello.axf
@@ -73,7 +72,7 @@ sim: program demo
 		--bin hello.code --name obj_code --bram_size $(CODE_BRAM_SIZE) \
 		--bin hello.data --name sram_init --xram_size $(XRAM_SIZE)\
 		--name prom_init --flash_size 0 \
-		--output $(TB_DIR)/sim_params_pkg.vhdl \
+		--output $(TB_DIR)/common/sim_params_pkg.vhdl \
 		-s $(SIM_LENGTH) --log_trigger=0xbfc00000 \
 
 #-- Create VHDL file for simulation test bench using TB0 template

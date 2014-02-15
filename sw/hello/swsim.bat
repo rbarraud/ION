@@ -1,5 +1,5 @@
 @rem Run software simulator in hands-off mode
-..\..\tools\slite\slite\bin\Debug\slite.exe ^
+..\..\tools\ion32sim\bin\ion32sim.exe ^
     --bram=hello.code ^
     --trigger=bfc00000 ^
     --noprompt ^

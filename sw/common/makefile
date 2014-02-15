@@ -13,9 +13,7 @@
 #
 #-------------------------------------------------------------------------------
 # NOTE:
-# A link script '/src/ion_noxram.lds' was used in previous versions of the
-# project. It is no longer used. It is known to be buggy and will be removed.
-#
+# 
 # See info on flag -G0 in ion_noxram.lds
 #-------------------------------------------------------------------------------
 
@@ -93,8 +91,8 @@ TB_DIR = ../../src/testbench
 DEMO_DIR = ../../vhdl/demo
 # Path to local libraries
 LIB_PATH = $(SRC_DIR)/common/libsoc
-# Link script to be used
-LINK_SCRIPT = $(SRC_DIR)/common/flash.lds
+# Link script to be used: by default, link for internal memory mode.
+LINK_SCRIPT ?= $(SRC_DIR)/common/link/internal.lds
 
 ### Build options -- to be replaced in application makefile ####################
 
@@ -102,6 +100,6 @@ LINK_SCRIPT = $(SRC_DIR)/common/flash.lds
 # This will prevent usage of unimplemented opcodes but will insert nops after
 # load instructions, which Ion does not need.
 # (See comment above about -G0 flag)
-CFLAGS = -O2 -Wall -c -s -fno-builtin -mips1 -G0 -nodefaultlibs -nostdlib
-
+#CFLAGS = -O2 -Wall -c -s -fno-builtin -mips1 -G0 -nodefaultlibs -nostdlib
+CFLAGS = -O2 -Wall -c -s -fno-builtin -mips1 -G0
 # LFLAGS: linker options are in the respective makefiles

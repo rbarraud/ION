@@ -92,7 +92,7 @@ begin
 
     core: entity work.ION_CORE
     generic map (
-        TCM_CODE_SIZE => 8192,
+        TCM_CODE_SIZE => 16384,
         TCM_CODE_INIT => OBJ_CODE,
         TCM_DATA_SIZE => BRAM_SIZE
     )
