@@ -27,7 +27,7 @@ CFLAGS = -O2 -Wall -c -s -msoft-float -mips1 -G0
 AFLAGS = --defsym XRAM_BASE=$(XRAM_START)
 
 
-OBJS = bootstrap.o opcode_emu.o c_startup.o hello.o
+OBJS = boot_rom.o opcode_emu.o crt0.o hello.o
 
 
 #-- Targets & rules ------------------------------------------------------------
@@ -49,14 +49,14 @@ hello.data: hello.axf
 
 
 
-bootstrap.o: $(SRC_DIR)/common/bootstrap.s
-	$(AS) $(AFLAGS) -o bootstrap.o $(SRC_DIR)/common/bootstrap.s
+boot_rom.o: $(SRC_DIR)/common/boot/boot_rom.s
+	$(AS) $(AFLAGS) -o boot_rom.o $(SRC_DIR)/common/boot/boot_rom.s
 
-c_startup.o: $(SRC_DIR)/common/c_startup.s
-	$(AS) $(AFLAGS) -o c_startup.o $(SRC_DIR)/common/c_startup.s
+crt0.o: $(SRC_DIR)/common/crt/crt0.s
+	$(AS) $(AFLAGS) -o crt0.o $(SRC_DIR)/common/crt/crt0.s
 
-opcode_emu.o: $(SRC_DIR)/common/opcode_emu.s
-	$(AS) $(AFLAGS) -o opcode_emu.o $(SRC_DIR)/common/opcode_emu.s
+opcode_emu.o: $(SRC_DIR)/common/crt/opcode_emu.s
+	$(AS) $(AFLAGS) -o opcode_emu.o $(SRC_DIR)/common/crt/opcode_emu.s
 
 hello.o: hello.c
 	$(CC) $(CFLAGS) -o hello.o hello.c
