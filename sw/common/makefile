@@ -101,5 +101,5 @@ LINK_SCRIPT ?= $(SRC_DIR)/common/link/internal.lds
 # load instructions, which Ion does not need.
 # (See comment above about -G0 flag)
 #CFLAGS = -O2 -Wall -c -s -fno-builtin -mips1 -G0 -nodefaultlibs -nostdlib
-CFLAGS = -O2 -Wall -c -s -fno-builtin -mips1 -G0
+CFLAGS = -O2 -Wall -c -s -mips1 -G0
 # LFLAGS: linker options are in the respective makefiles
