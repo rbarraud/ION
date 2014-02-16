@@ -153,7 +153,7 @@ variable full_pc, temp, temp2 : t_word;
 variable k : integer := 2;
 variable log_trap_status :      boolean := false;
 variable uart_data : integer;
-variable uart_we : std_logic;
+
 begin
     
     -- Trigger logging if the CPU fetches from trigger address
@@ -380,14 +380,8 @@ begin
     
     -- Decode the simulated UART single TX register at address 0x20000000.
     -- TODO this should be parameterizable.
-    if info.present_data_wr_addr = TB_UART_ADDRESS and info.wr_be /= "0000" then 
-        uart_we := '1';
-    else
-        uart_we := '0';
-    end if;
-    
     -- TX data comes from the low byte.
-    if uart_we = '1' then
+    if info.present_data_wr_addr = TB_UART_ADDRESS and info.wr_be /= "0000" then
         uart_data := conv_integer(unsigned(info.io_wr_data(7 downto 0)));
     
         -- UART TX data goes to output after a bit of line-buffering

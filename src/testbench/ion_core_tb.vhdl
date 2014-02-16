@@ -94,7 +94,8 @@ begin
     generic map (
         TCM_CODE_SIZE => 16384,
         TCM_CODE_INIT => OBJ_CODE,
-        TCM_DATA_SIZE => BRAM_SIZE
+        TCM_DATA_SIZE => 8192,
+        TCM_DATA_INIT => OBJ_CODE
     )
     port map (
         CLK_I               => clk,
@@ -135,6 +136,7 @@ begin
 
         print("TB finished");
         done <= '1';
+        file_close(con_file);
         wait;
         
     end process drive_uut;
