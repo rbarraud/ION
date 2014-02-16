@@ -1,16 +1,9 @@
 --------------------------------------------------------------------------------
 -- ION_MAIN_PKG.vhdl -- Configuration constants & utility types and functions
 --------------------------------------------------------------------------------
--- IMPORTANT:
--- Here's where you define the memory map of the system, in the implementation 
--- of function decode_addr. 
--- You need to change that function to change the memory map, independent of any
--- additional address decoding you may do out of the FPGA (e.g. if you have more
--- than one chip on any data bus) or out of the MCU module (e.g. when you add
--- new IO registers).
--- Please see the module c2sb_demo and mips_mcu for examples of memory decoding.
+-- FIXME Plenty of remnants from the old ION version, refactor!
 --------------------------------------------------------------------------------
--- Copyright (C) 2011 Jose A. Ruiz
+-- Copyright (C) 2014 Jose A. Ruiz
 --                                                              
 -- This source file may be used and distributed without         
 -- restriction provided that this copyright statement is not    
@@ -157,7 +150,7 @@ function objcode_to_wtable(oC : t_obj_code; size : integer) return t_word_table;
 
 -- Builds BRAM initialization constant from a constant CONSTRAINED byte array
 -- containing the application object code.
--- The constant is a 32-bit, big endian word table.
+-- The constant is a 16-bit, big endian word table.
 -- The object code is placed at the beginning of the BRAM and the rest is
 -- filled with zeros.
 -- The object code is truncated if it doesn't fit the given table size.
@@ -167,13 +160,19 @@ function objcode_to_htable(oC : t_obj_code; size : integer) return t_hword_table
 
 -- Builds BRAM initialization constant from a constant CONSTRAINED byte array
 -- containing the application object code.
--- The constant is an 8-bit byte table.
+-- It will put the whole object code into a byte table if slice=-1, otherwise
+-- it will extract the selected slice (0 to 3) and put only that in the table.
+-- If slice = -1, the size is that fo the whole data block.
+-- If slice >= 0, the size is that of the slice, i.e. 1/4 of the block size. 
+-- The constant is an 8-bit byte table in BIG ENDIAN format.
+-- Slice 0 is the lowest byte, slice 3 is the highest byte.
 -- The object code is placed at the beginning of the BRAM and the rest is
 -- filled with zeros.
 -- The object code is truncated if it doesn't fit the given table size.
 -- CAN BE USED IN SYNTHESIZABLE CODE to compute a BRAM initialization constant 
 -- from a constant argument.
-function objcode_to_btable(oC : t_obj_code; size : integer) return t_byte_table;
+function objcode_to_btable(oC : t_obj_code; size : integer; 
+                           slice : integer := -1) return t_byte_table;
 
 
 
@@ -380,19 +379,32 @@ begin
 end function objcode_to_htable;
 
 function objcode_to_btable(oC : t_obj_code; 
-                           size : integer) 
+                           size : integer; 
+                           slice : integer := -1) 
                            return t_byte_table is
 variable br : t_byte_table(integer range 0 to size-1):=(others => X"00");
 variable i, address, index : integer;
 begin
     
-    -- Copy object code to start of table, leave the rest of the table
-    for i in 0 to oC'length-1 loop
-        if i >= size then
-            exit;
-        end if;
-        br(i) := oC(i);
-    end loop;
+    if slice < 0 then 
+        -- Copy object code to start of table, leave the rest filled with zeros.
+        for i in 0 to oC'length-1 loop
+            if i >= size then
+                exit;
+            end if;
+            br(i) := oC(i);
+        end loop;
+    else
+        -- Remember, oC is big endian and slice 0 is the low byte.
+        i := 0; -- TODO check bounds!
+        while ((i*4)+(3-slice)) < (oC'length) loop
+            if i >= size then
+                exit;
+            end if;
+            br(i) := oC((3-slice) + (i*4));
+            i := i + 1;
+        end loop;
+    end if;
     
     return br;
 end function objcode_to_btable;

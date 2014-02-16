@@ -75,17 +75,15 @@ signal wr_data1 :           t_byte;
 signal wr_data2 :           t_byte;
 signal wr_data3 :           t_byte;
 
-                            -- FIXME initial value is not being loaded
+
 signal tcm_ram0:            t_byte_table(0 to ((SIZE/4)-1)) := 
-                            (others => X"00");
-                            -- we need new version of this function:
-                            --objcode_to_btable(INIT_DATA, SIZE, 0);
+                            objcode_to_btable(INIT_DATA, SIZE/4, 0);
 signal tcm_ram1:            t_byte_table(0 to ((SIZE/4)-1)) := 
-                            (others => X"00");
+                            objcode_to_btable(INIT_DATA, SIZE/4, 1);
 signal tcm_ram2:            t_byte_table(0 to ((SIZE/4)-1)) := 
-                            (others => X"00");
+                            objcode_to_btable(INIT_DATA, SIZE/4, 2);
 signal tcm_ram3:            t_byte_table(0 to ((SIZE/4)-1)) := 
-                            (others => X"00");
+                            objcode_to_btable(INIT_DATA, SIZE/4, 3);
 
           
 begin
