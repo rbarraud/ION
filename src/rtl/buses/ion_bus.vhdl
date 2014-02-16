@@ -92,7 +92,7 @@ slave0_addr <= MASTER_MOSI_I.addr(slave0_addr'high downto 2);
 slave0_ce <= 
     '1' when MASTER_MOSI_I.addr(31 downto slave0_addr'high+1) = 
              SLAVE_0_BASE_I(31 downto slave0_addr'high+1) 
-    else '0';
+    else '1';
 
 registered_ce:
 process(CLK_I)

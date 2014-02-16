@@ -140,7 +140,7 @@ signal data_uc_wbone_miso : t_cpumem_miso;
 signal data_uc_wbone_mosi : t_cpumem_mosi;
 
 -- FIXME this should come from one of the CP0 config registers.
-signal data_tcm_base :      t_word := X"00000000";          
+signal data_tcm_base :      t_word := X"A0000000";          
                             
 
 --------------------------------------------------------------------------------
@@ -300,7 +300,8 @@ begin
         
         data_tcm: entity work.ION_TCM_DATA
         generic map (
-            SIZE                => TCM_DATA_SIZE
+            SIZE                => TCM_DATA_SIZE,
+            INIT_DATA           => TCM_DATA_INIT
         )
         port map (
             CLK_I               => CLK_I,
