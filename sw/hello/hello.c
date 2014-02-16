@@ -7,7 +7,14 @@
     port at address 0x20000000, which is implemented in the TB entities.
     
     This test needs no libc stubs other than puts, which is provided, and with
-    the provided makefiles it should generate no MIPS32 opcodes at all. 
+    the provided makefiles it should generate no MIPS32 opcodes at all.
+
+    IMPORTANT: 
+    We're using gcc's intrinsic printf, whuch 'knows' it'll be using puts to 
+    output the string; puts appends a mandatory '\n' at the end of the
+    string, so THE LINK WILL FAIL if we try to printf a string that does not 
+    end in '\n'.
+
 */
 
 #include <stdio.h>
@@ -20,8 +27,8 @@
 
 int main()
 {   
-    printf("\n\nHello World!\n\n\n");
-    printf("compile time: " __DATE__ " -- " __TIME__ "\n\r\n");
+    printf("\n\nHello World!\n\n");
+    printf("compile time: " __DATE__ " -- " __TIME__ "\n");
     printf("gcc version:  " __VERSION__ "\n");
     return 0;
 }
@@ -43,6 +50,8 @@ int puts (const char * str) {
         *(UART) = str[i];
         i++;
     }
+    // puts has to append an extra CR. 
+    *(UART) = '\n';
     // Return success code.
     return 1;
 }

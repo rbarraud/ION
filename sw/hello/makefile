@@ -45,7 +45,7 @@ hello.code: hello.axf
 
 hello.data: hello.axf
 # Extract object code to be placed in data space
-	$(COPY) -I elf32-big -j.data -j.bss -O binary hello.axf hello.data
+	$(COPY) -I elf32-big -j.rodata -j.bss -O binary hello.axf hello.data
 
 
 
