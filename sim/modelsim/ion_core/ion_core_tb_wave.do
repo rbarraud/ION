@@ -12,19 +12,25 @@ add wave -noupdate -color Blue -radix hexadecimal /ion_core_tb/core/cpu/p0_pc_re
 add wave -noupdate -divider Memory
 add wave -noupdate /ion_core_tb/core/cpu/stall_pipeline
 add wave -noupdate /ion_core_tb/core/cpu/pipeline_stalled
-add wave -noupdate -radix hexadecimal -childformat {{/ion_core_tb/core/cpu/DATA_MOSI_O.addr -radix hexadecimal} {/ion_core_tb/core/cpu/DATA_MOSI_O.wr_data -radix hexadecimal}} -expand -subitemconfig {/ion_core_tb/core/cpu/DATA_MOSI_O.addr {-height 15 -radix hexadecimal} /ion_core_tb/core/cpu/DATA_MOSI_O.rd_en {-color {Olive Drab} -height 15} /ion_core_tb/core/cpu/DATA_MOSI_O.wr_be {-color {Medium Aquamarine} -height 15} /ion_core_tb/core/cpu/DATA_MOSI_O.wr_data {-color White -height 15 -radix hexadecimal}} /ion_core_tb/core/cpu/DATA_MOSI_O
-add wave -noupdate -radix hexadecimal -childformat {{/ion_core_tb/core/cpu/DATA_MISO_I.rd_data -radix hexadecimal} {/ion_core_tb/core/cpu/DATA_MISO_I.mwait -radix hexadecimal}} -expand -subitemconfig {/ion_core_tb/core/cpu/DATA_MISO_I.rd_data {-height 15 -radix hexadecimal} /ion_core_tb/core/cpu/DATA_MISO_I.mwait {-radix hexadecimal}} /ion_core_tb/core/cpu/DATA_MISO_I
+add wave -noupdate -radix hexadecimal -childformat {{/ion_core_tb/core/cpu/DATA_MOSI_O.addr -radix hexadecimal} {/ion_core_tb/core/cpu/DATA_MOSI_O.wr_data -radix hexadecimal}} -expand -subitemconfig {/ion_core_tb/core/cpu/DATA_MOSI_O.addr {-height 15 -radix hexadecimal} /ion_core_tb/core/cpu/DATA_MOSI_O.rd_en {-color Thistle -height 15} /ion_core_tb/core/cpu/DATA_MOSI_O.wr_be {-color {Medium Aquamarine} -height 15} /ion_core_tb/core/cpu/DATA_MOSI_O.wr_data {-color White -height 15 -radix hexadecimal}} /ion_core_tb/core/cpu/DATA_MOSI_O
+add wave -noupdate -radix hexadecimal -childformat {{/ion_core_tb/core/cpu/DATA_MISO_I.rd_data -radix hexadecimal} {/ion_core_tb/core/cpu/DATA_MISO_I.mwait -radix hexadecimal}} -expand -subitemconfig {/ion_core_tb/core/cpu/DATA_MISO_I.rd_data {-height 15 -radix hexadecimal} /ion_core_tb/core/cpu/DATA_MISO_I.mwait {-height 15 -radix hexadecimal}} /ion_core_tb/core/cpu/DATA_MISO_I
 add wave -noupdate -divider Debug
-add wave -noupdate -radix hexadecimal /ion_core_tb/core/data_cpu_mosi
-add wave -noupdate -radix hexadecimal /ion_core_tb/core/data_cpu_miso
-add wave -noupdate -radix hexadecimal /ion_core_tb/core/data_uncached_mosi
-add wave -noupdate -radix hexadecimal /ion_core_tb/core/data_uncached_miso
-add wave -noupdate -radix hexadecimal /ion_core_tb/core/data_tcm_mosi
-add wave -noupdate -radix hexadecimal /ion_core_tb/core/data_tcm_miso
+add wave -noupdate /ion_core_tb/core/cpu/load_interlock
+add wave -noupdate -radix hexadecimal /ion_core_tb/core/cpu/p1_rbank_wr_data
+add wave -noupdate /ion_core_tb/core/cpu/p2_do_load
+add wave -noupdate -radix hexadecimal /ion_core_tb/core/tcm_code_present/code_tcm/tcm_addr
+add wave -noupdate /ion_core_tb/core/tcm_code_present/code_arbiter/master0_ce
+add wave -noupdate -color {Orange Red} /ion_core_tb/core/tcm_code_present/code_arbiter/master0_ce_reg
+add wave -noupdate /ion_core_tb/core/tcm_code_present/code_arbiter/master0_request
+add wave -noupdate /ion_core_tb/core/tcm_code_present/code_arbiter/master0_selected
+add wave -noupdate /ion_core_tb/core/tcm_code_present/code_arbiter/master1_request
+add wave -noupdate /ion_core_tb/core/tcm_code_present/code_arbiter/master1_selected
+add wave -noupdate -radix hexadecimal -childformat {{/ion_core_tb/core/tcm_code_present/code_arbiter/SLAVE_MOSI_O.addr -radix hexadecimal} {/ion_core_tb/core/tcm_code_present/code_arbiter/SLAVE_MOSI_O.rd_en -radix hexadecimal} {/ion_core_tb/core/tcm_code_present/code_arbiter/SLAVE_MOSI_O.wr_be -radix hexadecimal} {/ion_core_tb/core/tcm_code_present/code_arbiter/SLAVE_MOSI_O.wr_data -radix hexadecimal}} -expand -subitemconfig {/ion_core_tb/core/tcm_code_present/code_arbiter/SLAVE_MOSI_O.addr {-height 15 -radix hexadecimal} /ion_core_tb/core/tcm_code_present/code_arbiter/SLAVE_MOSI_O.rd_en {-height 15 -radix hexadecimal} /ion_core_tb/core/tcm_code_present/code_arbiter/SLAVE_MOSI_O.wr_be {-height 15 -radix hexadecimal} /ion_core_tb/core/tcm_code_present/code_arbiter/SLAVE_MOSI_O.wr_data {-height 15 -radix hexadecimal}} /ion_core_tb/core/tcm_code_present/code_arbiter/SLAVE_MOSI_O
+add wave -noupdate -radix hexadecimal -childformat {{/ion_core_tb/core/tcm_code_present/code_arbiter/SLAVE_MISO_I.rd_data -radix hexadecimal} {/ion_core_tb/core/tcm_code_present/code_arbiter/SLAVE_MISO_I.mwait -radix hexadecimal}} -expand -subitemconfig {/ion_core_tb/core/tcm_code_present/code_arbiter/SLAVE_MISO_I.rd_data {-height 15 -radix hexadecimal} /ion_core_tb/core/tcm_code_present/code_arbiter/SLAVE_MISO_I.mwait {-height 15 -radix hexadecimal}} /ion_core_tb/core/tcm_code_present/code_arbiter/SLAVE_MISO_I
 TreeUpdate [SetDefaultTree]
-WaveRestoreCursors {{Cursor 1} {12399405 ps} 0} {{Cursor 2} {12350000 ps} 1}
+WaveRestoreCursors {{Cursor 1} {930000 ps} 0}
 quietly wave cursor active 1
-configure wave -namecolwidth 181
+configure wave -namecolwidth 206
 configure wave -valuecolwidth 60
 configure wave -justifyvalue left
 configure wave -signalnamewidth 0
@@ -38,4 +44,4 @@ configure wave -griddelta 40
 configure wave -timeline 0
 configure wave -timelineunits ps
 update
-WaveRestoreZoom {12199281 ps} {12557297 ps}
+WaveRestoreZoom {835647 ps} {1024353 ps}

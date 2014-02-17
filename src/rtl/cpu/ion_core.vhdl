@@ -77,8 +77,8 @@ entity ion_core is
         -- FIXME uncached wishbone ports missing
         
         -- Fixme this should be a Wishbone port, not an ION port.
-        DATA_UC_WB_MOSI_O   : out t_wishbone_mosi;
-        DATA_UC_WB_MISO_I   : in t_wishbone_miso;
+        DATA_UC_WB_MOSI_O   : out t_cpumem_mosi;
+        DATA_UC_WB_MISO_I   : in t_cpumem_miso;
         
         IRQ_I               : in std_logic_vector(7 downto 0)
     );
@@ -102,46 +102,48 @@ signal cache_ctrl_miso :    t_cache_miso;
 -- Code space signals
 
 -- Bus to code cache.
-signal code_cached_miso :   t_cpumem_miso;
-signal code_cached_mosi :   t_cpumem_mosi;
+signal code_cache_miso :    t_cpumem_miso;
+signal code_cache_mosi :    t_cpumem_mosi;
 
--- Bus to uncached code slaves: TCM and Wishbone.
-signal code_uncached_miso : t_cpumem_miso;
-signal code_uncached_mosi : t_cpumem_mosi;
+-- Buses to uncached code areas.
+signal code_uc_0_miso :     t_cpumem_miso;
+signal code_uc_0_mosi :     t_cpumem_mosi;
 
--- Bus to Data TCM.
+-- Bus to CTCM arbiter.
+signal code_ctcm_arb_miso : t_cpumem_miso;
+signal code_ctcm_arb_mosi : t_cpumem_mosi;
+
+-- Bus to Code TCM.
 signal code_tcm_miso :      t_cpumem_miso;
 signal code_tcm_mosi :      t_cpumem_mosi;
 
--- Bus to uncached Data Wishbone port.
-signal code_uc_wbone_miso : t_cpumem_miso;
-signal code_uc_wbone_mosi : t_cpumem_mosi;
-
 -- FIXME this should come from one of the CP0 config registers.
-signal code_tcm_base :      t_word := X"BFC00000";          
+constant code_tcm_base :    t_word := X"BFC00000";          
 
 --------------------------------------------------------------------------------
 -- Data space signals
 
--- Bus to data cache.
+-- CPU to cache mux.
 signal data_cached_miso :   t_cpumem_miso;
 signal data_cached_mosi :   t_cpumem_mosi;
-
--- Bus to uncached data slaves: TCM and Wishbone.
-signal data_uncached_miso : t_cpumem_miso;
-signal data_uncached_mosi : t_cpumem_mosi;
-
--- Bus to Data TCM.
+-- Cache mux to Data TCM mux.
+signal data_uc_0_miso : t_cpumem_miso;
+signal data_uc_0_mosi : t_cpumem_mosi;
+-- Data TCM mux to Data TCM.
 signal data_tcm_miso :      t_cpumem_miso;
 signal data_tcm_mosi :      t_cpumem_mosi;
-
--- Bus to uncached Data Wishbone port.
-signal data_uc_wbone_miso : t_cpumem_miso;
-signal data_uc_wbone_mosi : t_cpumem_mosi;
+-- Data TCM mux to Data/Code TCM arbiter mux.
+signal data_uc_1_miso : t_cpumem_miso;
+signal data_uc_1_mosi : t_cpumem_mosi;
+-- Data/Code TCM arbiter mux to Wishbone bridge.
+signal data_uc_2_miso : t_cpumem_miso;
+signal data_uc_2_mosi : t_cpumem_mosi;
+-- Data/Code TCM arbiter mux to arbiter.
+signal data_ctcm_arb_mosi : t_cpumem_mosi;
+signal data_ctcm_arb_miso : t_cpumem_miso;
 
 -- FIXME this should come from one of the CP0 config registers.
-signal data_tcm_base :      t_word := X"A0000000";          
-                            
+signal data_tcm_base :      t_word := X"00000000";          
 
 --------------------------------------------------------------------------------
 -- Wishbone bridge signals
@@ -185,6 +187,25 @@ begin
 
     -- Code cache ----------------------------------------------------------
 
+    -- TODO this mux is needed even when the cache is missing; otherwise we
+    -- get synth problems in Q2 (BRAM Dout goes straight to BRAM.Ain).
+    code_mux_cache: entity work.ION_CACHE_MUX
+    port map (
+        CLK_I               => CLK_I,
+        RESET_I             => RESET_I, 
+
+        MASTER_MOSI_I       => code_cpu_mosi,
+        MASTER_MISO_O       => code_cpu_miso,
+        
+        K0_CACHED_IN        => '1',
+        
+        CACHED_MOSI_O       => code_cache_mosi,
+        CACHED_MISO_I       => code_cache_miso,
+        
+        UNCACHED_MOSI_O     => code_uc_0_mosi,
+        UNCACHED_MISO_I     => code_uc_0_miso
+    );
+    
     code_cache_present:
     if CODE_CACHE_LINES > 0 generate
 
@@ -197,8 +218,8 @@ begin
     code_cache_missing:
     if CODE_CACHE_LINES = 0 generate
 
-        code_uncached_mosi <= code_cpu_mosi;
-        code_cpu_miso <= code_uncached_miso;
+        code_cache_miso.mwait <= '0';
+        code_cache_miso.rd_data <= (others => '0');
         
     end generate code_cache_missing;
 
@@ -206,27 +227,46 @@ begin
 
     tcm_code_present:
     if TCM_CODE_SIZE > 0 generate
+        
+        -- Filter Code accesses to CTCM space.
+        code_area_decoder: entity work.ION_BUS_DECODER
+        generic map (
+            SLAVE_AREA_SIZE     => TCM_CODE_SIZE
+        )
+        port map (
+            CLK_I               => CLK_I,
+            RESET_I             => RESET_I, 
+        
+            MASTER_MOSI_I       => code_uc_0_mosi,
+            MASTER_MISO_O       => code_uc_0_miso,
+            
+            SLAVE_BASE_I        => code_tcm_base,
+            
+            SLAVE_MOSI_O        => code_ctcm_arb_mosi,
+            SLAVE_MISO_I        => code_ctcm_arb_miso
+        );
 
-        data_mux_0: entity work.ION_BUS_MUX
+        -- Arbiter: share Code TCM between Code and Data space accesses.
+        -- note that Data accesses have priority necessarily.
+        code_arbiter: entity work.ION_CTCM_ARBITER
         generic map (
             SLAVE_0_AREA_SIZE   => TCM_CODE_SIZE
         )
         port map (
             CLK_I               => CLK_I,
             RESET_I             => RESET_I, 
-
-            MASTER_MOSI_I       => code_uncached_mosi,
-            MASTER_MISO_O       => code_uncached_miso,
-            
-            SLAVE_0_BASE_I      => code_tcm_base,
-            
-            SLAVE_0_MOSI_O      => code_tcm_mosi,
-            SLAVE_0_MISO_I      => code_tcm_miso,
-            
-            SLAVE_1_MOSI_O      => code_uc_wbone_mosi,
-            SLAVE_1_MISO_I      => code_uc_wbone_miso
-        );
         
+            MASTER_0_MOSI_I     => data_ctcm_arb_mosi,
+            MASTER_0_MISO_O     => data_ctcm_arb_miso,
+        
+            MASTER_1_MOSI_I     => code_ctcm_arb_mosi,
+            MASTER_1_MISO_O     => code_ctcm_arb_miso,
+            
+            SLAVE_MOSI_O        => code_tcm_mosi,
+            SLAVE_MISO_I        => code_tcm_miso
+        );
+    
+        -- Code TCM block.
         code_tcm: entity work.ION_TCM_CODE
         generic map (
             SIZE                => TCM_CODE_SIZE,
@@ -245,8 +285,8 @@ begin
     tcm_code_missing:
     if TCM_CODE_SIZE = 0 generate
     
-        code_uc_wbone_mosi <= code_uncached_mosi;
-        code_uncached_miso <= code_uc_wbone_miso;
+        code_uc_0_miso.mwait <= '0';
+        code_uc_0_miso.rd_data <= (others => '0');
     
     end generate tcm_code_missing;
     
@@ -268,8 +308,8 @@ begin
     data_cache_missing:
     if DATA_CACHE_LINES = 0 generate
 
-        data_uncached_mosi <= data_cpu_mosi;
-        data_cpu_miso <= data_uncached_miso;
+        data_uc_0_mosi <= data_cpu_mosi;
+        data_cpu_miso <= data_uc_0_miso;
         
     end generate data_cache_missing;
 
@@ -286,16 +326,16 @@ begin
             CLK_I               => CLK_I,
             RESET_I             => RESET_I, 
 
-            MASTER_MOSI_I       => data_uncached_mosi,
-            MASTER_MISO_O       => data_uncached_miso,
+            MASTER_MOSI_I       => data_uc_0_mosi,
+            MASTER_MISO_O       => data_uc_0_miso,
             
             SLAVE_0_BASE_I      => data_tcm_base,
             
             SLAVE_0_MOSI_O      => data_tcm_mosi,
             SLAVE_0_MISO_I      => data_tcm_miso,
             
-            SLAVE_1_MOSI_O      => data_uc_wbone_mosi,
-            SLAVE_1_MISO_I      => data_uc_wbone_miso
+            SLAVE_1_MOSI_O      => data_uc_1_mosi,
+            SLAVE_1_MISO_I      => data_uc_1_miso
         );
         
         data_tcm: entity work.ION_TCM_DATA
@@ -316,20 +356,39 @@ begin
     tcm_data_missing:
     if TCM_DATA_SIZE = 0 generate
     
-        data_uc_wbone_mosi <= data_uncached_mosi;
-        data_uncached_miso <= data_uc_wbone_miso;
+        data_uc_1_mosi <= data_uc_0_mosi;
+        data_uc_0_miso <= data_uc_1_miso;
     
     end generate tcm_data_missing;
 
-
+    data_mux_1: entity work.ION_BUS_MUX
+    generic map (
+        SLAVE_0_AREA_SIZE   => TCM_CODE_SIZE
+    )
+    port map (
+        CLK_I               => CLK_I,
+        RESET_I             => RESET_I, 
+    
+        MASTER_MOSI_I       => data_uc_1_mosi,
+        MASTER_MISO_O       => data_uc_1_miso,
+        
+        -- Code TCM must be seen at the same address in both spaces.
+        SLAVE_0_BASE_I      => code_tcm_base,
+        
+        SLAVE_0_MOSI_O      => data_ctcm_arb_mosi,
+        SLAVE_0_MISO_I      => data_ctcm_arb_miso,
+        
+        SLAVE_1_MOSI_O      => data_uc_2_mosi,
+        SLAVE_1_MISO_I      => data_uc_2_miso
+    );
+    
+    
 --------------------------------------------------------------------------------
 -- Wishbone Bridge & access arbiter.
 
-
-    -- FIXME Data uncached wishbone port missing.
-    -- This needs to go to an arbiter.
-    data_uc_wbone_miso.mwait <= '0';
-    data_uc_wbone_miso.rd_data <= (others => '0');
+    -- FIXME there should be a wishbone bridge here, this is a synth stub.
+    DATA_UC_WB_MOSI_O <= data_uc_2_mosi;
+    data_uc_2_miso <= DATA_UC_WB_MISO_I;
 
 
 end architecture rtl;

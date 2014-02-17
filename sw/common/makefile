@@ -88,7 +88,7 @@ SRC_DIR = ..
 # VHDL test bench directory, where VHDL output files will be created
 TB_DIR = ../../src/testbench
 # VHDL DE-1 board demo root directory, for vhdl output
-DEMO_DIR = ../../vhdl/demo
+DEMO_DIR = ../../src/rtl/common
 # Path to local libraries
 LIB_PATH = $(SRC_DIR)/common/libsoc
 # Link script to be used: by default, link for internal memory mode.

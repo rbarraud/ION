@@ -13,7 +13,7 @@
 -- REFERENCES
 -- [1] ion_design_notes.pdf -- ION project design notes.
 --------------------------------------------------------------------------------
---
+-- KNOWN BUGS AND CAVEATS:
 --
 --------------------------------------------------------------------------------
 -- Copyright (C) 2014 Jose A. Ruiz
@@ -92,7 +92,7 @@ slave0_addr <= MASTER_MOSI_I.addr(slave0_addr'high downto 2);
 slave0_ce <= 
     '1' when MASTER_MOSI_I.addr(31 downto slave0_addr'high+1) = 
              SLAVE_0_BASE_I(31 downto slave0_addr'high+1) 
-    else '1';
+    else '0';
 
 registered_ce:
 process(CLK_I)
@@ -163,9 +163,9 @@ signal cached_ce_reg :      std_logic;
 begin
 
 cached_ce <= 
-    '1' when MASTER_MOSI_I.addr(31 downto 29) = "101" else
-    '1' when MASTER_MOSI_I.addr(31 downto 29) = "100" and K0_CACHED_IN='1' else
-    '0';
+    '0' when MASTER_MOSI_I.addr(31 downto 29) = "101" else
+    '0' when MASTER_MOSI_I.addr(31 downto 29) = "100" and K0_CACHED_IN='0' else
+    '1';
 
 registered_ce:
 process(CLK_I)
@@ -196,3 +196,173 @@ with cached_ce_reg select MASTER_MISO_O <=
     UNCACHED_MISO_I     when others;
 
 end rtl;
+
+--##############################################################################
+
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.std_logic_arith.all;
+use ieee.std_logic_unsigned.all;
+
+use work.ION_MAIN_PKG.all;
+
+-- IMPORTANT: This is NOT a GENERAL ION BUS ARBITER; it does not pass along the 
+-- slave wait line. It works with the Code TCM but will fail with other slaves.
+-- Also, it's tailored for Data and Code master ports -- see registered MISO_0.
+entity ION_CTCM_ARBITER is
+    generic(
+        -- Size of memory area occupied by slave 0 in bytes.
+        SLAVE_0_AREA_SIZE : integer := 4096
+    );
+    port(
+        CLK_I               : in std_logic;
+        RESET_I             : in std_logic;
+
+        MASTER_0_MOSI_I     : in t_cpumem_mosi;
+        MASTER_0_MISO_O     : out t_cpumem_miso;
+
+        MASTER_1_MOSI_I     : in t_cpumem_mosi;
+        MASTER_1_MISO_O     : out t_cpumem_miso;
+        
+        SLAVE_MOSI_O        : out t_cpumem_mosi;
+        SLAVE_MISO_I        : in t_cpumem_miso
+    );
+end;
+
+architecture rtl of ION_CTCM_ARBITER is
+
+signal master0_ce :         std_logic;
+signal master0_ce_reg :     std_logic_vector(1 downto 0);
+signal master0_request :    std_logic;
+signal master0_selected :   std_logic;
+signal master1_request :    std_logic;
+signal master1_selected :   std_logic;
+          
+begin
+ 
+--------------------------------------------------------------------------------
+---- Address decoding.
+
+master0_ce <=
+    '1' when MASTER_0_MOSI_I.wr_be /= "0000" else 
+    '1' when MASTER_0_MOSI_I.rd_en = '1' else 
+    '0';
+
+registered_ce:
+process(CLK_I)
+begin
+    if (CLK_I'event and CLK_I='1') then
+        if RESET_I='1' then 
+            master0_ce_reg <= "00";
+        else
+            master0_ce_reg(0) <= master0_ce;
+            master0_ce_reg(1) <= master0_ce_reg(0);
+        end if;
+    end if;
+end process registered_ce;
+
+master0_selected <= master0_ce or master0_ce_reg(0);
+master0_request <= 
+    '1' when MASTER_0_MOSI_I.rd_en='1' else
+    '1' when MASTER_0_MOSI_I.wr_be /="0000" else
+    '0';
+master1_selected <= not master0_selected;
+master1_request <= 
+    '1' when MASTER_1_MOSI_I.rd_en='1' else
+    '1' when MASTER_1_MOSI_I.wr_be /="0000" else
+    '0';
+
+--------------------------------------------------------------------------------
+---- MOSI & MISO multiplexors.
+
+SLAVE_MOSI_O <= 
+    MASTER_0_MOSI_I when master0_ce='1' else
+    MASTER_1_MOSI_I;
+
+registered_miso:
+process(CLK_I)
+begin
+    if (CLK_I'event and CLK_I='1') then
+        if master0_ce_reg(0)='1' then
+            MASTER_0_MISO_O.rd_data <= SLAVE_MISO_I.rd_data;
+        end if;
+    end if;
+end process registered_miso;    
+
+-- FIXME we're not passing along the input MISO wait lines! not for general use!
+
+-- FIXME explain: DATA_MISO needs the data stable 2 cycles AFTER rd_en is 
+-- deasserted: the normal cycle and one extra used on load_interlock.
+MASTER_0_MISO_O.mwait <= master0_ce_reg(0);
+    
+MASTER_1_MISO_O.rd_data <= SLAVE_MISO_I.rd_data;
+MASTER_1_MISO_O.mwait <= master0_ce_reg(1); --master0_ce or 
+
+end architecture rtl;
+
+--##############################################################################
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.std_logic_arith.all;
+use ieee.std_logic_unsigned.all;
+
+use work.ION_MAIN_PKG.all;
+
+
+entity ION_BUS_DECODER is
+    generic(
+        -- Size of memory area occupied by slave 0 in bytes.
+        SLAVE_AREA_SIZE : integer := 4096
+    );
+    port(
+        CLK_I               : in std_logic;
+        RESET_I             : in std_logic;
+
+        MASTER_MOSI_I       : in t_cpumem_mosi;
+        MASTER_MISO_O       : out t_cpumem_miso;
+        
+        SLAVE_BASE_I        : in t_word;
+        
+        SLAVE_MOSI_O        : out t_cpumem_mosi;
+        SLAVE_MISO_I        : in t_cpumem_miso
+    );
+end;
+
+architecture rtl of ION_BUS_DECODER is
+
+constant MATCH_ADDR_SIZE : integer := log2(SLAVE_AREA_SIZE);
+
+subtype t_match_address is std_logic_vector(MATCH_ADDR_SIZE-1 downto 2);
+
+signal slave_addr :         t_match_address;
+signal slave_ce :           std_logic;
+
+constant HI :               integer := slave_addr'high;
+          
+begin
+ 
+--------------------------------------------------------------------------------
+---- Address decoding.
+ 
+slave_addr <= MASTER_MOSI_I.addr(slave_addr'high downto 2);
+
+slave_ce <= 
+    '1' when MASTER_MOSI_I.addr(31 downto slave_addr'high+1) = 
+             SLAVE_BASE_I(31 downto slave_addr'high+1) 
+    else '0';
+
+--------------------------------------------------------------------------------
+---- MOSI passthrough, MISO multiplexor.
+
+-- Slave 0 will have its enable signals filtered, other signals unmodified.
+SLAVE_MOSI_O.addr <= MASTER_MOSI_I.addr;
+SLAVE_MOSI_O.wr_data <= MASTER_MOSI_I.wr_data;
+SLAVE_MOSI_O.wr_be <= MASTER_MOSI_I.wr_be when slave_ce='1' else "0000";
+SLAVE_MOSI_O.rd_en <= MASTER_MOSI_I.rd_en when slave_ce='1' else '0';
+
+-- MISO multiplexor controlled by registered CE; see ION bus chronograms.
+MASTER_MISO_O <= SLAVE_MISO_I;
+
+end architecture rtl;

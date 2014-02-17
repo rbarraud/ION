@@ -65,8 +65,10 @@ architecture testbench of ION_CORE_TB is
 signal clk :                std_logic := '0';
 signal reset :              std_logic := '1';
 
-signal data_uc_wb_mosi :    t_wishbone_mosi;
-signal data_uc_wb_miso :    t_wishbone_miso;
+--signal data_uc_wb_mosi :    t_wishbone_mosi;
+--signal data_uc_wb_miso :    t_wishbone_miso;
+signal data_uc_wb_mosi :    t_cpumem_mosi;
+signal data_uc_wb_miso :    t_cpumem_miso;
 
 signal irq :                std_logic_vector(7 downto 0);
 
@@ -107,6 +109,9 @@ begin
         IRQ_I               => irq
     );
 
+    
+    data_uc_wb_miso.mwait <= '0';
+    data_uc_wb_miso.rd_data <= (others => '0');
 
     -- Master clock: free running clock used as main module clock --------------
     run_master_clock:

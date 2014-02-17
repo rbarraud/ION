@@ -17,7 +17,7 @@ LFLAGS = -Ttext $(BRAM_START) -Tdata $(XRAM_START) -eentry -I elf32-big
 #-- Targets & rules ------------------------------------------------------------
 
 opcodes:
-	$(AS) -o opcode_emu.o $(SRC_DIR)/common/opcode_emu.s
+	$(AS) -o opcode_emu.o $(SRC_DIR)/common/crt/opcode_emu.s
 	$(AS) -defsym XRAM_BASE=$(XRAM_START) -mips32r2 -o opcodes.o opcodes.s
 	$(LD) $(LFLAGS) -Map opcodes.map -s -N -o opcodes.axf opcodes.o opcode_emu.o
 	-@$(DUMP) -I elf32-big --disassemble opcodes.axf > opcodes.lst
