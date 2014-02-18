@@ -101,19 +101,16 @@ signal cache_ctrl_miso :    t_cache_miso;
 --------------------------------------------------------------------------------
 -- Code space signals
 
--- Bus to code cache.
+-- CPU to cache mux.
 signal code_cache_miso :    t_cpumem_miso;
 signal code_cache_mosi :    t_cpumem_mosi;
-
--- Buses to uncached code areas.
+-- Cache mux to Code TCM area decoder.
 signal code_uc_0_miso :     t_cpumem_miso;
 signal code_uc_0_mosi :     t_cpumem_mosi;
-
--- Bus to CTCM arbiter.
+-- Code TCM area decoder to CTCM arbiter.
 signal code_ctcm_arb_miso : t_cpumem_miso;
 signal code_ctcm_arb_mosi : t_cpumem_mosi;
-
--- Bus to Code TCM.
+-- CTCM arbiter to Code TCM.
 signal code_tcm_miso :      t_cpumem_miso;
 signal code_tcm_mosi :      t_cpumem_mosi;
 
