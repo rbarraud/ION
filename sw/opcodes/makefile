@@ -8,7 +8,7 @@ TARGET = opcodes
 APP_NAME = "Opcode tester"
 
 # Link script to be used: run from BRAM
-LINK_SCRIPT = $(SRC_DIR)/common/link/internal.lds
+LINK_SCRIPT = $(SW_ROOT)/common/link/internal.lds
 
 # Code memory parameters -- Code TCM.
 CODE_MEM_START  = 0xbfc00000
@@ -34,7 +34,7 @@ LFLAGS = -Ttext $(CODE_MEM_START) -Tdata $(DATA_MEM_START) -eentry -I elf32-big
 # source, so we can cram all in a single rule.
 
 program:
-	$(AS) -o opcode_emu.o $(SRC_DIR)/common/crt/opcode_emu.s
+	$(AS) -o opcode_emu.o $(SW_ROOT)/common/crt/opcode_emu.s
 	$(AS) -defsym XRAM_BASE=$(DATA_MEM_START) -mips32r2 -o $(TARGET).o opcodes.s
 	$(LD) $(LFLAGS) -Map $(TARGET).map -s -N -o $(TARGET).axf $(TARGET).o opcode_emu.o
 	-@$(DUMP) -I elf32-big --disassemble $(TARGET).axf > $(TARGET).lst

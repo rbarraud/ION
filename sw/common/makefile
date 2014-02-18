@@ -72,15 +72,15 @@ DATA_MEM_SIZE   = 2048
 ### Project directories -- to be replaced in application makefile ##############
 
 # Root test code source directory, where python script and vhdl templates are
-SRC_DIR = ..
+SW_ROOT = ..
 # VHDL test bench directory, where VHDL output files will be created
 TB_DIR = ../../src/testbench
 # Directory for object code package, to be used in synthesis.
 OBJ_DIR = ../../src/rtl/obj
 # Path to local libraries
-LIB_PATH = $(SRC_DIR)/common/libsoc
+LIB_PATH = $(SW_ROOT)/common/libsoc
 # Link script to be used: by default, link for internal memory mode.
-LINK_SCRIPT ?= $(SRC_DIR)/common/link/internal.lds
+LINK_SCRIPT ?= $(SW_ROOT)/common/link/internal.lds
 
 ### Build options -- to be replaced in application makefile ####################
 
@@ -91,3 +91,4 @@ LINK_SCRIPT ?= $(SRC_DIR)/common/link/internal.lds
 #CFLAGS = -O2 -Wall -c -s -fno-builtin -mips1 -G0 -nodefaultlibs -nostdlib
 CFLAGS = -O2 -Wall -c -s -mips1 -G0
 # LFLAGS: linker options are in the respective makefiles
+

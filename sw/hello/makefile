@@ -4,10 +4,11 @@ include ../common/makefile
 
 #-- Application setup ----------------------------------------------------------
 
+TARGET = hello
 APP_NAME = "Hello World!"
 
 # Link script to be used: run from BRAM
-LINK_SCRIPT = $(SRC_DIR)/common/link/internal.lds
+LINK_SCRIPT = $(SW_ROOT)/common/link/internal.lds
 
 # Code memory parameters -- Code TCM.
 CODE_MEM_START  = 0xbfc00000
@@ -23,7 +24,6 @@ LOG_TRIGGER = 0xbfc00000
 
 #-- Build flags ----------------------------------------------------------------
 
-
 LFLAGS = -T$(LINK_SCRIPT) -L $(LIB_PATH) \
          -Ttext $(CODE_MEM_START) -Tdata $(DATA_MEM_START) \
          -ereset -I elf32-big
@@ -31,40 +31,56 @@ CFLAGS = -O2 -Wall -c -s -msoft-float -mips1 -G0
 AFLAGS = --defsym XRAM_BASE=$(DATA_MEM_START)
 
 
-OBJS = boot_rom.o opcode_emu.o crt0.o hello.o
+#-- Common code build -- crt0 and bootstrap ------------------------------------
+
+CRTDIR = $(SW_ROOT)/common/crt
+BOOTDIR = $(SW_ROOT)/common/boot
+
+#-- crt0
+SRCCRT := $(wildcard $(CRTDIR)/*.s)
+OBJCRT := $(SRCCRT:$(CRTDIR)/%.s=%.o)
+#-- bootstrap code
+SRCBOOT := $(wildcard $(BOOTDIR)/*.s)  
+OBJBOOT := $(SRCBOOT:$(BOOTDIR)/%.s=%.o)
+
+%.o: $(CRTDIR)/%.s
+	$(AS) $(AFLAGS) -o $@ $^
+
+%.o: $(BOOTDIR)/%.s
+	$(AS) $(AFLAGS) -o $@ $^
 
 
-#-- Targets & rules ------------------------------------------------------------
+#-- Application build config ---------------------------------------------------
+
+SRCDIR = .
+SRCS := $(wildcard $(SRCDIR)/*.c)
+OBJAPP := $(SRCS:$(SRCDIR)/%.c=%.o) 
+
+#-- IMPORTANT: Keep this order or the linked executable will crash.
+OBJS = $(OBJBOOT) $(OBJCRT) $(OBJAPP) 
+
+
+#-- App build targets & rules --------------------------------------------------
 
 .PHONY: program
-program: hello.code hello.data
+program: $(TARGET).code $(TARGET).data
 
-hello.axf: $(OBJS)
-	$(LD) $(LFLAGS) -Map hello.map -s -N -o hello.axf $(OBJS)
-	-@$(DUMP) -m mips --disassemble hello.axf > hello.lst
 
-hello.code: hello.axf
+$(TARGET).axf: $(OBJS)
+	$(LD) $(LFLAGS) -Map $(TARGET).map -N -o $(TARGET).axf $(OBJS)
+	-@$(DUMP) -m mips -S --disassemble $(TARGET).axf > $(TARGET).lst
+
+%.o: %.c
+	$(CC) $(CFLAGS) $<    
+
+    
+$(TARGET).code: $(TARGET).axf
 # Extract object code to be placed in code space
-	$(COPY) -I elf32-big -O binary hello.axf hello.code
+	$(COPY) -I elf32-big -O binary $(TARGET).axf $(TARGET).code
 
-hello.data: hello.axf
-# Extract object code to be placed in data space
-	$(COPY) -I elf32-big -j.rodata -j.bss -O binary hello.axf hello.data
-
-
-
-boot_rom.o: $(SRC_DIR)/common/boot/boot_rom.s
-	$(AS) $(AFLAGS) -o boot_rom.o $(SRC_DIR)/common/boot/boot_rom.s
-
-crt0.o: $(SRC_DIR)/common/crt/crt0.s
-	$(AS) $(AFLAGS) -o crt0.o $(SRC_DIR)/common/crt/crt0.s
-
-opcode_emu.o: $(SRC_DIR)/common/crt/opcode_emu.s
-	$(AS) $(AFLAGS) -o opcode_emu.o $(SRC_DIR)/common/crt/opcode_emu.s
-
-hello.o: hello.c
-	$(CC) $(CFLAGS) -o hello.o hello.c
-
+$(TARGET).data: $(TARGET).axf
+# Extract object code to be placed in data space (useful in TBs)
+	$(COPY) -I elf32-big -j.rodata -j.bss -O binary $(TARGET).axf $(TARGET).data
 
 
 #-- Targets that build the synthesizable vhdl; meant for direct invocation -----
@@ -81,8 +97,8 @@ sim: program synth
 synth: program
 	$(VHDL_OBJ_PKG) --project=$(APP_NAME) \
 		--package OBJ_CODE_PKG \
-		--bin hello.code --name OBJ_CODE --cmem_size $(CODE_MEM_SIZE) \
-        --bin hello.data --name INIT_DATA --dmem_size $(DATA_MEM_SIZE)\
+		--bin $(TARGET).code --name OBJ_CODE --cmem_size $(CODE_MEM_SIZE) \
+        --bin $(TARGET).data --name INIT_DATA --dmem_size $(DATA_MEM_SIZE)\
 		--output $(OBJ_DIR)/obj_code_pkg.vhdl
 
 
