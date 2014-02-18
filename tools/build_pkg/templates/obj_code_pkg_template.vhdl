@@ -43,14 +43,7 @@ use work.ION_MAIN_PKG.all;
 
 package @obj_pkg_name@ is
 
--- Hardcoded simulation parameters ---------------------------------------------
-
--- Simulation clock rate
-constant CLOCK_RATE : integer   := 50e6;
--- Simulation clock period
-constant T : time               := (1.0e9/real(CLOCK_RATE)) * 1 ns;
-
--- Other simulation parameters -------------------------------------------------
+-- Simulation or synthesis parameters ------------------------------------------
 
 @constants@
 

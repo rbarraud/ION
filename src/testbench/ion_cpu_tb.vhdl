@@ -45,13 +45,18 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.std_logic_arith.all;
 use ieee.std_logic_unsigned.all;
-use std.textio.all;
 
-use work.txt_util.all;
+-- Main project package.
 use work.ION_MAIN_PKG.all;
-
+-- Tst bench support packages.
+use std.textio.all;
+use work.txt_util.all;
 use work.ION_TB_PKG.all;
-use work.sim_params_pkg.all;
+
+-- Simulation parameters defined in the SW makefile (generated package).
+use work.SIM_PARAMS_PKG.all;
+-- Hardware parameters & memory contents from SW build (generated package).
+use work.OBJ_CODE_PKG.all;
 
 
 entity ION_CPU_TB is
@@ -60,14 +65,19 @@ end;
 
 architecture testbench of ION_CPU_TB is
 
+-- Simulation clock rate
+constant CLOCK_RATE : integer   := 50e6;
+-- Simulation clock period
+constant T : time               := (1.0e9/real(CLOCK_RATE)) * 1 ns;
+
 --------------------------------------------------------------------------------
 -- Memory.
 
 -- For CPU verification, we'll connect a data array to the CPU data port with no 
 -- intervening cache, like TCMs.
 
--- For the data array, we'll use the SRAM size and initialization values.
-constant DTCM_SIZE : integer := SRAM_SIZE;
+-- For the data array, we'll use the data memory size and initialization values.
+constant DTCM_SIZE : integer := DATA_MEM_SIZE;
 constant DTCM_ADDR_SIZE : integer := log2(DTCM_SIZE);
 
 -- Using shared variables for big memory arrays speeds up simulation a lot;
@@ -80,8 +90,8 @@ signal dtcm_data :          t_word;
 signal dtcm_ce :            std_logic;
 signal dtcm_wait :          std_logic;
 
--- For the code array, we'll use the BRAM size and initialization values.
-constant CTCM_SIZE : integer := BRAM_SIZE;
+-- For the code array, we'll use the code memory size and initialization values.
+constant CTCM_SIZE : integer := CODE_MEM_SIZE;
 constant CTCM_ADDR_SIZE : integer := log2(CTCM_SIZE);
 
 shared variable ctcm : t_word_table(0 to CTCM_SIZE-1) := objcode_to_wtable(obj_code, CTCM_SIZE);

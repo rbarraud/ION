@@ -58,28 +58,16 @@ endif
 
 ### VHDL source file manipulation tools ########################################
 ION_TOOLS = ../../tools
-TO_VHDL = $(PYTHON) $(ION_TOOLS)/bin2hdl/bin2hdl.py
 VHDL_OBJ_PKG = $(PYTHON) $(ION_TOOLS)/build_pkg/build_pkg.py -t $(ION_TOOLS)/build_pkg/templates
 
 ### Default system parameters -- to be replaced in application makefile ########
 
-# 'CODE_BRAM' is meant to be a small BRAM (2 to 4KB) used for bootstrapping.
-# 'DATA_BRAM' is a small BRAM connected to the data ports, used for debugging.
-# 'XRAM' is meant to be external SRAM
-
-
-# Default location of code BRAM is on the reset vector address
-CODE_BRAM_ADDRESS = 0
-# Default size of code BRAM in 32-bit words
-CODE_BRAM_SIZE = 1024
-# Default size of data BRAM in 32-bit words (meant for simulation only)
-DATA_BRAM_SIZE = 256
-# Default address of BRAM -- used in some simulation-only tests, see makefiles
-DATA_BRAM_ADDRESS = 0x10000
-# Default size of data external SRAM (XRAM) in 16-bit words (for simulation)
-XRAM_SIZE = 2048
-# Default address of XRAM
-XRAM_ADDRESS = 0x80000000
+# Code memory parameters -- Code TCM.
+CODE_MEM_START  = 0xbfc00000
+CODE_MEM_SIZE   = 2048
+# Data memory parameters -- Data TCM.
+DATA_MEM_START  = 0x00000000
+DATA_MEM_SIZE   = 2048
 
 ### Project directories -- to be replaced in application makefile ##############
 
@@ -87,8 +75,8 @@ XRAM_ADDRESS = 0x80000000
 SRC_DIR = ..
 # VHDL test bench directory, where VHDL output files will be created
 TB_DIR = ../../src/testbench
-# VHDL DE-1 board demo root directory, for vhdl output
-DEMO_DIR = ../../src/rtl/common
+# Directory for object code package, to be used in synthesis.
+OBJ_DIR = ../../src/rtl/obj
 # Path to local libraries
 LIB_PATH = $(SRC_DIR)/common/libsoc
 # Link script to be used: by default, link for internal memory mode.

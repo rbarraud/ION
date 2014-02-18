@@ -14,6 +14,8 @@ vcom -reportprogress 300 -work work ../../../src/rtl/buses/ion_tcm_code.vhdl
 vcom -reportprogress 300 -work work ../../../src/rtl/buses/ion_tcm_data.vhdl
 vcom -reportprogress 300 -work work ../../../src/rtl/cpu/ion_core.vhdl
 
+vcom -reportprogress 300 -work work ../../../src/rtl/obj/obj_code_pkg.vhdl
+
 vcom -reportprogress 300 -work work ../../../src/testbench/common/txt_util.vhdl
 vcom -reportprogress 300 -work work ../../../src/testbench/common/ion_tb_pkg.vhdl
 #vlog -reportprogress 300 -work work ../../../src/testbench/common/models/mt48lc4m16a2.v

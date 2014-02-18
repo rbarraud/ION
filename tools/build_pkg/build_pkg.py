@@ -12,6 +12,8 @@
     In the code samples, this script is used to generate two separate packages
     for simulation and synthesis. Please refer to the makefiles for detailed
     usage examples.
+    
+    FIXME To be refactored slightly, still has remnants from old project.
 """
 
 import sys
@@ -47,13 +49,12 @@ def usage():
     print "{s|sim_length} <value>     Value of SIMULATION_LENGTH constant."
     print "{log_trigger} <value>      Value of LOG_TRIGGER_ADDRESS constant."
     print "{xram_size} <value>        Value of SRAM_SIZE constant."
-    print "{flash_size} <value>       Value of PROM_SIZE constant."
-    print "{xram_size} <value>        Value of SRAM_SIZE constant."    
+    print "{cmem_size} <value>        Value of CODE_MEM_SIZE constant."  
     print ""
     print "The following optional parameters will define a constant in the VHDL"
     print "package if they are used (simulation and synthesis configuration):"
     print ""
-    print "{bram_size} <value>        Value of BRAM_SIZE constant."    
+    print "{dmem_size} <value>         Value of DATA_MEM_SIZE constant."    
 
     
 def help():
@@ -196,14 +197,14 @@ def build_vhdl_code(template_filename, blocks, package_params):
                     str = str + \
                           "constant SRAM_SIZE : integer := %d;\n" % \
                           int(package_params['xram_size']) 
-                if defined(package_params,'flash_size'): 
+                if defined(package_params,'cmem_size'): 
                     str = str + \
-                          "constant PROM_SIZE : integer := %d;\n" % \
-                          int(package_params['flash_size']) 
-                if defined(package_params,'boot_bram_size'): 
+                          "constant CODE_MEM_SIZE : integer := %d;\n" % \
+                          int(package_params['cmem_size']) 
+                if defined(package_params,'dmem_size'): 
                     str = str + \
-                          "constant BRAM_SIZE : integer := %d;\n" % \
-                          int(package_params['boot_bram_size']) 
+                          "constant DATA_MEM_SIZE : integer := %d;\n" % \
+                          int(package_params['dmem_size']) 
                 
                 line = line.replace("@constants@", str)
             elif line.rfind("@project_name@") >= 0:
@@ -226,8 +227,8 @@ def main(argv):
          "output=", "indent=", "vhdl=", "bin=", "templates=", 
          "name=", "sim_length=", 
          # parameters with no short-form
-         "project=", "log_trigger=", "xram_size=", "flash_size=",
-         "bram_size=", 
+         "project=", "log_trigger=", "xram_size=", "cmem_size=",
+         "dmem_size=", 
          "empty"])
     except getopt.GetoptError, err:
         print ""
@@ -241,9 +242,9 @@ def main(argv):
     target_filename = None
     
     package_params = {
-        'boot_bram_size': 1024,
+        'dmem_size': 0,
         'xram_size': 0,
-        'flash_size': 0,
+        'cmem_size': 0,
         'trigger_address': None,
         'indent': 2,
         'project_name': "<anonymous>",
@@ -279,10 +280,10 @@ def main(argv):
             package_params['sim_length'] = arg
         elif opt in ("--xram_size"):
             package_params['xram_size'] = arg
-        elif opt in ("--flash_size"):
-            package_params['flash_size'] = arg
-        elif opt in ("--bram_size"):
-            package_params['boot_bram_size'] = arg
+        elif opt in ("--cmem_size"):
+            package_params['cmem_size'] = arg
+        elif opt in ("--dmem_size"):
+            package_params['dmem_size'] = arg
         # Options for one initialization block 
         elif opt in ("-n", "--name"):
             if block_params.has_key('constant_name'):

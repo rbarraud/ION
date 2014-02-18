@@ -44,13 +44,18 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.std_logic_arith.all;
 use ieee.std_logic_unsigned.all;
-use std.textio.all;
 
-use work.txt_util.all;
+-- Main project package.
 use work.ION_MAIN_PKG.all;
-
+-- Tst bench support packages.
+use std.textio.all;
+use work.txt_util.all;
 use work.ION_TB_PKG.all;
-use work.sim_params_pkg.all;
+
+-- Simulation parameters defined in the SW makefile (generated package).
+use work.SIM_PARAMS_PKG.all;
+-- Hardware parameters & memory contents from SW build (generated package).
+use work.OBJ_CODE_PKG.all;
 
 
 entity ION_CORE_TB is
@@ -58,6 +63,12 @@ end;
 
 
 architecture testbench of ION_CORE_TB is
+
+-- Simulation clock rate
+constant CLOCK_RATE : integer   := 50e6;
+-- Simulation clock period
+constant T : time               := (1.0e9/real(CLOCK_RATE)) * 1 ns;
+
 
 --------------------------------------------------------------------------------
 -- Core interface.
@@ -94,10 +105,10 @@ begin
 
     core: entity work.ION_CORE
     generic map (
-        TCM_CODE_SIZE => 16384,
+        TCM_CODE_SIZE => CODE_MEM_SIZE,
         TCM_CODE_INIT => OBJ_CODE,
-        TCM_DATA_SIZE => 8192,
-        TCM_DATA_INIT => OBJ_CODE
+        TCM_DATA_SIZE => DATA_MEM_SIZE
+        -- TCM_DATA_INIT => INIT_DATA
     )
     port map (
         CLK_I               => clk,

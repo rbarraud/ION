@@ -1,30 +1,34 @@
 #-- Bring toolchain config parameters from the common makefile
 include ../common/makefile
 
+
+#-- Application setup ----------------------------------------------------------
+
+APP_NAME = "Hello World!"
+
 # Link script to be used: run from BRAM
 LINK_SCRIPT = $(SRC_DIR)/common/link/internal.lds
 
-#-- Configure the application --------------------------------------------------
+# Code memory parameters -- Code TCM.
+CODE_MEM_START  = 0xbfc00000
+CODE_MEM_SIZE   = 2048
+# Data memory parameters -- Data TCM.
+DATA_MEM_START  = 0x00000000
+DATA_MEM_SIZE   = 2048
 
-# Simulation length in cycles; long enough to let the program run to completion.
+# Test bench simulation timeout period in clock cycles.
 SIM_LENGTH = 90000
+# Start logging HW activity after fetching from this address.
+LOG_TRIGGER = 0xbfc00000
 
-# FPGA Block RAM parameters
-BRAM_START = 0xbfc00000
-CODE_BRAM_SIZE = 2048
-# External RAM parameters (size in words)
-XRAM_SIZE = 1024
-XRAM_START = 0x00000000
+#-- Build flags ----------------------------------------------------------------
 
-
-# 1.- Put the code in internal BRAM and the data in external SRAM.
-# 2.- Do not use any of the standard libraries and use libsoc instead.
 
 LFLAGS = -T$(LINK_SCRIPT) -L $(LIB_PATH) \
-         -Ttext $(BRAM_START) -Tdata $(XRAM_START) \
+         -Ttext $(CODE_MEM_START) -Tdata $(DATA_MEM_START) \
          -ereset -I elf32-big
 CFLAGS = -O2 -Wall -c -s -msoft-float -mips1 -G0
-AFLAGS = --defsym XRAM_BASE=$(XRAM_START)
+AFLAGS = --defsym XRAM_BASE=$(DATA_MEM_START)
 
 
 OBJS = boot_rom.o opcode_emu.o crt0.o hello.o
@@ -65,34 +69,21 @@ hello.o: hello.c
 
 #-- Targets that build the synthesizable vhdl; meant for direct invocation -----
 
-#-- Create VHDL package with data and parameters for simulation 
-sim: program demo
-	$(VHDL_OBJ_PKG) --project="Hello World" \
-		--package sim_params_pkg \
-		--bin hello.code --name obj_code --bram_size $(CODE_BRAM_SIZE) \
-		--bin hello.data --name sram_init --xram_size $(XRAM_SIZE)\
-		--name prom_init --flash_size 0 \
+#-- Create VHDL package with data and parameters for simulation and synthesis
+sim: program synth
+	$(VHDL_OBJ_PKG) --project=$(APP_NAME) \
+		--package SIM_PARAMS_PKG \
 		--output $(TB_DIR)/common/sim_params_pkg.vhdl \
-		-s $(SIM_LENGTH) --log_trigger=0xbfc00000 \
+		-s $(SIM_LENGTH) --log_trigger=$(LOG_TRIGGER) \
 
-#-- Create VHDL file for simulation test bench using TB0 template
-#-- This will instantiate the CPU without any caches or memory controller and
-#-- will run the program off of an initialized ROM connected to the code 
-#-- interface.
-#-- NOTE: This target has not been used in some time and may be broken. It's 
-#-- here because it can still be useful in an emergency.
-sim_bram: program
-	$(TO_VHDL) --code hello.code --data hello.data \
-		--code_size $(CODE_BRAM_SIZE) --data_size $(XRAM_SIZE) \
-		-s $(SIM_LENGTH) -v $(SRC_DIR)/mips_tb0_template.vhdl \
-		-o $(TB_DIR)/mips_tb2.vhdl -e mips_tb2
 
-#-- Create VHDL package with data and parameters for simulation and syntesis
-demo: program
-	$(VHDL_OBJ_PKG) --project="Hello World" \
-		--package obj_code_pkg \
-		--bin hello.code --name obj_code --bram_size $(CODE_BRAM_SIZE) \
-		--output $(DEMO_DIR)/../SoC/bootstrap_code_pkg.vhdl
+#-- Create VHDL package with data and parameters for syntesis
+synth: program
+	$(VHDL_OBJ_PKG) --project=$(APP_NAME) \
+		--package OBJ_CODE_PKG \
+		--bin hello.code --name OBJ_CODE --cmem_size $(CODE_MEM_SIZE) \
+        --bin hello.data --name INIT_DATA --dmem_size $(DATA_MEM_SIZE)\
+		--output $(OBJ_DIR)/obj_code_pkg.vhdl
 
 
 #-- And now the usual housekeeping stuff ---------------------------------------
