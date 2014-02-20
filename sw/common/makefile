@@ -29,23 +29,25 @@ RM = del
 DWIN32 = -DWIN32
 LINUX_PWD =
 
-
 # MIPS GCC cross-toolchain: CodeSourcery -- replace with your own
-
-PYTHON = c:/devel/tools/Python27/python.exe
-BIN_MIPS = C:/devel/tools/CS_MIPS/bin
-#BIN_MIPS = C:/dev/embedded/SourceryGpp/mips-elf-11-03.52/bin
+TOOLCHAIN = C:/devel/tools/CS_MIPS
+BIN_MIPS = $(TOOLCHAIN)/bin
 CC = $(BIN_MIPS)/mips-sde-elf-gcc.exe $(CFLAGS)
 AS = $(BIN_MIPS)/mips-sde-elf-as
 LD = $(BIN_MIPS)/mips-sde-elf-ld
 DUMP = $(BIN_MIPS)/mips-sde-elf-objdump
 COPY = $(BIN_MIPS)/mips-sde-elf-objcopy
 
+LIBPATH = $(TOOLCHAIN)/mips-sde-elf/lib
+
+PYTHON = c:/devel/tools/Python27/python.exe
+
 else
 #**** Customize for Linux
 
 # MIPS GCC cross-toolchain: BuildRoot toolchain in my home directory -- replace with your own
 # NOTE: we will not use gcc builtin functions or libc
+# FIXME this hasn't been tested for ages!
 
 BIN_MIPS = /home/jaruiz/desarrollo/uClinux/MIPS/buildroot/buildroot-2010.11/output/staging/usr/bin
 CC = $(BIN_MIPS)/mips-unknown-linux-uclibc-gcc $(CFLAGS)
@@ -77,8 +79,6 @@ SW_ROOT = ..
 TB_DIR = ../../src/testbench
 # Directory for object code package, to be used in synthesis.
 OBJ_DIR = ../../src/rtl/obj
-# Path to local libraries
-LIB_PATH = $(SW_ROOT)/common/libsoc
 # Link script to be used: by default, link for internal memory mode.
 LINK_SCRIPT ?= $(SW_ROOT)/common/link/internal.lds
 
@@ -91,4 +91,6 @@ LINK_SCRIPT ?= $(SW_ROOT)/common/link/internal.lds
 #CFLAGS = -O2 -Wall -c -s -fno-builtin -mips1 -G0 -nodefaultlibs -nostdlib
 CFLAGS = -O2 -Wall -c -s -mips1 -G0
 # LFLAGS: linker options are in the respective makefiles
+
+SYSLIBS = -lc -lm -lcs3 -lcs3unhosted
 

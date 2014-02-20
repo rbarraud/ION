@@ -126,7 +126,7 @@ typedef struct s_map {
 t_map memory_maps[NUM_MEM_MAPS] = {
     {/* Experimental memory map (default) */
         {/* Bootstrap BRAM, read only */
-        {VECTOR_RESET,  0x00008000, 0xf8000000, 1, NULL, "Boot BRAM"},
+        {VECTOR_RESET,  0x00010000, 0xf8000000, 1, NULL, "Boot BRAM"},
         /* main external ram block  */
         {0x00000000,    0x00080000, 0xf8000000, 0, NULL, "XRAM0"},
         /* main external ram block  */
@@ -1401,8 +1401,8 @@ void cycle(t_state *s, int show_mode){
         break;
     case 0x11:/*COP1*/  unimplemented(s,"COP1");
                         break;
-//      case 0x12:/*COP2*/ break;
-//      case 0x13:/*COP3*/ break;
+    case 0x12:/*COP2*/ unimplemented(s,"COP2"); break;
+    case 0x13:/*COP3*/ unimplemented(s,"COP3"); break;
     case 0x14:/*BEQL*/  lbranch=r[rs]==r[rt];    break;
     case 0x15:/*BNEL*/  lbranch=r[rs]!=r[rt];    break;
     case 0x16:/*BLEZL*/ lbranch=r[rs]<=0;        break;

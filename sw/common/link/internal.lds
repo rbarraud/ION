@@ -5,7 +5,7 @@
 MEMORY
 {
     /* FIXME should use maximum block sizes here. */
-    CODE_TCM        : ORIGIN = 0xbfc00000, LENGTH = 8K
+    CODE_TCM        : ORIGIN = 0xbfc00000, LENGTH = 64K
     DATA_TCM        : ORIGIN = 0x00000000, LENGTH = 4K
 }
 
