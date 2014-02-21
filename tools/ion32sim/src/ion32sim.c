@@ -182,6 +182,8 @@ t_map memory_maps[NUM_MEM_MAPS] = {
 typedef struct s_args {
     /** !=0 to trap on unimplemented opcodes, 0 to print warning and NOP */
     uint32_t trap_on_reserved;
+    /** !=0 to stop simulation on unimplemented opcodes */
+    uint32_t stop_on_unimplemented;
     /** !=0 to emulate some common mips32 opcodes */
     uint32_t emulate_some_mips32;
     /** Prescale value used for the timer/counter */
@@ -541,7 +543,8 @@ void log_read(t_state *s, int full_address, int word_value, int size, int log){
     /* if bit CP0.16==1, this is a D-Cache line invalidation access and
            the HW will not read any actual data, so skip the log (@note1) */
     // FIXME refactor
-    if(log_enabled(s) && log!=0 && !(s->cp0_status & 0x00010000)){
+    //if(log_enabled(s) && log!=0 && !(s->cp0_status & 0x00010000)){
+    if(log_enabled(s) && log!=0){
         fprintf(s->t.log, "(%08X) [%08X] <**>=%08X RD\n",
               s->op_addr, full_address, word_value);
     }
@@ -1061,7 +1064,7 @@ void cycle(t_state *s, int show_mode){
     unsigned int opcode;
     int delay_slot = 0; /* 1 of this instruction is a branch */
     unsigned int op, rs, rt, rd, re, func, imm, target;
-    int imm_shift, branch=0, lbranch=2, skip2=0;
+    int imm_shift, branch=0, lbranch=2;
     int link=0; /* !=0 if this is a 'branch-and-link' opcode */
     int *r=s->r;
     unsigned int *u=(unsigned int*)s->r;
@@ -1403,7 +1406,7 @@ void cycle(t_state *s, int show_mode){
                         break;
     case 0x12:/*COP2*/ unimplemented(s,"COP2"); break;
     case 0x13:/*COP3*/ unimplemented(s,"COP3"); break;
-    case 0x14:/*BEQL*/  lbranch=r[rs]==r[rt];    break;
+    case 0x14:/*    */  lbranch=r[rs]==r[rt];    break;
     case 0x15:/*BNEL*/  lbranch=r[rs]!=r[rt];    break;
     case 0x16:/*BLEZL*/ lbranch=r[rs]<=0;        break;
     case 0x17:/*BGTZL*/ lbranch=r[rs]>0;         break;
@@ -1416,10 +1419,11 @@ void cycle(t_state *s, int show_mode){
                 case 0x02: /* MUL */ r[rd] = mult_gpr(r[rs], r[rt]); break;
                 default:
                     reserved_opcode(epc, opcode, s);
+                    unimplemented(s, "SPECIAL2");
             }
         }
         else{
-            reserved_opcode(epc, opcode, s);
+            unimplemented(s, "SPECIAL2");
         }
         break;
     case 0x1f: /* SPECIAL3 */
@@ -1429,6 +1433,7 @@ void cycle(t_state *s, int show_mode){
                 case 0x04: /* INS */ r[rt] = ins_bitfield(r[rt], r[rs], opcode); break;
                 default:
                     reserved_opcode(epc, opcode, s);
+                    unimplemented(s, "SPECIAL3");
             }
         }
         else{
@@ -1487,6 +1492,7 @@ void cycle(t_state *s, int show_mode){
 //      case 0x3f:/*SDC3*/ break;
     default:  /* unimplemented opcode */
         reserved_opcode(epc, opcode, s);
+        unimplemented(s, "???");
     }
 
     /* */
@@ -1497,7 +1503,7 @@ void cycle(t_state *s, int show_mode){
     /* adjust next PC if this was a a jump instruction */
     s->pc_next += (branch || lbranch == 1) ? imm_shift : 0;
     s->pc_next &= ~3;
-    s->skip = (lbranch == 0) | skip2; // FIXME remove skip2
+    //s->skip = (lbranch == 0); // FIXME experiment
 
     /* If there was trouble (failed assertions), log it */
     if(s->failed_assertions!=0){
@@ -1922,6 +1928,7 @@ uint32_t log_cycle(t_state *s){
     static unsigned int last_pc = 0;
     int i;
     uint32_t log_pc;
+    uint32_t logged = 0;
 
     /* store PC in trace buffer only if there was a jump */
     if(s->pc != (last_pc+4)){
@@ -1939,6 +1946,7 @@ uint32_t log_cycle(t_state *s){
         for(i=1;i<32;i++){
             if(s->t.pr[i] != s->r[i]){
                 fprintf(s->t.log, "(%08X) [%02X]=%08X\n", log_pc, i, s->r[i]);
+                logged = 1;
             }
             s->t.pr[i] = s->r[i];
         }
@@ -1955,15 +1963,22 @@ uint32_t log_cycle(t_state *s){
         /* Catch changes in EPC by direct write (mtc0) and by exception */
         if(s->epc != s->t.epc){
             fprintf(s->t.log, "(%08X) [EP]=%08X\n", log_pc, s->epc);
+            logged = 1;
         }
         s->t.epc = s->epc;
 
         if(s->cp0_status != s->t.status){
             //@hack3 fprintf(s->t.log, "(%08X) [SR]=%08X\n", log_pc, s->cp0_status);
             fprintf(s->t.log, "(%08X) [SR]=%08X\n", 0x0, s->cp0_status);
+            logged = 1;
         }
         s->t.status = s->cp0_status;
     }
+
+    // FIXME this should be conditional on command line argument
+    //if (!logged){
+    //    fprintf(s->t.log, "(%08X)\n", log_pc);
+    //}
 
 #if 0
     /* FIXME Try to detect a code crash by looking at SP */
@@ -2105,7 +2120,8 @@ void reset_cpu(t_state *s){
 
 /* FIXME redundant function, merge with reserved_opcode */
 void unimplemented(t_state *s, const char *txt){
-    printf("UNIMPLEMENTED: %s\n", txt);
+    printf("[%08x] UNIMPLEMENTED: %s\n", s->epc, txt);
+    if(cmd_line_args.stop_on_unimplemented) exit(1);
 }
 
 int init_cpu(t_state *s, t_args *args){
@@ -2149,7 +2165,8 @@ int32_t parse_cmd_line(uint32_t argc, char **argv, t_args *args){
 
     /* fill cmd line args with default values */
     args->memory_map = MAP_DEFAULT;
-    args->trap_on_reserved = 1;
+    args->trap_on_reserved = 0;
+    args->stop_on_unimplemented = 0;
     args->emulate_some_mips32 = 1;
     args->timer_prescaler = DEFAULT_TIMER_PRESCALER;
     args->start_addr = VECTOR_RESET;
@@ -2185,7 +2202,10 @@ int32_t parse_cmd_line(uint32_t argc, char **argv, t_args *args){
         else if(strcmp(argv[i],"--noprompt")==0){
             args->no_prompt = 1;
         }
-        else if(strcmp(argv[i],"--notrap10")==0){
+        else if(strcmp(argv[i],"--stop_on_unimplemented")==0){
+            args->stop_on_unimplemented = 1;
+        }
+        else if(strcmp(argv[i],"--notrap")==0){
             args->trap_on_reserved = 0;
         }
         else if(strcmp(argv[i],"--nomips32")==0){
@@ -2251,13 +2271,14 @@ void usage(void){
     printf("--trigger=<hex number>  : Log trigger address\n");
     printf("--break=<hex number>    : Breakpoint address\n");
     printf("--start=<hex number>    : Start here instead of at reset vector\n");
-    printf("--notrap10              : Reserverd opcodes are NOPs and don't trap\n");
+    printf("--notrap                : Reserved opcodes are NOPs and don't trap\n");
     printf("--nomips32              : Do not emulate any mips32 opcodes\n");
     printf("--plasma                : Simulate Plasma instead of MIPS-I\n");
     printf("--uclinux               : Use memory map tailored to uClinux\n");
     printf("--unaligned             : Implement unaligned load/store instructions\n");
     printf("--noprompt              : Run in batch mode\n");
     printf("--stop_at_zero          : Stop simulation when fetching from address 0x0\n");
+    printf("--stop_on_unimplemented : Stop simulation when executing unimplemented opcode\n");
     printf("--help, -h              : Show this usage text\n");
 }
 

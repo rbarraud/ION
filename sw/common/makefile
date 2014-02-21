@@ -38,7 +38,7 @@ LD = $(BIN_MIPS)/mips-sde-elf-ld
 DUMP = $(BIN_MIPS)/mips-sde-elf-objdump
 COPY = $(BIN_MIPS)/mips-sde-elf-objcopy
 
-LIBPATH = $(TOOLCHAIN)/mips-sde-elf/lib
+LIBPATH = $(TOOLCHAIN)/mips-sde-elf/lib/sof
 
 PYTHON = c:/devel/tools/Python27/python.exe
 
