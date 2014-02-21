@@ -627,7 +627,9 @@ with p1_ir_op select p1_jump_type_set0 <=
     "11" when "000010", -- J
     "11" when "000011", -- JAL
     "10" when "000100", -- BEQ
+    "10" when "010100", -- BEQL
     "10" when "000101", -- BNE
+    "10" when "010101", -- BNEL
     "10" when "000110", -- BLEZ
     "10" when "000111", -- BGTZ
     "00" when others;   -- no jump
@@ -650,7 +652,9 @@ p1_jump_cond_sel <=
     "001" when p1_ir_op="000001" and p1_ir_reg(16)='0' else --   op1 < 0   BLTZ*
     "101" when p1_ir_op="000001" and p1_ir_reg(16)='1' else -- !(op1 < 0) BNLTZ*
     "010" when p1_ir_op="000100" else                       --   op1 == op2  BEQ
+    "010" when p1_ir_op="010100" else                       --   op1 == op2  BEQL
     "110" when p1_ir_op="000101" else                       -- !(op1 == op2) BNE
+    "110" when p1_ir_op="010101" else                       -- !(op1 == op2) BNEL
     "011" when p1_ir_op="000110" else                       --   op1 <= 0   BLEZ
     "111" when p1_ir_op="000111" else                       -- !(op1 <= 0)  BGTZ
     "000";                                                  -- always
@@ -831,7 +835,10 @@ p1_unknown_opcode <= '1' when
     p1_ir_op(31 downto 29)="011" or
     p1_ir_op(31 downto 29)="110" or
     p1_ir_op(31 downto 29)="111" or
-    (p1_ir_op(31 downto 29)="010" and p1_ir_op(28 downto 26)/="000") or
+    (p1_ir_op(31 downto 29)="010" and 
+        (p1_ir_op(28 downto 26)/="000" and      -- COP0 is valid
+         p1_ir_op(28 downto 26)/="100" and     -- BEQL is valid
+         p1_ir_op(28 downto 26)/="101")) or     -- BNEL is valid
     p1_ir_op="101111" or    -- CACHE
     p1_ir_op="100010" or    -- LWL
     p1_ir_op="100110" or    -- LWR
