@@ -1054,7 +1054,7 @@ void process_traps(t_state *s, uint32_t epc, uint32_t rSave, uint32_t rt){
         /* FIXME vector address harcoded */
         s->pc_next = VECTOR_TRAP;
         /* Simulation control flags... */
-        s->skip = 1;
+        s->skip = 1; /* skip instruction following victim */
         s->userMode = 0;
     }
 }
@@ -1085,6 +1085,9 @@ void cycle(t_state *s, int show_mode){
 
     /* fetch and decode instruction */
     opcode = mem_read(s, 4, s->pc, 0);
+    if (s->pc == 0xbfc00250) {
+        printf("################## \n");
+    }
 
     op = (opcode >> 26) & 0x3f;
     rs = (opcode >> 21) & 0x1f;
@@ -1210,7 +1213,7 @@ void cycle(t_state *s, int show_mode){
     epc = s->pc + 4;
 
     /* If we catch a jump instruction jumping to itself, assume we hit the
-       and of the program and quit. */
+       end of the program and quit. */
     if(s->pc == s->pc_next+4){
         printf("\n\nEndless loop at 0x%08x\n\n", s->pc-4);
         s->wakeup = 1;
@@ -1332,10 +1335,10 @@ void cycle(t_state *s, int show_mode){
                 //             ((s->cp0_status & 0x03c) >> 2);
             }
             if(opcode==0x42000018){  // eret
-                s->skip = 1;
+                s->skip = 0;
                 s->eret_delay_slot = 1;
                 s->pc_next = s->epc;
-                //printf("ERET to %08xh, STATUS = %08x\n", s->pc_next, s->cp0_status);
+                printf("ERET to %08xh, STATUS = %08x\n", s->pc_next, s->cp0_status);
                 /* Now, if ERL is set... */
                 if (s->cp0_status & SR_ERL) {
                     s->cp0_status &= (~SR_ERL); /* ...clear ERL... */
