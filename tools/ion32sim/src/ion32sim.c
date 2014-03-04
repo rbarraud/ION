@@ -1085,9 +1085,6 @@ void cycle(t_state *s, int show_mode){
 
     /* fetch and decode instruction */
     opcode = mem_read(s, 4, s->pc, 0);
-    if (s->pc == 0xbfc00250) {
-        printf("################## \n");
-    }
 
     op = (opcode >> 26) & 0x3f;
     rs = (opcode >> 21) & 0x1f;
@@ -1338,7 +1335,7 @@ void cycle(t_state *s, int show_mode){
                 s->skip = 0;
                 s->eret_delay_slot = 1;
                 s->pc_next = s->epc;
-                printf("ERET to %08xh, STATUS = %08x\n", s->pc_next, s->cp0_status);
+                //printf("ERET to %08xh, STATUS = %08x\n", s->pc_next, s->cp0_status);
                 /* Now, if ERL is set... */
                 if (s->cp0_status & SR_ERL) {
                     s->cp0_status &= (~SR_ERL); /* ...clear ERL... */
