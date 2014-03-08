@@ -1,0 +1,19 @@
+{ "signal" : [
+  {"name": "CLK",               "wave": "0101010101|010101010101"},
+  ['MOSI',
+  {"name": "addr",              "wave": "x4.x......|.4.x........", "data": ["A0", "A1", "A2"]},
+  {"name": "wr_be",             "wave": "53.5......|.3.5........", "data": ["0000", "1111", "0000", "1111", "0000"]}
+  ],
+  ['MISO',
+  {"name": "mwait",             "wave": "0.........|...1...0...."},
+  {"name": "wr_data",           "wave": "x5.x......|.5.x........", "data": ["D0", "D1", "D2"]},
+  ]
+  ],
+ head:{
+   text:' Write Access, no Wait States                                                  Write Access, two Wait States                                        ',
+   tick:0,
+ },
+ foot:{
+   text:'ION Bus Write Cycles'
+ }}
+
