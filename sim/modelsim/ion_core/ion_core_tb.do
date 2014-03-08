@@ -1,4 +1,4 @@
-# assumed to run from /<project directory>/sim/modelsim
+# assumed to run from /<project directory>/sim/modelsim/ion_core
 # change the path to the libraries in the vmap commands to match your setup
 # some unused modules' vcom calls have been commented out
 vlib work
