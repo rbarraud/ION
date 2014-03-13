@@ -1230,7 +1230,6 @@ void cycle(t_state *s, int show_mode){
         return;
     }
     rSave = r[rt];
-    if (s->op_addr == 0xbfc001d8) return;
     //printf("PC = %08x\n", s->op_addr);
     switch(op){
     case 0x00:/*SPECIAL*/
