@@ -4,6 +4,20 @@
 -- Simulates the CPU connected to fake memory on both buses. 
 -- The size and contents of the simulated memory are defined in package 
 -- sim_params_pkg.
+--
+--------------------------------------------------------------------------------
+-- MEMORY MAP (except IO areas, see below):
+--
+-- Code [00000000..FFFFFFFF] : Code ROM (mirrored).
+-- Data [00000000..BFBFFFFF] : Data RAM (mirrored).
+-- Data [BFC00000..BFCFFFFF] : Code ROM (mirrored, read only).
+-- Data [BFD00000..FFFFFFFF] : Data RAM (mirrored).
+--
+-- Note we only simulate two separate blocks, ROM for code and RAM for data.
+-- Both are mirrored all over the decoded memory spaces. 
+-- the code ROM is accessible from the data bus so that SW constants can be 
+-- easily reached.
+--
 --------------------------------------------------------------------------------
 -- FIXME no support for simulating external IRQs.
 --------------------------------------------------------------------------------
@@ -87,8 +101,15 @@ shared variable dtcm : t_word_table(0 to DTCM_SIZE-1) := (others => X"00000000")
 
 signal dtcm_addr :          std_logic_vector(DTCM_ADDR_SIZE downto 2);
 signal dtcm_data :          t_word;
-signal dtcm_ce :            std_logic;
+signal data_dtcm_ce :       std_logic;
+signal data_dtcm_ce_reg :   std_logic;
+signal data_rd_en_reg :     std_logic;
 signal dtcm_wait :          std_logic;
+signal data_ctcm_ce :       std_logic;
+
+signal data_dtcm :          t_word;
+signal data_ctcm :          t_word;
+
 
 -- For the code array, we'll use the code memory size and initialization values.
 constant CTCM_SIZE : integer := CODE_MEM_SIZE;
@@ -100,8 +121,12 @@ signal ctcm_addr :          std_logic_vector(CTCM_ADDR_SIZE downto 2);
 signal ctcm_data :          t_word;
 signal ctcm_wait :          std_logic;
 
-signal code_wait_ctr :      integer range 0 to 63;
-signal data_wait_ctr :      integer range 0 to 63;
+signal code_wait_ctr :      integer range -1 to 63;
+signal data_wait_ctr :      integer range -1 to 63;
+
+signal code_ctcm_ce_reg :   std_logic;
+signal code_ctcm :          t_word;
+
 
 --------------------------------------------------------------------------------
 -- CPU interface.
@@ -208,15 +233,20 @@ begin
     
     dtcm_addr <= data_mosi.addr(dtcm_addr'high downto 2);
     data_miso.mwait <= dtcm_wait;
-    dtcm_ce <= '1' when data_mosi.addr(31 downto 28) /= X"2" else '0';
+    data_ctcm_ce <= '1' when data_mosi.addr(31 downto 20) = X"bfc" else '0';
+    data_dtcm_ce <= '1' when data_mosi.addr(31 downto 28) /= X"2" and 
+                   data_ctcm_ce='0' 
+               else '0';
             
-    -- Note we inore the wait states; we get the data when it's in DATA_MOSI
+    -- Simulated data RAM write port.
+    -- Note we ignore the wait states; we get the data when it's in DATA_MOSI
     -- and let the CPU deal with the simulated wait states.
+    -- This is the behavior expected from a real ION bus slave.
     simulated_dtcm_write:
     process(clk)
     begin
         if clk'event and clk='1' then
-            if dtcm_ce='1' then 
+            if data_dtcm_ce='1' then 
                 if data_mosi.wr_be(0)='1' then
                     dtcm(conv_integer(unsigned(dtcm_addr)))(7 downto 0) := data_mosi.wr_data(7 downto 0);
                 end if;
@@ -233,31 +263,59 @@ begin
         end if;
     end process simulated_dtcm_write;
     
+    -- Simulated data RAM read port.
     data_memory:
     process(clk)
     begin
-        if clk'event and clk='1' and dtcm_ce='1' then
+        if clk'event and clk='1' and data_dtcm_ce='1' then
             -- Update data bus the cycle after rd_en is asserted if there's no 
             -- wait states, or the cycle after wait goes low otherwise.
             if (conv_integer(wait_states_data)=0) or (data_wait_ctr = 1) then
-                data_miso.rd_data <= dtcm(conv_integer(unsigned(dtcm_addr)));
+                data_dtcm <= dtcm(conv_integer(unsigned(dtcm_addr)));
             end if;
         end if;
     end process data_memory;
+
+    -- Simulated code RAM read port connected to the data bus.
+    code_memory_as_data:
+    process(clk)
+    begin
+        if clk'event and clk='1' and data_ctcm_ce='1' then
+            -- Update data bus the cycle after rd_en is asserted if there's no 
+            -- wait states, or the cycle after wait goes low otherwise.
+            if (conv_integer(wait_states_data)=0) or (data_wait_ctr = 1) then
+                data_ctcm <= ctcm(conv_integer(unsigned(dtcm_addr)));
+            end if;
+        end if;
+    end process code_memory_as_data;
+    
+    -- Read data will come from either the code array or the data array; we 
+    -- to drive the mux with a delayed CE, the data bus is pipelined.
+    -- The data abus will be driven only when the ION bus specs say so, to
+    -- help pinpoint bugs in the bus logic.
+    data_miso.rd_data <= 
+        data_dtcm when data_dtcm_ce_reg='1' and data_wait_ctr<=0 else 
+        data_ctcm when data_dtcm_ce_reg='0' and data_wait_ctr<=0 else
+        (others => 'Z');
+    -- TODO Debug IO register inputs are unimplemented.
+ 
  
     data_mem_wait_states:
     process(clk)
     begin
         if clk'event and clk='1' then
             if reset = '1' then
-                data_wait_ctr <= 0;
-            elsif dtcm_ce='1' and (data_mosi.rd_en='1' or data_mosi.wr_be/="0000") and data_wait_ctr=0 then
+                data_wait_ctr <= -1;
+            elsif data_dtcm_ce='1' and (data_mosi.rd_en='1' or data_mosi.wr_be/="0000") and data_wait_ctr < 0 then
                 data_wait_ctr <= conv_integer(wait_states_data);
-            elsif data_wait_ctr > 0 then
+            elsif data_wait_ctr >= 0 then
                 data_wait_ctr <= data_wait_ctr - 1;
             else 
-                data_wait_ctr <= 0;
+                data_wait_ctr <= -1;
             end if;
+            
+            data_dtcm_ce_reg <= data_dtcm_ce;
+            data_rd_en_reg <= data_mosi.rd_en;
         end if;
     end process data_mem_wait_states;
     
@@ -276,24 +334,31 @@ begin
             -- Update data bus the cycle after rd_en is asserted if there's no 
             -- wait states, or the cycle after wait goes low otherwise.
             if (conv_integer(wait_states_code)=0) or (code_wait_ctr = 1) then
-                code_miso.rd_data <= ctcm(conv_integer(unsigned(ctcm_addr)));
+                code_ctcm <= ctcm(conv_integer(unsigned(ctcm_addr)));
             end if;
         end if;
     end process code_memory;    
 
+    code_miso.rd_data <=
+        code_ctcm when code_wait_ctr <= 0 else 
+        (others => 'Z');
+    
+    
     code_mem_wait_states:
     process(clk)
     begin
         if clk'event and clk='1' then
             if reset = '1' then
-                code_wait_ctr <= 0;
-            elsif code_mosi.rd_en='1' and code_wait_ctr=0 then
+                code_wait_ctr <= -1;
+            elsif code_mosi.rd_en='1' then
                 code_wait_ctr <= conv_integer(wait_states_code);
-            elsif code_wait_ctr > 0 then
+            elsif code_wait_ctr >= 0 then
                 code_wait_ctr <= code_wait_ctr - 1;
             else 
-                code_wait_ctr <= 0;
+                code_wait_ctr <= -1;
             end if;
+            
+            code_ctcm_ce_reg <= code_mosi.rd_en;
         end if;
     end process code_mem_wait_states;
     
@@ -309,8 +374,8 @@ begin
     begin
         if clk'event and clk='1' then 
             if reset = '1' then
-                wait_states_code <= "000011";
-                wait_states_data <= "000010";
+                wait_states_code <= "000010";
+                wait_states_data <= "000000";
             elsif debug_reg_ce='1' and data_mosi.wr_be/="0000" then
                 case data_mosi.addr(15 downto 0) is
                 when X"0030" => 
