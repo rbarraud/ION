@@ -6,7 +6,7 @@
   ],
   ['MISO',
   {"name": "mwait",                  "wave": "0.........|...1...0...."},
-  {"name": "rd_data",                "wave": "x..5..x...|.......5..x.", "data": ["D0", "D1", "D2"]},
+  {"name": "rd_data",                "wave": "x..5.x....|.......5.x..", "data": ["D0", "D1", "D2"]},
   ]
 ],
  head:{
@@ -14,5 +14,5 @@
    tick:0,
  },
  foot:{
-   text:'ION Bus Read Cycles'
+   text:'ION Data Bus Read Cycles'
  }}
