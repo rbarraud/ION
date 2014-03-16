@@ -90,10 +90,10 @@ architecture rtl of ion_core is
 --------------------------------------------------------------------------------
 -- CPU interface signals
 
-signal data_cpu_mosi :      t_cpumem_mosi;
-signal data_cpu_miso :      t_cpumem_miso;
-signal code_cpu_mosi :      t_cpumem_mosi;
-signal code_cpu_miso :      t_cpumem_miso;
+signal data_mosi :          t_cpumem_mosi;
+signal data_miso :          t_cpumem_miso;
+signal code_mosi :          t_cpumem_mosi;
+signal code_miso :          t_cpumem_miso;
 
 signal cache_ctrl_mosi :    t_cache_mosi;
 signal cache_ctrl_miso :    t_cache_miso;
@@ -101,51 +101,76 @@ signal cache_ctrl_miso :    t_cache_miso;
 --------------------------------------------------------------------------------
 -- Code space signals
 
--- CPU to cache mux.
-signal code_cache_miso :    t_cpumem_miso;
-signal code_cache_mosi :    t_cpumem_mosi;
--- Cache mux to Code TCM area decoder.
-signal code_uc_0_miso :     t_cpumem_miso;
-signal code_uc_0_mosi :     t_cpumem_mosi;
--- Code TCM area decoder to CTCM arbiter.
-signal code_ctcm_arb_miso : t_cpumem_miso;
-signal code_ctcm_arb_mosi : t_cpumem_mosi;
--- CTCM arbiter to Code TCM.
-signal code_tcm_miso :      t_cpumem_miso;
-signal code_tcm_mosi :      t_cpumem_mosi;
+-- Address decoding signals.
+signal code_mux_ctrl :      std_logic_vector(1 downto 0);
+signal code_mux_ctrl_reg :  std_logic_vector(1 downto 0);
+signal code_ce :            std_logic_vector(1 downto 0);
 
--- FIXME this should come from one of the CP0 config registers.
-constant code_tcm_base :    t_word := X"BFC00000";          
+-- Instruction Cache MISO bus & enable signal.
+signal icache_miso :        t_cpumem_miso;
+signal icache_ce :          std_logic;
+
+-- Code TCM MISO bus & enable signal.
+signal ctcm_c_miso :        t_cpumem_miso;
+
+-- Bus from CTCM arbiter to CTCM.
+signal ctcm_mosi :          t_cpumem_mosi;
+signal ctcm_miso :          t_cpumem_miso;
 
 --------------------------------------------------------------------------------
 -- Data space signals
 
--- CPU to cache mux.
-signal data_cached_miso :   t_cpumem_miso;
-signal data_cached_mosi :   t_cpumem_mosi;
--- Cache mux to Data TCM mux.
-signal data_uc_0_miso : t_cpumem_miso;
-signal data_uc_0_mosi : t_cpumem_mosi;
--- Data TCM mux to Data TCM.
-signal data_tcm_miso :      t_cpumem_miso;
-signal data_tcm_mosi :      t_cpumem_mosi;
--- Data TCM mux to Data/Code TCM arbiter mux.
-signal data_uc_1_miso : t_cpumem_miso;
-signal data_uc_1_mosi : t_cpumem_mosi;
--- Data/Code TCM arbiter mux to Wishbone bridge.
-signal data_uc_2_miso : t_cpumem_miso;
-signal data_uc_2_mosi : t_cpumem_mosi;
--- Data/Code TCM arbiter mux to arbiter.
-signal data_ctcm_arb_mosi : t_cpumem_mosi;
-signal data_ctcm_arb_miso : t_cpumem_miso;
+-- Address decoding signals.
+signal data_mux_ctrl :      std_logic_vector(2 downto 0);
+signal data_mux_ctrl_reg :  std_logic_vector(2 downto 0);
+signal data_ce :            std_logic_vector(3 downto 0);
 
--- FIXME this should come from one of the CP0 config registers.
-signal data_tcm_base :      t_word := X"00000000";          
+-- Data Cache MISO bus & enable signal.
+signal dcache_miso :        t_cpumem_miso;
+signal dcache_ce :          std_logic;
+
+-- Data TCM MISO bus & enable signal.
+signal dtcm_miso :          t_cpumem_miso;
+signal dtcm_ce :            std_logic;
+
+-- Code TCM MISO bus & enable signal (CTCM seen from data bus).
+signal ctcm_d_miso :        t_cpumem_miso;
+
+-- Uncached Data, external WB bridge MISO bus & enable signal.
+signal ucd_wb_miso :        t_cpumem_miso;
+signal ucd_wb_ce :          std_logic;
+
+signal void_miso :          t_cpumem_miso;
 
 --------------------------------------------------------------------------------
--- Wishbone bridge signals
+-- Address decoding constant & constant functions.
 
-signal wbone_mem_miso :     t_cpumem_miso;
+-- FIXME this should come from a generic.
+constant DTCM_BASE : t_word :=          X"00000000";          
+constant DTCM_ASIZE : integer :=        log2(TCM_DATA_SIZE);
+-- FIXME this should come from a generic.
+constant CTCM_BASE : t_word :=          X"BFC00000";
+constant CTCM_ASIZE : integer :=        log2(TCM_CODE_SIZE);
+constant DCTCM_BASE : t_word :=         X"BFC00000";
+
+-- FIXME D/I-Cache area decoding unfinished.
+constant ICACHE_BASE : t_word :=        X"80000000";
+constant ICACHE_ASIZE : integer :=      28; 
+constant DCACHE_BASE : t_word :=        X"80000000";
+constant DCACHE_ASIZE : integer :=      28; 
+constant DWB_BASE : t_word :=           X"20000000";
+constant DWB_ASIZE : integer :=         28; 
+
+-- Note this function is a "constant function": can be used in synthesizable
+-- rtl as long as its parameters are constants.
+function adecode(a : t_word; b : t_word; s : integer) return std_logic is
+begin
+    if a(31 downto s) = b(31 downto s) then
+        return '1';
+    else
+        return '0';
+    end if;
+end function adecode;
 
 
 begin
@@ -161,11 +186,11 @@ begin
         CLK_I               => CLK_I,
         RESET_I             => RESET_I, 
         
-        DATA_MOSI_O         => data_cpu_mosi,
-        DATA_MISO_I         => data_cpu_miso,
+        DATA_MOSI_O         => data_mosi,
+        DATA_MISO_I         => data_miso,
 
-        CODE_MOSI_O         => code_cpu_mosi,
-        CODE_MISO_I         => code_cpu_miso,
+        CODE_MOSI_O         => code_mosi,
+        CODE_MISO_I         => code_miso,
 
         CACHE_CTRL_MOSI_O   => cache_ctrl_mosi,
         CACHE_CTRL_MISO_I   => cache_ctrl_miso,
@@ -177,31 +202,48 @@ begin
     -- FIXME cache control interface to be refactored.
     cache_ctrl_miso.ready <= '1';
     
+    -- MISO to be fed by the code-data MISO mux when no valid area is addressed.
+    void_miso.mwait <= '0';
+    void_miso.rd_data <= (others => '0');
     
 --------------------------------------------------------------------------------
--- Code Bus.
--- FIXME Code TCM should be writeable from data space.
+-- Code Bus interconnect
 
+    -- Address decoding --------------------------------------------------------
+    
+    -- Decode the index of the slave being addressed.
+    code_mux_ctrl <=
+        "01" when adecode(code_mosi.addr, CTCM_BASE, CTCM_ASIZE) = '1' else
+        "10" when adecode(code_mosi.addr, ICACHE_BASE, ICACHE_ASIZE) = '1' else
+        "00";
+
+    -- Convert slave index to one-hot enable signal vector.
+    with code_mux_ctrl select code_ce <=
+        "01" when "01",
+        "10" when "10",
+        "00" when others;
+    
+    
+    -- Code MISO multiplexor -----------------------------------------------
+        
+    process(CLK_I)
+    begin
+        if CLK_I'event and CLK_I='1' then
+            if RESET_I='1' then
+                code_mux_ctrl_reg <= (others => '0');
+            elsif code_mosi.rd_en='1' then
+                code_mux_ctrl_reg <= code_mux_ctrl;
+            end if;
+        end if;
+    end process;        
+    
+    with code_mux_ctrl_reg select code_miso <=
+        ctcm_c_miso     when "01",
+        icache_miso     when "10",
+        void_miso       when others;
+ 
+        
     -- Code cache ----------------------------------------------------------
-
-    -- TODO this mux is needed even when the cache is missing; otherwise we
-    -- get synth problems in Q2 (BRAM Dout goes straight to BRAM.Ain).
-    code_mux_cache: entity work.ION_CACHE_MUX
-    port map (
-        CLK_I               => CLK_I,
-        RESET_I             => RESET_I, 
-
-        MASTER_MOSI_I       => code_cpu_mosi,
-        MASTER_MISO_O       => code_cpu_miso,
-        
-        K0_CACHED_IN        => '1',
-        
-        CACHED_MOSI_O       => code_cache_mosi,
-        CACHED_MISO_I       => code_cache_miso,
-        
-        UNCACHED_MOSI_O     => code_uc_0_mosi,
-        UNCACHED_MISO_I     => code_uc_0_miso
-    );
     
     code_cache_present:
     if CODE_CACHE_LINES > 0 generate
@@ -215,8 +257,8 @@ begin
     code_cache_missing:
     if CODE_CACHE_LINES = 0 generate
 
-        code_cache_miso.mwait <= '0';
-        code_cache_miso.rd_data <= (others => '0');
+        icache_miso.mwait <= '0';
+        icache_miso.rd_data <= (others => '0');
         
     end generate code_cache_missing;
 
@@ -224,43 +266,24 @@ begin
 
     tcm_code_present:
     if TCM_CODE_SIZE > 0 generate
-        
-        -- Filter Code accesses to CTCM space.
-        code_area_decoder: entity work.ION_BUS_DECODER
-        generic map (
-            SLAVE_AREA_SIZE     => TCM_CODE_SIZE
-        )
-        port map (
-            CLK_I               => CLK_I,
-            RESET_I             => RESET_I, 
-        
-            MASTER_MOSI_I       => code_uc_0_mosi,
-            MASTER_MISO_O       => code_uc_0_miso,
-            
-            SLAVE_BASE_I        => code_tcm_base,
-            
-            SLAVE_MOSI_O        => code_ctcm_arb_mosi,
-            SLAVE_MISO_I        => code_ctcm_arb_miso
-        );
 
         -- Arbiter: share Code TCM between Code and Data space accesses.
         -- note that Data accesses have priority necessarily.
         code_arbiter: entity work.ION_CTCM_ARBITER
-        generic map (
-            SLAVE_0_AREA_SIZE   => TCM_CODE_SIZE
-        )
         port map (
             CLK_I               => CLK_I,
             RESET_I             => RESET_I, 
         
-            MASTER_0_MOSI_I     => data_ctcm_arb_mosi,
-            MASTER_0_MISO_O     => data_ctcm_arb_miso,
+            MASTER_D_CE_I       => data_ce(2),
+            MASTER_D_MOSI_I     => data_mosi,
+            MASTER_D_MISO_O     => ctcm_d_miso,
         
-            MASTER_1_MOSI_I     => code_ctcm_arb_mosi,
-            MASTER_1_MISO_O     => code_ctcm_arb_miso,
+            MASTER_C_CE_I       => code_ce(0),
+            MASTER_C_MOSI_I     => code_mosi,
+            MASTER_C_MISO_O     => ctcm_c_miso,
             
-            SLAVE_MOSI_O        => code_tcm_mosi,
-            SLAVE_MISO_I        => code_tcm_miso
+            SLAVE_MOSI_O        => ctcm_mosi,
+            SLAVE_MISO_I        => ctcm_miso
         );
     
         -- Code TCM block.
@@ -273,8 +296,10 @@ begin
             CLK_I               => CLK_I,
             RESET_I             => RESET_I, 
             
-            MEM_MOSI_I          => code_tcm_mosi,
-            MEM_MISO_O          => code_tcm_miso
+            EN_I                => code_ce(0),
+            
+            MEM_MOSI_I          => ctcm_mosi,
+            MEM_MISO_O          => ctcm_miso
         );
     
     end generate tcm_code_present;
@@ -282,8 +307,8 @@ begin
     tcm_code_missing:
     if TCM_CODE_SIZE = 0 generate
     
-        code_uc_0_miso.mwait <= '0';
-        code_uc_0_miso.rd_data <= (others => '0');
+        ctcm_miso.mwait <= '0';
+        ctcm_miso.rd_data <= (others => '0');
     
     end generate tcm_code_missing;
     
@@ -291,6 +316,45 @@ begin
 --------------------------------------------------------------------------------
 -- Data Bus.
 
+    -- Address decoding --------------------------------------------------------
+    
+    -- Decode the index of the slave being addressed.
+    data_mux_ctrl <=
+        "001" when adecode(data_mosi.addr, DTCM_BASE, DTCM_ASIZE) = '1' else
+        "010" when adecode(data_mosi.addr, DCACHE_BASE, DCACHE_ASIZE) = '1' else
+        "011" when adecode(data_mosi.addr, DCTCM_BASE, CTCM_ASIZE) = '1' else
+        "100" when adecode(data_mosi.addr, DWB_BASE, DWB_ASIZE) = '1' else
+        "000";
+
+    -- Convert slave index to one-hot enable signal vector.
+    with data_mux_ctrl select data_ce <=
+        "0001" when "001",
+        "0010" when "010",
+        "0100" when "011",
+        "1000" when "100",
+        "0000" when others;
+    
+    
+    -- Data MISO multiplexor -----------------------------------------------
+        
+    process(CLK_I)
+    begin
+        if CLK_I'event and CLK_I='1' then
+            if RESET_I='1' then
+                data_mux_ctrl_reg <= (others => '0');
+            elsif data_mosi.rd_en='1' or data_mosi.wr_be/="0000" then
+                data_mux_ctrl_reg <= data_mux_ctrl;
+            end if;
+        end if;
+    end process;        
+    
+    with data_mux_ctrl_reg select data_miso <=
+        dtcm_miso       when "001",
+        dcache_miso     when "010",
+        ctcm_d_miso     when "011",
+        ucd_wb_miso     when "100",
+        void_miso       when others;
+ 
     -- Data cache ----------------------------------------------------------
 
     data_cache_present:
@@ -305,8 +369,8 @@ begin
     data_cache_missing:
     if DATA_CACHE_LINES = 0 generate
 
-        data_uc_0_mosi <= data_cpu_mosi;
-        data_cpu_miso <= data_uc_0_miso;
+        dcache_miso.mwait <= '0';
+        dcache_miso.rd_data <= (others => '0');
         
     end generate data_cache_missing;
 
@@ -315,26 +379,6 @@ begin
     tcm_data_present:
     if TCM_DATA_SIZE > 0 generate
 
-        data_mux_0: entity work.ION_BUS_MUX
-        generic map (
-            SLAVE_0_AREA_SIZE   => TCM_DATA_SIZE
-        )
-        port map (
-            CLK_I               => CLK_I,
-            RESET_I             => RESET_I, 
-
-            MASTER_MOSI_I       => data_uc_0_mosi,
-            MASTER_MISO_O       => data_uc_0_miso,
-            
-            SLAVE_0_BASE_I      => data_tcm_base,
-            
-            SLAVE_0_MOSI_O      => data_tcm_mosi,
-            SLAVE_0_MISO_I      => data_tcm_miso,
-            
-            SLAVE_1_MOSI_O      => data_uc_1_mosi,
-            SLAVE_1_MISO_I      => data_uc_1_miso
-        );
-        
         data_tcm: entity work.ION_TCM_DATA
         generic map (
             SIZE                => TCM_DATA_SIZE,
@@ -344,8 +388,10 @@ begin
             CLK_I               => CLK_I,
             RESET_I             => RESET_I, 
             
-            MEM_MOSI_I          => data_tcm_mosi,
-            MEM_MISO_O          => data_tcm_miso
+            EN_I                => data_ce(0),
+            
+            MEM_MOSI_I          => data_mosi,
+            MEM_MISO_O          => dtcm_miso
         );
     
     end generate tcm_data_present;
@@ -353,39 +399,18 @@ begin
     tcm_data_missing:
     if TCM_DATA_SIZE = 0 generate
     
-        data_uc_1_mosi <= data_uc_0_mosi;
-        data_uc_0_miso <= data_uc_1_miso;
+        dtcm_miso.mwait <= '0';
+        dtcm_miso.rd_data <= (others => '0');
     
     end generate tcm_data_missing;
-
-    data_mux_1: entity work.ION_BUS_MUX
-    generic map (
-        SLAVE_0_AREA_SIZE   => TCM_CODE_SIZE
-    )
-    port map (
-        CLK_I               => CLK_I,
-        RESET_I             => RESET_I, 
-    
-        MASTER_MOSI_I       => data_uc_1_mosi,
-        MASTER_MISO_O       => data_uc_1_miso,
-        
-        -- Code TCM must be seen at the same address in both spaces.
-        SLAVE_0_BASE_I      => code_tcm_base,
-        
-        SLAVE_0_MOSI_O      => data_ctcm_arb_mosi,
-        SLAVE_0_MISO_I      => data_ctcm_arb_miso,
-        
-        SLAVE_1_MOSI_O      => data_uc_2_mosi,
-        SLAVE_1_MISO_I      => data_uc_2_miso
-    );
     
     
 --------------------------------------------------------------------------------
 -- Wishbone Bridge & access arbiter.
 
     -- FIXME there should be a wishbone bridge here, this is a synth stub.
-    DATA_UC_WB_MOSI_O <= data_uc_2_mosi;
-    data_uc_2_miso <= DATA_UC_WB_MISO_I;
+    DATA_UC_WB_MOSI_O <= data_mosi;
+    ucd_wb_miso <= DATA_UC_WB_MISO_I;
 
 
 end architecture rtl;

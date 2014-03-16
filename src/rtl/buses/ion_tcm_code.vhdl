@@ -55,6 +55,8 @@ entity ION_TCM_CODE is
     port(
         CLK_I               : in std_logic;
         RESET_I             : in std_logic;
+        
+        EN_I                : in std_logic;
 
         MEM_MOSI_I          : in t_cpumem_mosi;
         MEM_MISO_O          : out t_cpumem_miso
@@ -89,7 +91,7 @@ process(CLK_I)
 begin
     if (CLK_I'event and CLK_I='1') then
         tcm_rd_data <= tcm_ram(conv_integer(tcm_addr));
-        if MEM_MOSI_I.wr_be/="0000" then
+        if MEM_MOSI_I.wr_be/="0000" and EN_I='1' then
             tcm_ram(conv_integer(unsigned(tcm_addr))) <= MEM_MOSI_I.wr_data;
         end if;
     end if;

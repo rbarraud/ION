@@ -52,6 +52,8 @@ entity ION_TCM_DATA is
         CLK_I               : in std_logic;
         RESET_I             : in std_logic;
 
+        EN_I                : in std_logic;
+        
         MEM_MOSI_I          : in t_cpumem_mosi;
         MEM_MISO_O          : out t_cpumem_miso
     );
@@ -102,7 +104,7 @@ process(CLK_I)
 begin
     if (CLK_I'event and CLK_I='1') then
         tcm_rd_data0 <= tcm_ram0(conv_integer(tcm_addr));
-        if MEM_MOSI_I.wr_be(0)='1' then
+        if MEM_MOSI_I.wr_be(0)='1' and EN_I='1' then
             tcm_ram0(conv_integer(unsigned(tcm_addr))) <= wr_data0;
         end if;
     end if;
@@ -113,7 +115,7 @@ process(CLK_I)
 begin
     if (CLK_I'event and CLK_I='1') then
         tcm_rd_data1 <= tcm_ram1(conv_integer(tcm_addr));
-        if MEM_MOSI_I.wr_be(1)='1' then
+        if MEM_MOSI_I.wr_be(1)='1' and EN_I='1' then
             tcm_ram1(conv_integer(unsigned(tcm_addr))) <= wr_data1;
         end if;
     end if;
@@ -124,7 +126,7 @@ process(CLK_I)
 begin
     if (CLK_I'event and CLK_I='1') then
         tcm_rd_data2 <= tcm_ram2(conv_integer(tcm_addr));
-        if MEM_MOSI_I.wr_be(2)='1' then
+        if MEM_MOSI_I.wr_be(2)='1' and EN_I='1' then
             tcm_ram2(conv_integer(unsigned(tcm_addr))) <= wr_data2;
         end if;
     end if;
@@ -135,7 +137,7 @@ process(CLK_I)
 begin
     if (CLK_I'event and CLK_I='1') then
         tcm_rd_data3 <= tcm_ram3(conv_integer(tcm_addr));
-        if MEM_MOSI_I.wr_be(3)='1' then
+        if MEM_MOSI_I.wr_be(3)='1' and EN_I='1' then
             tcm_ram3(conv_integer(unsigned(tcm_addr))) <= wr_data3;
         end if;
     end if;
