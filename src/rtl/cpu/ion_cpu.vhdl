@@ -3,28 +3,24 @@
 --------------------------------------------------------------------------------
 -- project:       ION (http://www.opencores.org/project,ion_cpu)
 -- author:        Jose A. Ruiz (ja_rd@hotmail.com)
--- created:       Jan/11/2011
--- last modified: Jan/31/2014 (ja_rd@hotmail.com)
+-- author:        Paul Debayan ()
 --------------------------------------------------------------------------------
 -- FIXME refactor comments!
 --
 -- Please read file /doc/ion_project.txt for usage instructions.
+-- 
 --------------------------------------------------------------------------------
---### MIPS-I things not implemented
---
--- 1.- Most of the R3000 CP0 registers and of course all of the CP1.
--- 2.- External interrupts missing, with CP0.SR IR, NMI and IM7..0 flags.
+-- REFERENCES
+-- [1] doc/ion_core_ds.pdf      -- ION core datasheet .
+-- [2] doc/ion_notes.pdf        -- Design notes.
+--------------------------------------------------------------------------------
 --
 --### Things with provisional implementation
 -- 
--- 1.- Load interlocks: the pipeline is stalled for every load instruction, even
---     if the target register is not used in the following instruction. So that
---     every load takes two cycles.
---     The interlock logic should check register indices (@note2)
--- 2.- Invalid instruction side effects:
+-- 1.- Invalid instruction side effects:
 --     Invalid opcodes do trap but the logic that prevents bad opcodes from
 --     having side affects has not been tested yet.
--- 3.- Kernel/user status.
+-- 2.- Kernel/user status.
 --     When in user mode, COP* instructions will trigger a 'CpU' exception.
 --     BUT there's no address checking and user code can still access kernel 
 --     space in this version.
@@ -32,14 +28,8 @@
 --------------------------------------------------------------------------------
 -- KNOWN BUGS:
 --
--- 1.- The instruction executed right after entering user mode (i.e. the 
---     instruction after the MTC0 or RFE that clears the KU flag) is executed 
---     in kernel mode (instead of user mode). This is a gaping security hole,
---     in case it makes any sense to speak of security in this project at this
---     stage. 
---     This can be easily fixed but is not very urgent.
 --------------------------------------------------------------------------------
--- Copyright (C) 2011 Jose A. Ruiz
+-- Copyright (C) 2014 Jose A. Ruiz
 --                                                              
 -- This source file may be used and distributed without         
 -- restriction provided that this copyright statement is not    
@@ -119,11 +109,7 @@ signal p0_rt_num :          t_regnum;
 signal p0_jump_cond_value : std_logic;
 signal p0_rbank_rs_hazard : std_logic;
 signal p0_rbank_rt_hazard : std_logic;
-signal p0_uses_rs1 :        std_logic;
-signal p0_uses_rs2 :        std_logic;
 
-signal p1_rs1_hazard :      std_logic;
-signal p1_rs2_hazard :      std_logic;
 
 --------------------------------------------------------------------------------
 -- Pipeline stage 1
@@ -329,7 +315,7 @@ p1_rbank_we <= '1' when (p2_do_load='1' or p1_load_alu='1' or p1_link='1' or
                         -- not writeback
                         mem_wait='0' and
                         -- if stalled because of muldiv, block writeback
-                        stalled_muldiv='0' and --@note1
+                        stalled_muldiv='0' and -- @note1
                         -- on exception, abort next instruction (by preventing 
                         -- regbank writeback).
                         p2_exception='0'
@@ -598,9 +584,11 @@ begin
         if RESET_I='1' then
             p1_ir_reg <= (others => '0');
         elsif CACHE_CTRL_MISO_I.ready='1' and reset_done(1)='1' then
-            -- Load the IR with whatever the cache is giving us, UNLESS the
-            -- cache is not ready (has not yet completed the first code refill
-            -- after RESET_I).
+            -- Load the IR with whatever the cache is giving us, provided:
+            -- 1) The cache is ready (i.e. has already completed the first code 
+            --    refill after RESET_I.
+            -- 2) The CPU has ocmpleted its reset sequence.
+            -- 2) The pipeline is not stalled (@note4).
             if stall_pipeline='0' then
                 p1_ir_reg <= CODE_MISO_I.rd_data;
             end if;
@@ -931,7 +919,7 @@ begin
             p2_load_target <= "00000";
         
         -- Load signals from previous stage only if there is no pipeline stall
-        -- unless the stall is caused by interlock (@note1).
+        -- unless the stall is caused by interlock (@note1, @note2).
         elsif (stall_pipeline='0' or load_interlock='1') then
             -- Disable reg bank writeback if pipeline is stalled; this prevents
             -- duplicate writes in case the stall is a mem_wait.
@@ -982,8 +970,7 @@ stall_pipeline <= mem_wait or load_interlock or p1_muldiv_stall;
 -- (p1_do_load='1' and (p1_rd_num=p0_rs_num or p1_rd_num=p0_rt_num))
 load_interlock <= '1' when 
     p1_do_load='1' and      -- this is a load instruction
-    pipeline_stalled='0' and -- not already stalled (i.e. assert for 1 cycle)
-    (p1_rs1_hazard='1' or p1_rs2_hazard='1')
+    pipeline_stalled='0'    -- not already stalled (i.e. assert for 1 cycle)
     else '0';
 
 pipeline_stalled <= stalled_interlock or stalled_memwait or stalled_muldiv;
@@ -1023,32 +1010,6 @@ begin
     end if;
 end process pipeline_stall_registers;
 
--- Here's where we stall the pipeline upon load reg bank hazards
--- FIXME (@note2) for the time being we stall the pipeline for ALL loads
-p1_rs1_hazard <= '1'; --'1' when p0_uses_rs1='1' and p1_rd_num=p0_rs_num else '0';
-p1_rs2_hazard <= '1'; --'1' when p0_uses_rs2='1' and p1_rd_num=p0_rt_num else '0';
-
-with p1_ir_op select p0_uses_rs1 <= 
-    '0' when "000010",
-    '0' when "000011",
-    '0' when "001111",
-    '0' when "001000",
-    '1' when others;
-    
-with p1_ir_op select p0_uses_rs2 <= 
-    '1' when "000000",
-    '1' when "000100",
-    '1' when "000101",
-    '1' when "000110",
-    '1' when "000111",
-    '1' when "010000",
-    '1' when "101000",
-    '1' when "101001",
-    '1' when "101010",
-    '1' when "101011",
-    '1' when "101110",
-    '0' when others;
-    
 
 --##############################################################################
 -- Data memory interface
@@ -1164,13 +1125,20 @@ end architecture rtl;
 -- load operation can complete while the rest of the pipeline is frozen.
 --
 -- @note2:
--- The logic that checks register indices for data hazards is 'commented out'
--- because it has not been tested yet.
+-- All instructions that follow a load instruction are stalled for one cycle.
+-- Otherwise the regbank write from the load and post-load instructions would 
+-- clash. See {[2], sec. ?} for a full explanation.
 --
 -- @note3:
 -- CP0 instructions (mtc0, mfc0 and rfe) are only partially decoded.
 -- This is possible because no other VALID MIPS* opcode shares the decoded 
 -- part; that is, we're not going to misdecode a MIPS32 opcode, but we MIGHT
 -- mistake a bad opcode for a COP0; we'll live with that for the time being.
+--
+-- @note4:
+-- The pipeline may be stalled for one of 4 reasons including code bus waits 
+-- AND data bus waits; we need the code word to be valid when actually fetched,
+-- and that means it needs to be valid from the deassertion of code_miso.mwait
+-- to the edge after code_mosi.addr changes. See {[2], sec. ?}.
 --
 --------------------------------------------------------------------------------
