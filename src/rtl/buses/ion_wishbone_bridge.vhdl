@@ -51,7 +51,7 @@ entity ION_WISHBONE_BRIDGE is
         ION_MISO_O          : out t_cpumem_miso;
         
         WISHBONE_MOSI_O     : out t_wishbone_mosi;
-        WISHBONE_MISO_O     : out t_wishbone_miso
+        WISHBONE_MISO_I     : in t_wishbone_miso
     );
 end;
 
@@ -62,7 +62,8 @@ begin
 
     -- FIXME This is a total fake! it's a placeholder until real stuff is done.
 
-    WISHBONE_MOSI_O.adr <= ION_MOSI_I.addr;
+    WISHBONE_MOSI_O <= ION_MOSI_I;
+    ION_MISO_O <= WISHBONE_MISO_I;
 
     
 end architecture rtl;

@@ -1,7 +1,18 @@
 --------------------------------------------------------------------------------
 -- ion_ctcm_arbiter.vhdl -- Arbiter for access to CTCM from data & code buses.
 --------------------------------------------------------------------------------
+-- This is a minimalistic arbiter meant to enable access to the code TCM from
+-- both the code and data buses, for both read and write.
+-- The code TCM needs to be accessible so that the SW can load code into it 
+-- and so that the SW can access its constants without resorting to linker 
+-- trickery.
 -- 
+-- Note that this stuff only works for masters that don´t produce any wait
+-- states themselves, like the code TCM. 
+-- Also, the data port is always given priority over the code port.
+-- This is NOT a generic arbiter nor a good starting point for one!
+--
+-- REFERENCES
 -- [1] ion_notes.pdf -- ION project design notes.
 --------------------------------------------------------------------------------
 --
@@ -39,7 +50,7 @@ use work.ION_MAIN_PKG.all;
 
 -- IMPORTANT: This is NOT a GENERAL ION BUS ARBITER; it does not pass along the 
 -- slave wait line. It works with the Code TCM but will fail with other slaves.
--- Also, it's tailored for Data and Code master ports -- see registered MISO_0.
+-- Also, it's tailored for Data and Code master ports.
 entity ION_CTCM_ARBITER is
     generic(
         -- Size of memory area occupied by slave 0 in bytes.
@@ -64,6 +75,7 @@ end;
 
 architecture rtl of ION_CTCM_ARBITER is
 
+-- Asserted when both masters attempt to access the slave in the same cycle.
 signal clash :              std_logic;
 signal clash_reg :          std_logic;
 
@@ -74,8 +86,25 @@ signal code_request :       std_logic;
 begin
  
     ----------------------------------------------------------------------------
-    ---- Address decoding.
+    ---- Arbitration logic.
+    
+    -- Figure up when the masters are actually using the port.
+    data_request <= 
+        '1' when MASTER_D_MOSI_I.rd_en='1' else
+        '1' when MASTER_D_MOSI_I.wr_be /="0000" else
+        '0';
 
+    code_request <= 
+        '1' when MASTER_C_MOSI_I.rd_en='1' else
+        '0';
+
+    -- when both masters attempt an access on the same cycle we have a clash.
+    clash <= (MASTER_D_CE_I and data_request) and 
+             (MASTER_C_CE_I and code_request);
+    
+    -- We need to register a clash because we have to wait the code for two
+    -- cycles, clash and clash+1.
+    -- FIXME this is not necessary, test it with a single wait.
     process(CLK_I)
     begin
         if (CLK_I'event and CLK_I='1') then
@@ -86,28 +115,16 @@ begin
             end if;
         end if;
     end process;
-
-    clash <= (MASTER_D_CE_I and data_request) and 
-             (MASTER_C_CE_I and code_request);
-    
-    data_request <= 
-        '1' when MASTER_D_MOSI_I.rd_en='1' else
-        '1' when MASTER_D_MOSI_I.wr_be /="0000" else
-        '0';
-
-    code_request <= 
-        '1' when MASTER_C_MOSI_I.rd_en='1' else
-        '0';
-
-    ----------------------------------------------------------------------------
-    ---- MOSI & MISO multiplexors.
-
+        
+    -- MOSI is combinationally multiplexed giving priority to the data port.
     SLAVE_MOSI_O <= 
         MASTER_D_MOSI_I when MASTER_D_CE_I='1' and data_request='1' else
         MASTER_C_MOSI_I;
 
+    -- The data mosi comes straight from the slave.
     MASTER_D_MISO_O <= SLAVE_MISO_I;
     
+    -- The code port will be stalled during a clash cycle.
     MASTER_C_MISO_O.rd_data <= SLAVE_MISO_I.rd_data;
     MASTER_C_MISO_O.mwait <= clash or clash_reg;
     
