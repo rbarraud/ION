@@ -1,43 +1,39 @@
 onerror {resume}
 quietly WaveActivateNextPane {} 0
-add wave -noupdate /ion_cpu_tb/clk
-add wave -noupdate /ion_cpu_tb/reset
 add wave -noupdate -divider Fetch
-add wave -noupdate -expand -group Code -color {Sky Blue} -radix hexadecimal /ion_cpu_tb/code_mosi.addr
-add wave -noupdate -expand -group Code -radix hexadecimal /ion_cpu_tb/code_miso.rd_data
-add wave -noupdate -expand -group Code /ion_cpu_tb/code_mosi.rd_en
-add wave -noupdate -expand -group Code /ion_cpu_tb/code_miso.mwait
-add wave -noupdate -expand -group Code -color Gold -radix hexadecimal /ion_cpu_tb/cpu/p1_ir_reg
-add wave -noupdate -color Blue -radix hexadecimal /ion_cpu_tb/cpu/p0_pc_reg
-add wave -noupdate /ion_cpu_tb/code_wait_ctr
+add wave -noupdate -expand -group Code
+add wave -noupdate -group Code -color {Sky Blue} -format Literal -radix hexadecimal /ion_cpu_tb/code_mosi.addr
+add wave -noupdate -group Code -format Literal -radix hexadecimal /ion_cpu_tb/code_miso.rd_data
+add wave -noupdate -group Code -format Logic /ion_cpu_tb/code_mosi.rd_en
+add wave -noupdate -group Code -format Logic /ion_cpu_tb/code_miso.mwait
+add wave -noupdate -group Code -color Gold -format Literal -radix hexadecimal /ion_cpu_tb/cpu/p1_ir_reg
+add wave -noupdate -color Blue -format Literal -radix hexadecimal /ion_cpu_tb/cpu/p0_pc_reg
+add wave -noupdate -format Literal /ion_cpu_tb/code_wait_ctr
 add wave -noupdate -divider Memory
-add wave -noupdate /ion_cpu_tb/cpu/stall_pipeline
-add wave -noupdate /ion_cpu_tb/cpu/pipeline_stalled
-add wave -noupdate -childformat {{/ion_cpu_tb/cpu/DATA_MOSI_O.addr -radix hexadecimal} {/ion_cpu_tb/cpu/DATA_MOSI_O.wr_data -radix hexadecimal}} -expand -subitemconfig {/ion_cpu_tb/cpu/DATA_MOSI_O.addr {-color Orchid -height 15 -radix hexadecimal} /ion_cpu_tb/cpu/DATA_MOSI_O.rd_en {-color {Olive Drab} -height 15} /ion_cpu_tb/cpu/DATA_MOSI_O.wr_be {-color {Medium Aquamarine} -height 15} /ion_cpu_tb/cpu/DATA_MOSI_O.wr_data {-color White -height 15 -radix hexadecimal}} /ion_cpu_tb/cpu/DATA_MOSI_O
-add wave -noupdate -childformat {{/ion_cpu_tb/cpu/DATA_MISO_I.rd_data -radix hexadecimal}} -expand -subitemconfig {/ion_cpu_tb/cpu/DATA_MISO_I.rd_data {-color {Medium Sea Green} -height 15 -radix hexadecimal}} /ion_cpu_tb/cpu/DATA_MISO_I
-add wave -noupdate /ion_cpu_tb/data_wait_ctr
+add wave -noupdate -format Literal /ion_cpu_tb/data_wait_ctr
+add wave -noupdate -format Literal /ion_cpu_tb/wait_states_data
+add wave -noupdate -format Literal -expand /ion_cpu_tb/cpu/data_mosi_o
+add wave -noupdate -format Literal -radix hexadecimal -expand /ion_cpu_tb/cpu/data_miso_i
 add wave -noupdate -divider {Debug 2}
-add wave -noupdate /ion_cpu_tb/cpu/cop0/privileged
-add wave -noupdate -radix hexadecimal -childformat {{/ion_cpu_tb/log_info.pc_m(0) -radix hexadecimal} {/ion_cpu_tb/log_info.pc_m(1) -radix hexadecimal} {/ion_cpu_tb/log_info.pc_m(2) -radix hexadecimal} {/ion_cpu_tb/log_info.pc_m(3) -radix hexadecimal}} -expand -subitemconfig {/ion_cpu_tb/log_info.pc_m(0) {-height 15 -radix hexadecimal} /ion_cpu_tb/log_info.pc_m(1) {-height 15 -radix hexadecimal} /ion_cpu_tb/log_info.pc_m(2) {-height 15 -radix hexadecimal} /ion_cpu_tb/log_info.pc_m(3) {-height 15 -radix hexadecimal}} /ion_cpu_tb/log_info.pc_m
-add wave -noupdate -radix hexadecimal /ion_cpu_tb/cpu/p1_rbank(27)
-add wave -noupdate -radix hexadecimal /ion_cpu_tb/cpu/p1_rbank(26)
-add wave -noupdate /ion_cpu_tb/cpu/p0_pc_increment
-add wave -noupdate -color White /ion_cpu_tb/cpu/p0_pc_load_pending
-add wave -noupdate /ion_cpu_tb/cpu/cop0/CPU_O.pc_load_en
-add wave -noupdate -radix hexadecimal /ion_cpu_tb/cpu/cop0/CPU_O.pc_load_value
-add wave -noupdate /ion_cpu_tb/cpu/p1_exception
-add wave -noupdate /ion_cpu_tb/cpu/p2_exception
-add wave -noupdate -color Firebrick /ion_cpu_tb/cpu/cop0/CPU_I.exception
-add wave -noupdate /ion_cpu_tb/cpu/cop0/CPU_I.missing_cop
-add wave -noupdate -radix hexadecimal /ion_cpu_tb/cpu/cop0/CPU_I.pc_restart
-add wave -noupdate -radix hexadecimal /ion_cpu_tb/cpu/cop0/epc_reg
-add wave -noupdate -color {Indian Red} -radix hexadecimal /ion_cpu_tb/cpu/p0_pc_next
-add wave -noupdate -radix hexadecimal /ion_cpu_tb/cpu/p0_pc_next_exceptions
-add wave -noupdate -radix hexadecimal /ion_cpu_tb/cpu/p0_pc_target
-add wave -noupdate -radix hexadecimal /ion_cpu_tb/cpu/p0_pc_incremented
+add wave -noupdate -format Literal -radix unsigned /ion_cpu_tb/cpu/p0_rt_num
+add wave -noupdate -format Literal -radix unsigned /ion_cpu_tb/cpu/p0_rs_num
+add wave -noupdate -color {Light Blue} -format Literal -radix unsigned /ion_cpu_tb/cpu/p1_rd_num
+add wave -noupdate -color Aquamarine -format Literal -radix unsigned /ion_cpu_tb/cpu/p2_load_target
+add wave -noupdate -color {Cornflower Blue} -format Logic /ion_cpu_tb/cpu/p2_do_load
+add wave -noupdate -format Literal -radix hexadecimal /ion_cpu_tb/cpu/p1_rbank_forward
+add wave -noupdate -format Logic /ion_cpu_tb/cpu/p0_rbank_rt_hazard
+add wave -noupdate -format Logic /ion_cpu_tb/cpu/p0_rbank_rs_hazard
+add wave -noupdate -format Literal -radix hexadecimal /ion_cpu_tb/cpu/p1_rt
+add wave -noupdate -format Literal -radix hexadecimal /ion_cpu_tb/cpu/p1_rs
+add wave -noupdate -color Orange -format Literal -radix hexadecimal /ion_cpu_tb/cpu/p1_rbank(2)
+add wave -noupdate -format Literal -radix hexadecimal /ion_cpu_tb/cpu/p1_rbank
+add wave -noupdate -format Logic /ion_cpu_tb/data_dtcm_ce
+add wave -noupdate -format Logic /ion_cpu_tb/data_ctcm_ce
+add wave -noupdate -color White -format Logic /ion_cpu_tb/clk
+add wave -noupdate -format Logic /ion_cpu_tb/cpu/p1_do_load
+add wave -noupdate -format Logic /ion_cpu_tb/cpu/load_interlock
 TreeUpdate [SetDefaultTree]
-WaveRestoreCursors {{Cursor 1} {2450000 ps} 1} {{Cursor 2} {2410000 ps} 0}
-quietly wave cursor active 2
+WaveRestoreCursors {{Cursor 2} {290000 ps} 0}
 configure wave -namecolwidth 181
 configure wave -valuecolwidth 60
 configure wave -justifyvalue left
@@ -50,6 +46,5 @@ configure wave -gridoffset 0
 configure wave -gridperiod 1
 configure wave -griddelta 40
 configure wave -timeline 0
-configure wave -timelineunits ps
 update
-WaveRestoreZoom {2200104 ps} {2876185 ps}
+WaveRestoreZoom {0 ps} {21875 ns}

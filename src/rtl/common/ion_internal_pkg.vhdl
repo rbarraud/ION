@@ -1,10 +1,11 @@
 --------------------------------------------------------------------------------
--- ION_MAIN_PKG.vhdl -- Configuration constants & utility types and functions
+-- ION_INTERNAL_PKG.vhdl -- Configuration constants, utility types & functions.
+--------------------------------------------------------------------------------
+-- For use within the core component modules only.
+-- Modules instantiating an ion_core entity do not need this package.
 --------------------------------------------------------------------------------
 -- FIXME Plenty of remnants from the old ION version, refactor!
 --------------------------------------------------------------------------------
--- Copyright (C) 2014 Jose A. Ruiz
---                                                              
 -- This source file may be used and distributed without         
 -- restriction provided that this copyright statement is not    
 -- removed from the file and that any derivative work contains  
@@ -32,11 +33,12 @@ use ieee.std_logic_1164.all;
 use ieee.std_logic_arith.all;
 use ieee.std_logic_unsigned.all;
 
-package ION_MAIN_PKG is
+use work.ION_INTERFACES_PKG.all;
+
+package ION_INTERNAL_PKG is
 
 ---- Basic types ---------------------------------------------------------------
 
-subtype t_word is std_logic_vector(31 downto 0);
 subtype t_halfword is std_logic_vector(15 downto 0);
 subtype t_byte is std_logic_vector(7 downto 0);
 subtype t_pc is std_logic_vector(31 downto 2);
@@ -90,21 +92,6 @@ type t_cop0_miso is record
     idcache_enable :    std_logic;
     icache_invalidate : std_logic;
 end record t_cop0_miso;
-
-type t_wishbone_mosi is record
-    adr :               t_word;
-    dat :               t_word;
-    sel :               std_logic_vector(3 downto 0);
-    we :                std_logic;
-    cyc :               std_logic;
-    stb :               std_logic;
-end record t_wishbone_mosi;
-
-type t_wishbone_miso is record
-    ack :               std_logic;
-    dat :               t_word;
-end record t_wishbone_miso;
-
 
 ---- System configuration constants --------------------------------------------
 
@@ -266,7 +253,7 @@ function decode_addr(addr : t_addr_decode) return t_range_attr;
 
 end package;
 
-package body ION_MAIN_PKG is
+package body ION_INTERNAL_PKG is
 
 function log2(A : natural) return natural is
 begin

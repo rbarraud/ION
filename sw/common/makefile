@@ -30,7 +30,10 @@ DWIN32 = -DWIN32
 LINUX_PWD =
 
 # MIPS GCC cross-toolchain: CodeSourcery -- replace with your own
-TOOLCHAIN = C:/devel/tools/CS_MIPS
+TOOLCHAIN = C:/dev/embedded/SourceryGpp/mips-elf-11-03.52
+#TOOLCHAIN = C:/devel/tools/CS_MIPS
+
+# Toolchain executables
 BIN_MIPS = $(TOOLCHAIN)/bin
 CC = $(BIN_MIPS)/mips-sde-elf-gcc.exe $(CFLAGS)
 AS = $(BIN_MIPS)/mips-sde-elf-as
@@ -40,7 +43,9 @@ COPY = $(BIN_MIPS)/mips-sde-elf-objcopy
 
 LIBPATH = $(TOOLCHAIN)/mips-sde-elf/lib/sof
 
-PYTHON = c:/devel/tools/Python27/python.exe
+# Python interpreter -- replace with your own
+#PYTHON = c:/devel/tools/Python27/python.exe
+PYTHON = python
 
 else
 #**** Customize for Linux

@@ -1,17 +1,8 @@
 --------------------------------------------------------------------------------
--- ion_wishbone_bridge.vhdl -- Connects an ION bus master to a Wishbone bus.
+-- ION_INTERFACES_PKG.vhdl -- Data types used in the core interface.
 --------------------------------------------------------------------------------
--- ION_WISHBONE_BRIDGE 
---
---
--- REFERENCES
---
+-- Needs to be imported by any module that instantiates an ion_core entity.
 --------------------------------------------------------------------------------
---
---
---------------------------------------------------------------------------------
--- Copyright (C) 2014 Jose A. Ruiz
---                                                              
 -- This source file may be used and distributed without         
 -- restriction provided that this copyright statement is not    
 -- removed from the file and that any derivative work contains  
@@ -39,33 +30,28 @@ use ieee.std_logic_1164.all;
 use ieee.std_logic_arith.all;
 use ieee.std_logic_unsigned.all;
 
-use work.ION_INTERFACES_PKG.all;
-use work.ION_INTERNAL_PKG.all;
+package ION_INTERFACES_PKG is
 
+subtype t_word is std_logic_vector(31 downto 0);
 
-entity ION_WISHBONE_BRIDGE is
-    port(
-        CLK_I               : in std_logic;
-        RESET_I             : in std_logic;
+type t_wishbone_mosi is record
+    adr :               t_word;
+    dat :               t_word;
+    sel :               std_logic_vector(3 downto 0);
+    we :                std_logic;
+    cyc :               std_logic;
+    stb :               std_logic;
+end record t_wishbone_mosi;
 
-        ION_MOSI_I          : in t_cpumem_mosi;
-        ION_MISO_O          : out t_cpumem_miso;
-        
-        WISHBONE_MOSI_O     : out t_wishbone_mosi;
-        WISHBONE_MISO_I     : in t_wishbone_miso
-    );
-end;
+type t_wishbone_miso is record
+    ack :               std_logic;
+    dat :               t_word;
+end record t_wishbone_miso;
 
-architecture rtl of ION_WISHBONE_BRIDGE is
+end package;
 
-          
-begin
+package body ION_INTERFACES_PKG is
 
-    -- FIXME This is a total fake! it's a placeholder until real stuff is done.
+    -- No package body is necessary.
 
-    WISHBONE_MOSI_O <= ION_MOSI_I;
-    ION_MISO_O <= WISHBONE_MISO_I;
-
-    
-end architecture rtl;
-
+end package body;

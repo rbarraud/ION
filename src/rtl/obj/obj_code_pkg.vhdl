@@ -11,8 +11,6 @@
 -- initialize 32-, 16- or 8-bit-wide memory -- memory initialization functions
 -- can be found in package mips_pkg.
 --------------------------------------------------------------------------------
--- Copyright (C) 2012 Jose A. Ruiz
---
 -- This source file may be used and distributed without
 -- restriction provided that this copyright statement is not
 -- removed from the file and that any derivative work contains
@@ -39,7 +37,8 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-use work.ION_MAIN_PKG.all;
+use work.ION_INTERFACES_PKG.all;
+use work.ION_INTERNAL_PKG.all;
 
 package OBJ_CODE_PKG is
 

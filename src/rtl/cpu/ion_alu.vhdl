@@ -2,8 +2,6 @@
 -- ion_alu.vhdl -- integer arithmetic ALU, excluding mult/div functionality.
 --
 --------------------------------------------------------------------------------
--- Copyright (C) 2011 Jose A. Ruiz
---                                                              
 -- This source file may be used and distributed without         
 -- restriction provided that this copyright statement is not    
 -- removed from the file and that any derivative work contains  
@@ -31,7 +29,8 @@ use ieee.std_logic_1164.all;
 use ieee.std_logic_arith.all;
 use ieee.std_logic_unsigned.all;
 
-use work.ION_MAIN_PKG.all;
+use work.ION_INTERFACES_PKG.all;
+use work.ION_INTERNAL_PKG.all;
 
 
 entity ION_ALU is

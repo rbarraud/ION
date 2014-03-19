@@ -17,8 +17,6 @@
 --------------------------------------------------------------------------------
 --
 --------------------------------------------------------------------------------
--- Copyright (C) 2014 Jose A. Ruiz
---                                                              
 -- This source file may be used and distributed without         
 -- restriction provided that this copyright statement is not    
 -- removed from the file and that any derivative work contains  
@@ -46,7 +44,8 @@ use ieee.std_logic_1164.all;
 use ieee.std_logic_arith.all;
 use ieee.std_logic_unsigned.all;
 
-use work.ION_MAIN_PKG.all;
+use work.ION_INTERFACES_PKG.all;
+use work.ION_INTERNAL_PKG.all;
 
 -- IMPORTANT: This is NOT a GENERAL ION BUS ARBITER; it does not pass along the 
 -- slave wait line. It works with the Code TCM but will fail with other slaves.

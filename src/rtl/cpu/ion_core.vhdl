@@ -5,7 +5,7 @@
 -- if it is configured to have any. 
 -- The user does not need to tinker wth any modules at or below this level.
 --------------------------------------------------------------------------------
--- FIXME add brief usge instructions.
+-- FIXME add brief usage instructions.
 -- FIXME add reference to datasheet.
 --------------------------------------------------------------------------------
 --
@@ -42,7 +42,8 @@ use ieee.std_logic_1164.all;
 use ieee.std_logic_arith.all;
 use ieee.std_logic_unsigned.all;
 
-use work.ION_MAIN_PKG.all;
+use work.ION_INTERFACES_PKG.all;
+use work.ION_INTERNAL_PKG.all;
 
 
 entity ion_core is

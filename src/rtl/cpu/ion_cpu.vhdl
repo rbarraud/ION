@@ -58,7 +58,8 @@ use ieee.std_logic_1164.all;
 use ieee.std_logic_arith.all;
 use ieee.std_logic_unsigned.all;
 
-use work.ION_MAIN_PKG.all;
+use work.ION_INTERFACES_PKG.all;
+use work.ION_INTERNAL_PKG.all;
 
 
 entity ion_cpu is
@@ -76,6 +77,7 @@ entity ion_cpu is
         CODE_MOSI_O         : out t_cpumem_mosi;
         CODE_MISO_I         : in t_cpumem_miso;
         
+        -- FIXME spec this; one per cache? only for icache?
         CACHE_CTRL_MOSI_O   : out t_cache_mosi;
         CACHE_CTRL_MISO_I   : in t_cache_miso;
         

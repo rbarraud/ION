@@ -49,7 +49,8 @@ use ieee.std_logic_1164.all;
 use ieee.std_logic_unsigned.all;
 use IEEE.std_logic_arith.all;
 
-use work.ION_MAIN_PKG.all;
+use work.ION_INTERFACES_PKG.all;
+use work.ION_INTERNAL_PKG.all;
 
 
 entity ION_MULDIV is
