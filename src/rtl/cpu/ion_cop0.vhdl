@@ -3,8 +3,6 @@
 --------------------------------------------------------------------------------
 --
 --------------------------------------------------------------------------------
--- Copyright (C) 2013 Jose A. Ruiz
---                                                              
 -- This source file may be used and distributed without         
 -- restriction provided that this copyright statement is not    
 -- removed from the file and that any derivative work contains  
@@ -31,7 +29,9 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.std_logic_arith.all;
 
-use work.ION_MAIN_PKG.all;
+use work.ION_INTERFACES_PKG.all;
+use work.ION_INTERNAL_PKG.all;
+
 
 entity ION_COP0 is
     generic(

@@ -3,13 +3,14 @@
 # some unused modules' vcom calls have been commented out
 vlib work
 
-vcom -reportprogress 300 -work work ../../../src/rtl/common/ion_main_pkg.vhdl
+vcom -reportprogress 300 -work work ../../../src/rtl/common/ion_interfaces_pkg.vhdl
+vcom -reportprogress 300 -work work ../../../src/rtl/common/ion_internal_pkg.vhdl
 vcom -reportprogress 300 -work work ../../../src/rtl/cpu/ion_shifter.vhdl
 vcom -reportprogress 300 -work work ../../../src/rtl/cpu/ion_alu.vhdl
 vcom -reportprogress 300 -work work ../../../src/rtl/cpu/ion_muldiv.vhdl
 vcom -reportprogress 300 -work work ../../../src/rtl/cpu/ion_cop0.vhdl
 vcom -reportprogress 300 -work work ../../../src/rtl/cpu/ion_cpu.vhdl
-vcom -reportprogress 300 -work work ../../../src/rtl/buses/ion_bus.vhdl
+vcom -reportprogress 300 -work work ../../../src/rtl/buses/ion_ctcm_arbiter.vhdl
 vcom -reportprogress 300 -work work ../../../src/rtl/buses/ion_tcm_code.vhdl
 vcom -reportprogress 300 -work work ../../../src/rtl/buses/ion_tcm_data.vhdl
 vcom -reportprogress 300 -work work ../../../src/rtl/cpu/ion_core.vhdl
