@@ -2,7 +2,8 @@
 -- ion_wishbone_bridge.vhdl -- Connects an ION bus master to a Wishbone bus.
 --------------------------------------------------------------------------------
 -- ION_WISHBONE_BRIDGE 
---
+-- This bridge converts ION-bus signals to Wishbone signals ans vice-versa.
+-- For the Wb-slaves, the bridge appears as the Wb-bus master.
 --
 -- REFERENCES
 --
