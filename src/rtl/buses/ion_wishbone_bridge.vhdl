@@ -4,7 +4,7 @@
 -- ION_WISHBONE_BRIDGE 
 -- This bridge converts ION-bus signals to Wishbone signals ans vice-versa.
 -- For the Wb-slaves, the bridge appears as the Wb-bus master.
---
+-- 
 -- REFERENCES
 --
 --------------------------------------------------------------------------------
@@ -103,9 +103,9 @@ begin
 			TGA_O <= ION_wr_be;
 			WE_O  <= not(ION_rd_en);
 			
-			STB_O
+			STB_O <=
 			
-			CYC_O 
+			CYC_O <=
 			
 		end process;
 
