@@ -1,5 +1,5 @@
 --------------------------------------------------------------------------------
--- ion_wishbone_bridge.vhd -- Connects an ION bus master to a Wishbone bus.
+-- ion_wishbone_bridge.vhdl -- Connects an ION bus master to a Wishbone bus.
 --------------------------------------------------------------------------------
 -- ION_WISHBONE_BRIDGE 
 --
