@@ -1,5 +1,5 @@
 --------------------------------------------------------------------------------
--- ion_wishbone_bridge.vhdl -- Connects an ION bus master to a Wishbone bus.
+-- ion_wishbone_bridge.vhd -- Connects an ION bus master to a Wishbone bus.
 --------------------------------------------------------------------------------
 -- ION_WISHBONE_BRIDGE 
 --
@@ -39,33 +39,75 @@ use ieee.std_logic_1164.all;
 use ieee.std_logic_arith.all;
 use ieee.std_logic_unsigned.all;
 
-use work.ION_INTERFACES_PKG.all;
-use work.ION_INTERNAL_PKG.all;
+ use work.ION_INTERFACES_PKG.all;
+ use work.ION_INTERNAL_PKG.all;
 
 
 entity ION_WISHBONE_BRIDGE is
     port(
-        CLK_I               : in std_logic;
-        RESET_I             : in std_logic;
-
-        ION_MOSI_I          : in t_cpumem_mosi;
-        ION_MISO_O          : out t_cpumem_miso;
-        
-        WISHBONE_MOSI_O     : out t_wishbone_mosi;
-        WISHBONE_MISO_I     : in t_wishbone_miso
+		--CLK_I               : in std_logic;
+        --RESET_I             : in std_logic;
+        --ION_MOSI_I          : in t_cpumem_mosi;
+        --ION_MISO_O          : out t_cpumem_miso;        
+        --WISHBONE_MOSI_O     : out t_wishbone_mosi;
+        --WISHBONE_MISO_I     : in t_wishbone_miso
+		
+		-- ION-bus ports
+		-- MOSI
+		ION_addr		: in std_logic_vector(31 downto 0); -- Address bus
+		ION_rd_en		: in std_logic;					    -- Read Enable	
+		ION_wr_be		: in std_logic_vector(3 downto 0);  -- Write Byte Enable. Bit 0 is for wr_data[7..0]
+		ION_wr_data     : in std_logic_vector(31 downto 0); -- Write data bus
+		-- MISO
+		ION_rd_data     : out std_logic_vector(31 downto 0); -- Read data bus
+		ION_mwait       : out std_logic;	                 -- Asserted to stall a read or write cycle
+		
+		-- Wishbone ports
+		--CLK_I           : in std_logic;						-- System Interconnect clock
+		--RST_I			: in std_logic;						-- Reset input forces the WISHBONE interface to restart
+		DAT_I			: in std_logic_vector(31 downto 0); -- Read data bus
+		STALL_I			: in std_logic;						-- Pipeline stall input, indicates current slave is busy
+		ACK_I			: in std_logic;						-- Acknowledge from Slave for normal termination of a bus cycle at Master
+		
+		ADR_O			: out std_logic_vector(31 downto 0); -- Address bus
+		DAT_O			: out std_logic_vector(31 downto 0); -- Write data bus
+		TGA_O			: out std_logic_vector(3 downto 0);  -- Address tag type, contains information associated with the address bus
+		WE_O			: out std_logic;					 -- write enable output, indicates if the current local bus cycle is a READ or WRITE cycle	
+		STB_O			: out std_logic;					 -- Strobe output indicates a valid data transfer cycle
+		CYC_O			: out std_logic;					 -- Indicates that a valid bus cycle is in progress
     );
-end;
+end; 
 
-architecture rtl of ION_WISHBONE_BRIDGE is
+
+architecture ION_WISHBONE_BRIDGE_arc of ION_WISHBONE_BRIDGE is
 
           
 begin
 
     -- FIXME This is a total fake! it's a placeholder until real stuff is done.
 
-    WISHBONE_MOSI_O <= ION_MOSI_I;
-    ION_MISO_O <= WISHBONE_MISO_I;
+    --WISHBONE_MOSI_O <= ION_MOSI_I;
+    --ION_MISO_O <= WISHBONE_MISO_I;
+	
+	process (ION_addr, ACK_I)
+	
+		begin
+			-- Conversion to ION-bus signals
+			ION_rd_data <= DAT_I;
+			ION_mwait   <= STALL_I;
+			
+			-- Conversion to Wishbone-bus signals
+			ADR_O <= ION_addr;
+			DAT_O <= ION_wr_data;
+			TGA_O <= ION_wr_be;
+			WE_O  <= not(ION_rd_en);
+			
+			STB_O
+			
+			CYC_O 
+			
+		end process;
 
     
-end architecture rtl;
+end architecture ION_WISHBONE_BRIDGE_arc;
 
