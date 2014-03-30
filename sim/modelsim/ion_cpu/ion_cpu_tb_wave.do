@@ -1,6 +1,9 @@
 onerror {resume}
 quietly WaveActivateNextPane {} 0
+<<<<<<< HEAD
 add wave -noupdate -color White -format Logic /ion_cpu_tb/clk
+=======
+>>>>>>> 6c4aacc22a75a0e3f4e8725372f0f227c9920316
 add wave -noupdate -divider Fetch
 add wave -noupdate -expand -group Code
 add wave -noupdate -group Code -color {Sky Blue} -format Literal -radix hexadecimal /ion_cpu_tb/code_mosi.addr
@@ -8,6 +11,7 @@ add wave -noupdate -group Code -format Literal -radix hexadecimal /ion_cpu_tb/co
 add wave -noupdate -group Code -format Logic /ion_cpu_tb/code_mosi.rd_en
 add wave -noupdate -group Code -format Logic /ion_cpu_tb/code_miso.mwait
 add wave -noupdate -group Code -color Gold -format Literal -radix hexadecimal /ion_cpu_tb/cpu/p1_ir_reg
+<<<<<<< HEAD
 add wave -noupdate -format Logic /ion_cpu_tb/cpu/stall_pipeline
 add wave -noupdate -color Blue -format Literal -radix hexadecimal /ion_cpu_tb/cpu/p0_pc_reg
 add wave -noupdate -format Literal /ion_cpu_tb/code_wait_ctr
@@ -20,6 +24,15 @@ add wave -noupdate -color Tan -format Literal -radix hexadecimal /ion_cpu_tb/cpu
 add wave -noupdate -color Coral -format Literal -radix hexadecimal /ion_cpu_tb/cpu/data_miso_i.rd_data
 add wave -noupdate -format Logic -radix hexadecimal /ion_cpu_tb/cpu/data_miso_i.mwait
 add wave -noupdate -divider Memory
+=======
+add wave -noupdate -color Blue -format Literal -radix hexadecimal /ion_cpu_tb/cpu/p0_pc_reg
+add wave -noupdate -format Literal /ion_cpu_tb/code_wait_ctr
+add wave -noupdate -divider Memory
+add wave -noupdate -format Literal /ion_cpu_tb/data_wait_ctr
+add wave -noupdate -format Literal /ion_cpu_tb/wait_states_data
+add wave -noupdate -format Literal -expand /ion_cpu_tb/cpu/data_mosi_o
+add wave -noupdate -format Literal -radix hexadecimal -expand /ion_cpu_tb/cpu/data_miso_i
+>>>>>>> 6c4aacc22a75a0e3f4e8725372f0f227c9920316
 add wave -noupdate -divider {Debug 2}
 add wave -noupdate -format Literal -radix unsigned /ion_cpu_tb/cpu/p0_rt_num
 add wave -noupdate -format Literal -radix unsigned /ion_cpu_tb/cpu/p0_rs_num
@@ -35,6 +48,10 @@ add wave -noupdate -color Orange -format Literal -radix hexadecimal /ion_cpu_tb/
 add wave -noupdate -format Literal -radix hexadecimal /ion_cpu_tb/cpu/p1_rbank
 add wave -noupdate -format Logic /ion_cpu_tb/data_dtcm_ce
 add wave -noupdate -format Logic /ion_cpu_tb/data_ctcm_ce
+<<<<<<< HEAD
+=======
+add wave -noupdate -color White -format Logic /ion_cpu_tb/clk
+>>>>>>> 6c4aacc22a75a0e3f4e8725372f0f227c9920316
 add wave -noupdate -format Logic /ion_cpu_tb/cpu/p1_do_load
 add wave -noupdate -format Logic /ion_cpu_tb/cpu/load_interlock
 TreeUpdate [SetDefaultTree]
@@ -52,4 +69,8 @@ configure wave -gridperiod 1
 configure wave -griddelta 40
 configure wave -timeline 0
 update
+<<<<<<< HEAD
 WaveRestoreZoom {36799935 ps} {36986056 ps}
+=======
+WaveRestoreZoom {0 ps} {21875 ns}
+>>>>>>> 6c4aacc22a75a0e3f4e8725372f0f227c9920316

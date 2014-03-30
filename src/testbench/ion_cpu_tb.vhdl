@@ -8,14 +8,17 @@
 --------------------------------------------------------------------------------
 -- MEMORY MAP (except IO areas, see below):
 --
--- Code [00000000..FFFFFFFF] : Code ROM (mirrored).
--- Data [00000000..BFBFFFFF] : Data RAM (mirrored).
--- Data [BFC00000..BFCFFFFF] : Code ROM (mirrored, read only).
--- Data [BFD00000..FFFFFFFF] : Data RAM (mirrored).
+--                             Code ROM         Data RAM
+--                            -----------------------------
+-- Code [00000000..FFFFFFFF] :    R/O              
+-- Data [00000000..BFBFFFFF] :                     R/W
+-- Data [BFC00000..BFCFFFFF] :    R/O              
+-- Data [BFD00000..FFFFFFFF] :                     R/W
+--                            -----------------------------
 --
 -- Note we only simulate two separate blocks, ROM for code and RAM for data.
 -- Both are mirrored all over the decoded memory spaces. 
--- the code ROM is accessible from the data bus so that SW constants can be 
+-- The code ROM is accessible from the data bus so that SW constants can be 
 -- easily reached.
 --
 --------------------------------------------------------------------------------
@@ -30,18 +33,22 @@
 -- 20010028: Debug register 2 (R/W).    -- FIXME unimplemented
 -- 2001002c: Debug register 3 (R/W).    -- FIXME unimplemented
 -- 20010030: Wait states for simulated code memory accesses (W/o).
--- 20010030: Wait states for simulated data memory accesses (W/o).
+-- 20010034: Wait states for simulated data memory accesses (W/o).
 --
--- NOTE: these addresses are for write accesses only. for read accesses, the 
+-- NOTE: These addresses are for write accesses only. For read accesses, the 
 -- debug registers 0..3 are mirrored over all the io address range 2001xxxxh.
 --
 -- The debug registers 0 to 3 can only be used to test 32-bit i/o.
 -- All of these registers can only be addressed as 32-bit words. Any other type
 -- of access will yield undefined results.
+--
+-- These registers are only write-enabled if the generic ENABLE_DEBUG_REGISTERS
+-- is TRUE.
 --------------------------------------------------------------------------------
 -- Console logging:
 --
--- Console output (at address 0x20000000) is logged to text file
+-- The TB implements a simple, fake console at address 0x20000000.
+-- Any bytes written to that address will be logged to text file
 -- "hw_sim_console_log.txt".
 --
 -- IMPORTANT: The code that echoes UART TX data to the simulation console does
@@ -49,16 +56,13 @@
 -- will ifnore LFs (0x0a). Bear this in mind if you see no output when you 
 -- expect it.
 --
--- Console logging is done by monitoring CPU writes to the UART, NOT by looking
--- at the TxD pin. It will NOT catch baud-related problems, etc.
 --------------------------------------------------------------------------------
--- WARNING: Will only work on Modelsim; uses custom library SignalSpy.
+-- WARNING: This TB will only work on Modelsim; uses custom library SignalSpy.
 --##############################################################################
 
 library ieee;
 use ieee.std_logic_1164.all;
-use ieee.std_logic_arith.all;
-use ieee.std_logic_unsigned.all;
+use ieee.numeric_std.all;
 
 -- Project packages.
 use work.ION_INTERFACES_PKG.all;
@@ -75,6 +79,12 @@ use work.OBJ_CODE_PKG.all;
 
 
 entity ION_CPU_TB is
+    generic (
+        CODE_WCYCLES : integer := 1;
+        DATA_WCYCLES : integer := 0;
+        
+        ENABLE_DEBUG_REGISTERS : boolean := false
+    );
 end;
 
 
@@ -122,8 +132,8 @@ signal ctcm_addr :          std_logic_vector(CTCM_ADDR_SIZE downto 2);
 signal ctcm_data :          t_word;
 signal ctcm_wait :          std_logic;
 
-signal code_wait_ctr :      integer range -1 to 63;
-signal data_wait_ctr :      integer range -1 to 63;
+signal code_wait_ctr :      integer range -2 to 63;
+signal data_wait_ctr :      integer range -2 to 63;
 
 signal code_ctcm_ce_reg :   std_logic;
 signal code_ctcm :          t_word;
@@ -249,16 +259,16 @@ begin
         if clk'event and clk='1' then
             if data_dtcm_ce='1' then 
                 if data_mosi.wr_be(0)='1' then
-                    dtcm(conv_integer(unsigned(dtcm_addr)))(7 downto 0) := data_mosi.wr_data(7 downto 0);
+                    dtcm(to_integer(unsigned(dtcm_addr)))(7 downto 0) := data_mosi.wr_data(7 downto 0);
                 end if;
                 if data_mosi.wr_be(1)='1' then
-                    dtcm(conv_integer(unsigned(dtcm_addr)))(15 downto 8) := data_mosi.wr_data(15 downto 8);
+                    dtcm(to_integer(unsigned(dtcm_addr)))(15 downto 8) := data_mosi.wr_data(15 downto 8);
                 end if;
                 if data_mosi.wr_be(2)='1' then
-                    dtcm(conv_integer(unsigned(dtcm_addr)))(23 downto 16) := data_mosi.wr_data(23 downto 16);
+                    dtcm(to_integer(unsigned(dtcm_addr)))(23 downto 16) := data_mosi.wr_data(23 downto 16);
                 end if;
                 if data_mosi.wr_be(3)='1' then
-                    dtcm(conv_integer(unsigned(dtcm_addr)))(31 downto 24) := data_mosi.wr_data(31 downto 24);
+                    dtcm(to_integer(unsigned(dtcm_addr)))(31 downto 24) := data_mosi.wr_data(31 downto 24);
                 end if;
             end if;
         end if;
@@ -271,9 +281,9 @@ begin
         if clk'event and clk='1' and data_dtcm_ce='1' then
             -- Update data bus the cycle after rd_en is asserted if there's no 
             -- wait states, or the cycle after wait goes low otherwise.
-            if (conv_integer(wait_states_data)=0) or (data_wait_ctr = 1) then
-                data_dtcm <= dtcm(conv_integer(unsigned(dtcm_addr)));
-            end if;
+            --if (to_integer(wait_states_data)=0) or (data_wait_ctr = 1) then
+                data_dtcm <= dtcm(to_integer(unsigned(dtcm_addr)));
+            --end if;
         end if;
     end process data_memory;
 
@@ -284,8 +294,8 @@ begin
         if clk'event and clk='1' and data_ctcm_ce='1' then
             -- Update data bus the cycle after rd_en is asserted if there's no 
             -- wait states, or the cycle after wait goes low otherwise.
-            if (conv_integer(wait_states_data)=0) or (data_wait_ctr = 1) then
-                data_ctcm <= ctcm(conv_integer(unsigned(dtcm_addr)));
+            if (to_integer(wait_states_data)=0) or (data_wait_ctr = 1) then
+                data_ctcm <= ctcm(to_integer(unsigned(dtcm_addr)));
             end if;
         end if;
     end process code_memory_as_data;
@@ -295,8 +305,8 @@ begin
     -- The data abus will be driven only when the ION bus specs say so, to
     -- help pinpoint bugs in the bus logic.
     data_miso.rd_data <= 
-        data_dtcm when data_dtcm_ce_reg='1' and data_wait_ctr<=0 else 
-        data_ctcm when data_dtcm_ce_reg='0' and data_wait_ctr<=0 else
+        data_dtcm when data_dtcm_ce_reg='1' and data_wait_ctr=0 else 
+        data_ctcm when data_dtcm_ce_reg='0' and data_wait_ctr=0 else
         (others => 'Z');
     -- TODO Debug IO register inputs are unimplemented.
  
@@ -306,13 +316,13 @@ begin
     begin
         if clk'event and clk='1' then
             if reset = '1' then
-                data_wait_ctr <= -1;
-            elsif data_dtcm_ce='1' and (data_mosi.rd_en='1' or data_mosi.wr_be/="0000") and data_wait_ctr < 0 then
-                data_wait_ctr <= conv_integer(wait_states_data);
-            elsif data_wait_ctr >= 0 then
+                data_wait_ctr <= -2;
+            elsif data_dtcm_ce='1' and (data_mosi.rd_en='1' or data_mosi.wr_be/="0000") then
+                data_wait_ctr <= to_integer(wait_states_data);
+            elsif data_wait_ctr >= -1 then
                 data_wait_ctr <= data_wait_ctr - 1;
             else 
-                data_wait_ctr <= -1;
+                data_wait_ctr <= -2;
             end if;
             
             data_dtcm_ce_reg <= data_dtcm_ce;
@@ -334,8 +344,8 @@ begin
         if clk'event and clk='1' then
             -- Update data bus the cycle after rd_en is asserted if there's no 
             -- wait states, or the cycle after wait goes low otherwise.
-            if (conv_integer(wait_states_code)=0) or (code_wait_ctr = 1) then
-                code_ctcm <= ctcm(conv_integer(unsigned(ctcm_addr)));
+            if (to_integer(wait_states_code)=0) or (code_wait_ctr = 1) then
+                code_ctcm <= ctcm(to_integer(unsigned(ctcm_addr)));
             end if;
         end if;
     end process code_memory;    
@@ -350,13 +360,13 @@ begin
     begin
         if clk'event and clk='1' then
             if reset = '1' then
-                code_wait_ctr <= -1;
+                code_wait_ctr <= -2;
             elsif code_mosi.rd_en='1' then
-                code_wait_ctr <= conv_integer(wait_states_code);
-            elsif code_wait_ctr >= 0 then
+                code_wait_ctr <= to_integer(wait_states_code);
+            elsif code_wait_ctr >= -1 then
                 code_wait_ctr <= code_wait_ctr - 1;
             else 
-                code_wait_ctr <= -1;
+                code_wait_ctr <= -2;
             end if;
             
             code_ctcm_ce_reg <= code_mosi.rd_en;
@@ -375,16 +385,19 @@ begin
     begin
         if clk'event and clk='1' then 
             if reset = '1' then
-                wait_states_code <= "000010";
-                wait_states_data <= "000000";
-            elsif debug_reg_ce='1' and data_mosi.wr_be/="0000" then
-                case data_mosi.addr(15 downto 0) is
-                when X"0030" => 
-                    wait_states_code <= unsigned(data_mosi.wr_data(5 downto 0));
-                when X"0034" =>
-                    wait_states_data <= unsigned(data_mosi.wr_data(5 downto 0));
-                when others => -- ignore access.
-                end case;
+                wait_states_code <= to_unsigned(CODE_WCYCLES,wait_states_code'length);
+                wait_states_data <= to_unsigned(DATA_WCYCLES,wait_states_data'length);
+            else
+                if debug_reg_ce='1' and data_mosi.wr_be/="0000" and 
+                   ENABLE_DEBUG_REGISTERS then
+                    case data_mosi.addr(15 downto 0) is
+                    when X"0030" => 
+                        wait_states_code <= unsigned(data_mosi.wr_data(5 downto 0));
+                    when X"0034" =>
+                        wait_states_data <= unsigned(data_mosi.wr_data(5 downto 0));
+                    when others => -- ignore access.
+                    end case;
+                end if;
             end if;
         end if;
     end process debug_register_writes;

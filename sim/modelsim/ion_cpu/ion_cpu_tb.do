@@ -1,7 +1,10 @@
 # Assumed to run from /<project directory>/sim/modelsim/ion_cpu.
 vlib work
 
+<<<<<<< HEAD
 # Compile all the core files.
+=======
+>>>>>>> 6c4aacc22a75a0e3f4e8725372f0f227c9920316
 vcom -reportprogress 300 -work work ../../../src/rtl/common/ion_interfaces_pkg.vhdl
 vcom -reportprogress 300 -work work ../../../src/rtl/common/ion_internal_pkg.vhdl
 vcom -reportprogress 300 -work work ../../../src/rtl/cpu/ion_shifter.vhdl

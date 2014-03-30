@@ -1,7 +1,7 @@
 --------------------------------------------------------------------------------
 -- obj_code_pkg.vhdl -- Application object code in vhdl constant string format.
 --------------------------------------------------------------------------------
--- Built for project 'Opcode tester'.
+-- Built for project 'CPU tester'.
 --------------------------------------------------------------------------------
 -- This file contains object code in the form of a VHDL byte table constant.
 -- This constant can be used to initialize FPGA memories for synthesis or
