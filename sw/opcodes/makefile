@@ -15,7 +15,7 @@ CODE_MEM_START  = 0xbfc00000
 CODE_MEM_SIZE   = 4096
 # Data memory parameters -- Data TCM.
 DATA_MEM_START  = 0x00000000
-DATA_MEM_SIZE   = 1024
+DATA_MEM_SIZE   = 4096
 
 # Test bench simulation timeout period in clock cycles.
 SIM_LENGTH = 14000

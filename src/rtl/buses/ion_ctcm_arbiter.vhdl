@@ -79,6 +79,7 @@ signal clash :              std_logic;
 signal clash_reg :          std_logic;
 
 signal data_request :       std_logic;
+signal data_request_reg :   std_logic;
 signal code_request :       std_logic;
 
           
@@ -98,8 +99,8 @@ begin
         '0';
 
     -- when both masters attempt an access on the same cycle we have a clash.
-    clash <= (MASTER_D_CE_I and data_request) and 
-             (MASTER_C_CE_I and code_request);
+    clash <= (MASTER_D_CE_I and data_request);-- and 
+             --(MASTER_C_CE_I and code_request);
     
     -- We need to register a clash because we have to wait the code for two
     -- cycles, clash and clash+1.
@@ -109,8 +110,10 @@ begin
         if (CLK_I'event and CLK_I='1') then
             if RESET_I='1' then 
                 clash_reg <= '0';
+                data_request_reg <= '0';
             else
                 clash_reg <= clash;
+                data_request_reg <= data_request;
             end if;
         end if;
     end process;
@@ -125,7 +128,8 @@ begin
     
     -- The code port will be stalled during a clash cycle.
     MASTER_C_MISO_O.rd_data <= SLAVE_MISO_I.rd_data;
-    MASTER_C_MISO_O.mwait <= clash or clash_reg;
+    -- FIXME explain
+    MASTER_C_MISO_O.mwait <= clash_reg;
     
 
 end architecture rtl;

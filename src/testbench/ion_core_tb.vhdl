@@ -78,8 +78,9 @@ constant T : time               := (1.0e9/real(CLOCK_RATE)) * 1 ns;
 signal clk :                std_logic := '0';
 signal reset :              std_logic := '1';
 
---signal data_uc_wb_mosi :    t_wishbone_mosi;
---signal data_uc_wb_miso :    t_wishbone_miso;
+signal data_wb_mosi :       t_wishbone_mosi;
+signal data_wb_miso :       t_wishbone_miso;
+
 signal data_uc_wb_mosi :    t_cpumem_mosi;
 signal data_uc_wb_miso :    t_cpumem_miso;
 
@@ -107,15 +108,19 @@ begin
 
     core: entity work.ION_CORE
     generic map (
-        TCM_CODE_SIZE => CODE_MEM_SIZE,
-        TCM_CODE_INIT => OBJ_CODE,
-        TCM_DATA_SIZE => DATA_MEM_SIZE
-        -- TCM_DATA_INIT => INIT_DATA
+        TCM_CODE_SIZE =>        CODE_MEM_SIZE,
+        TCM_CODE_INIT =>        OBJ_CODE,
+        TCM_DATA_SIZE =>        DATA_MEM_SIZE,
+        
+        DATA_CACHE_LINES =>     128
     )
     port map (
         CLK_I               => clk,
         RESET_I             => reset, 
 
+        --DATA_WB_MOSI_O      => data_wb_mosi,
+        --DATA_WB_MISO_I      => data_wb_miso,
+        
         DATA_UC_WB_MOSI_O   => data_uc_wb_mosi,
         DATA_UC_WB_MISO_I   => data_uc_wb_miso,
 
@@ -158,6 +163,14 @@ begin
         wait;
         
     end process drive_uut;
+    
+    
+    -- Data refill port interface ----------------------------------------------
+    
+    -- STUB: read zeros with no delay.
+    data_wb_miso.ack <= data_wb_mosi.stb;
+    data_wb_miso.dat <= (others => '0');
+    
     
     -- Logging process: launch logger function ---------------------------------
     log_execution:

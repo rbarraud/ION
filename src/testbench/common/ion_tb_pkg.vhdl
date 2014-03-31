@@ -85,7 +85,7 @@ type t_log_info is record
     data_rd_en :            std_logic;
     p1_rbank_we :           std_logic;
     code_rd_en :            std_logic;
-    wr_be :          std_logic_vector(3 downto 0);
+    wr_be :                 std_logic_vector(3 downto 0);
 
     present_data_wr_addr :  t_word;
     present_data_wr :       t_word;
@@ -98,6 +98,7 @@ type t_log_info is record
     pending_data_wr_pc :    t_word;
     pending_data_wr :       t_word;
     pending_data_wr_we :    std_logic_vector(3 downto 0);
+    pending_load_target :   std_logic_vector(4 downto 0);
     
     word_loaded :           t_word;
     
@@ -342,10 +343,23 @@ begin
     -- Log memory reads ------------------------------------------
     if info.read_pending and info.load='1' and info.p1_rbank_we='1' then
         if info.log_triggered then
+            -- Log memory read cycle.
             print(l_file, "("& hstr(info.pc_m(1)) &") ["& 
                   hstr(info.pending_data_rd_addr) &"] <"& 
                   "**"& ">="& 
                   hstr(info.word_loaded)& " RD" );
+            -- Also log here the register change (here we have the PC info that
+            -- we will have lost if we wait to log it at the beginning of the 
+            -- next log function invocation).
+            ri := X"00" + info.pending_load_target;
+            -- Log only if the target register actually changed...
+            if info.prev_rbank(conv_integer(ri)) /= info.word_loaded then 
+                print(l_file, "("& hstr(info.pc_m(1))& ") "& 
+                      "["& hstr(ri)& "]="& hstr(info.word_loaded));
+                -- ...and prevent this change from appearing twice in the log
+                -- by setting the previous value to the new value.
+                info.prev_rbank(conv_integer(ri)) <= info.word_loaded;
+            end if;
         end if;
         info.read_pending <= false;
     end if;
@@ -444,6 +458,7 @@ begin
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/data_mosi_o.addr", signal_name&".present_data_rd_addr", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/p1_exception", signal_name&".exception", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/data_mosi_o.wr_data", signal_name&".io_wr_data", 0);
+    init_signal_spy("/"&base_entity&"/"&cpu_name&"/p2_load_target", signal_name&".pending_load_target", 0);
     
     
     while done='0' loop
