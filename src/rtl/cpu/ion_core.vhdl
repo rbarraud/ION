@@ -74,7 +74,11 @@ entity ion_core is
         CLK_I               : in std_logic;
         RESET_I             : in std_logic;
 
-        -- FIXME cache refill ports missing
+        -- Data cache refill port.
+        DATA_WB_MOSI_O      : out t_wishbone_mosi;
+        DATA_WB_MISO_I      : in t_wishbone_miso;
+        
+        -- FIXME code cache refill ports missing
         -- FIXME uncached wishbone ports missing
         
         -- Fixme this should be a Wishbone port, not an ION port.
@@ -360,10 +364,25 @@ begin
 
     data_cache_present:
     if DATA_CACHE_LINES > 0 generate
+        
+        data_cache: entity work.ION_CACHE 
+        generic map (
+            NUM_LINES => DATA_CACHE_LINES
+        )
+        port map (
+            CLK_I               => CLK_I,
+            RESET_I             => RESET_I,
 
-        assert 1=0
-        report "Data cache unimplemented, set DATA_CACHE_LINES => 0."
-        severity failure;
+            -- FIXME there should be a MISO for each cache in the control port
+            CACHE_CTRL_MOSI_I   => cache_ctrl_mosi,
+            CACHE_CTRL_MISO_O   => cache_ctrl_miso,
+            
+            CPU_MOSI_I          => data_mosi,
+            CPU_MISO_O          => dcache_miso,
+            
+            MEM_MOSI_O          => DATA_WB_MOSI_O,
+            MEM_MISO_I          => DATA_WB_MISO_I
+        );
         
     end generate data_cache_present;
 
