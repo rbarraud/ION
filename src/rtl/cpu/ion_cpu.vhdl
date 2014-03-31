@@ -88,10 +88,11 @@ end; --entity ion_cpu
 architecture rtl of ion_cpu is
 
 --------------------------------------------------------------------------------
--- Interface 
+-- Memory interface 
 
 signal mem_wait :           std_logic;
 signal data_rd :            t_word;
+signal data_rd_reg :        t_word;
 
 
 --------------------------------------------------------------------------------
@@ -200,23 +201,25 @@ signal p2_rd_addr :         std_logic_vector(1 downto 0);
 signal p2_rd_mux_control :  std_logic_vector(3 downto 0);
 signal p2_load_target :     t_regnum;
 signal p2_do_load :         std_logic;
-signal p2_do_store :        std_logic;
 signal p2_ld_upper_hword :  std_logic;
 signal p2_ld_upper_byte :   std_logic;
 signal p2_ld_unsigned :     std_logic;
 signal p2_wback_mux_sel :   std_logic_vector(1 downto 0);
 signal p2_data_word_rd :    t_word;
 signal p2_data_word_ext :   std_logic;
+signal p2_load_pending :    std_logic;
 
 --------------------------------------------------------------------------------
 -- Global control signals 
 
 signal load_interlock :     std_logic;
+-- stall pipeline for any reason
 signal stall_pipeline :     std_logic;
 -- pipeline is stalled for any reason
 signal pipeline_stalled :   std_logic;
-
+-- pipeline is stalled because CODE or DATA buses are waited
 signal stalled_memwait :    std_logic;
+-- pipeline is stalled because we´re waiting for the mul/div unit result
 signal stalled_muldiv :     std_logic;
 -- pipeline is stalled because of a load instruction interlock
 signal stalled_interlock :  std_logic;
@@ -231,9 +234,6 @@ signal cp0_miso :           t_cop0_miso;
 
 begin
 
-mem_wait <= DATA_MISO_I.mwait or CODE_MISO_I.mwait; 
-data_rd <= DATA_MISO_I.rd_data;
-
 --##############################################################################
 -- Register bank & datapath
 
@@ -246,9 +246,31 @@ with p1_ir_reg(31 downto 26) select p1_rd_num <=
 -- This is also called rs2 in the docs
 p0_rt_num <= std_logic_vector(CODE_MISO_I.rd_data(20 downto 16));
 
---------------------------------------------------------------------------------
--- Data input shifter & masker (LB,LBU,LH,LHU,LW)
 
+--------------------------------------------------------------------------------
+-- Data input register and input shifter & masker (LB,LBU,LH,LHU,LW)
+
+
+-- If data can't be latched form the bus when it´s valid due to a stall, it will
+-- be registered here.
+data_input_register:
+process(CLK_I)
+begin
+    if CLK_I'event and CLK_I='1' then
+        if p2_load_pending='1' and DATA_MISO_I.mwait='0' then
+            data_rd_reg <= DATA_MISO_I.rd_data;
+        end if;
+    end if;
+end process data_input_register;
+
+-- Data input mux:
+data_rd <= 
+    -- If pipeline was stalled when data was valid, use registered value...
+    data_rd_reg when p2_do_load='1' and p2_load_pending='0' else 
+    -- ...otherwise get the data straight from the data bus.
+    DATA_MISO_I.rd_data;
+
+-- Byte and half-word shifter control.
 p2_rd_mux_control <= p2_ld_upper_hword & p2_ld_upper_byte & p2_rd_addr;
 
 -- Extension for unused bits will be zero or the sign (bit 7 or bit 15)
@@ -308,17 +330,17 @@ with (p2_wback_mux_sel) select p1_rbank_wr_data <=
 --------------------------------------------------------------------------------
 -- Register bank RAM & Rbank WE logic
 
+-- Write data back onto the register bank in P1 stage of regular instructions 
+-- or in P2 stage of load instructions...
 p1_rbank_we <= '1' when (p2_do_load='1' or p1_load_alu='1' or p1_link='1' or 
-                        -- if mfc0 triggers privilege trap, don't load reg
+                        -- ...EXCEPT in some cases:
+                        -- If mfc0 triggers privilege trap, don't load reg.
                         (p1_get_cp0='1' and p1_cp_unavailable='0')) and 
-                        -- If target register is $zero, ignore write
+                        -- If target register is $zero, ignore write.
                         p1_rbank_wr_addr/="00000" and
-                        -- if the cache controller keeps the cpu stopped, do
-                        -- not writeback
-                        mem_wait='0' and
-                        -- if stalled because of muldiv, block writeback
-                        stalled_muldiv='0' and -- @note1
-                        -- on exception, abort next instruction (by preventing 
+                        -- If pipeline is stalled for any reason, ignore write.
+                        stall_pipeline='0' and 
+                        -- On exception, abort next instruction (by preventing 
                         -- regbank writeback).
                         p2_exception='0'
                 else '0';
@@ -589,8 +611,8 @@ begin
             -- Load the IR with whatever the cache is giving us, provided:
             -- 1) The cache is ready (i.e. has already completed the first code 
             --    refill after RESET_I.
-            -- 2) The CPU has ocmpleted its reset sequence.
-            -- 2) The pipeline is not stalled (@note4).
+            -- 2) The CPU has completed its reset sequence.
+            -- 3) The pipeline is not stalled (@note4).
             if stall_pipeline='0' then
                 p1_ir_reg <= CODE_MISO_I.rd_data;
             end if;
@@ -910,36 +932,60 @@ pipeline_stage2_register_load_control:
 process(CLK_I)
 begin
     if CLK_I'event and CLK_I='1' then
-        -- Clear load control, effectively preventing load, at RESET_I or if
+        -- Clear load control, effectively preventing a load, at RESET_I or if
         -- the previous instruction raised an exception.
         if RESET_I='1' or p2_exception='1' then
-            p2_do_store <= '0';
             p2_do_load <= '0';
             p2_ld_upper_hword <= '0';
             p2_ld_upper_byte <= '0';
             p2_ld_unsigned <= '0';
             p2_load_target <= "00000";
-        
-        -- Load signals from previous stage only if there is no pipeline stall
-        -- unless the stall is caused by interlock (@note1, @note2).
-        elsif (stall_pipeline='0' or load_interlock='1') then
-            -- Disable reg bank writeback if pipeline is stalled; this prevents
-            -- duplicate writes in case the stall is a mem_wait.
-            if pipeline_stalled='0' then
-                p2_do_load <= p1_do_load;
-            else
-                p2_do_load <= '0';
+        else      
+            -- The P2 registers controlling load writeback are updated...
+            -- ...if the pipeline is not stalled (@note1)...
+            if stall_pipeline='0' or 
+               -- or if it is stalled due to a load interlock (@note2).
+               (stall_pipeline='1' and load_interlock='1') then
+                
+                -- These signals control the input LOAD mux.
+                p2_load_target <= p1_rd_num;
+                p2_ld_upper_hword <= p1_ld_upper_hword;
+                p2_ld_upper_byte <= p1_ld_upper_byte;
+                p2_ld_unsigned <= p1_ld_unsigned;
+                
+                -- p2_do_load gates the reg bank WE and needs extra logic:
+                -- Disable reg bank writeback if pipeline is stalled; this 
+                -- prevents duplicate writes in case the stall is a mem_wait.
+                if pipeline_stalled='0' then
+                    p2_do_load <= p1_do_load;
+                else
+                    p2_do_load <= '0';
+                end if;
             end if;
-            p2_do_store <= p1_do_store;
-            p2_load_target <= p1_rd_num;
-            p2_ld_upper_hword <= p1_ld_upper_hword;
-            p2_ld_upper_byte <= p1_ld_upper_byte;
-            p2_ld_unsigned <= p1_ld_unsigned;
         end if;
     end if;
 end process pipeline_stage2_register_load_control;
 
--- All the rest of the stage 2 register
+-- P2 register that controls the data input mux.
+-- Note this FF is never stalled: all we do here is record whether input data
+-- is to be taken straight from the bus of from the input register. The latter
+-- will only happen if there was any stall at the moment the data bus had the 
+-- valid data and it has to be registered.
+pipeline_stage2_register_load_pending:
+process(CLK_I)
+begin
+    if CLK_I'event and CLK_I='1' then
+        if RESET_I='1' then
+            p2_load_pending <= '0';
+        elsif p1_do_load='1' and pipeline_stalled='0' then 
+            p2_load_pending <= '1';
+        elsif p2_load_pending='1' and DATA_MISO_I.mwait='0' then
+            p2_load_pending <= '0';
+        end if;
+    end if;
+end process pipeline_stage2_register_load_pending;
+
+-- All the rest of the stage 2 registers
 pipeline_stage2_register_others:
 process(CLK_I)
 begin
@@ -963,9 +1009,11 @@ end process pipeline_stage2_register_others;
 --------------------------------------------------------------------------------
 -- Pipeline control logic (stall control)
 
--- FIXME demonstrate that this combinational will not have bad glitches
--- Note we don't execute the instruction after ERET, as per the specs.
+-- These are the 3 conditions upon which the pipeline is stalled.
 stall_pipeline <= mem_wait or load_interlock or p1_muldiv_stall;
+
+-- Either of the two buses will stall the pipeline when waited.
+mem_wait <= DATA_MISO_I.mwait or CODE_MISO_I.mwait; 
 
 -- FIXME load interlock should happen only if the instruction following 
 -- the load actually uses the load target register. Something like this:
@@ -975,8 +1023,8 @@ load_interlock <= '1' when
     pipeline_stalled='0'    -- not already stalled (i.e. assert for 1 cycle)
     else '0';
 
-pipeline_stalled <= stalled_interlock or stalled_memwait or stalled_muldiv;
-
+-- We need to have a registered version of these
+    
 pipeline_stall_registers:
 process(CLK_I)
 begin
@@ -986,31 +1034,15 @@ begin
             stalled_memwait <= '0';
             stalled_muldiv <= '0';
         else
-            if mem_wait='1' then
-                stalled_memwait <= '1';
-            else
-                stalled_memwait <= '0';
-            end if;
-            
-            if p1_muldiv_stall='1' then
-                stalled_muldiv <= '1';
-            else
-                stalled_muldiv <= '0';
-            end if;
-            
-            -- stalls caused by mem_wait and load_interlock are independent and
-            -- must not overlap; so when mem_wait='1' the cache stall takes
-            -- precedence and the loa interlock must wait.
-            if mem_wait='0' then
-                if load_interlock='1' then
-                    stalled_interlock <= '1';
-                else
-                    stalled_interlock <= '0';
-                end if;
-            end if;
+            stalled_memwait <= mem_wait;
+            stalled_muldiv <= p1_muldiv_stall;
+            stalled_interlock <= load_interlock;
         end if;
     end if;
 end process pipeline_stall_registers;
+
+pipeline_stalled <= stalled_interlock or stalled_memwait or stalled_muldiv;
+
 
 
 --##############################################################################
@@ -1032,18 +1064,11 @@ p1_data_addr <= p1_rs + p1_data_offset;
 
 p1_we_control <= (mem_wait) & p1_do_store & p1_store_size & p1_data_addr(1 downto 0);
 
---p1_we_control <= (mem_wait) & p1_do_store & p1_store_size & p1_data_addr(1 downto 0);
--- old p1_we_control <= (pipeline_stalled) & p1_do_store & p1_store_size & p1_data_addr(1 downto 0);
-
+-- FIXME: make sure this bug is gone, it should be.
 -- Bug: For two SW instructions in a row, the 2nd one will be stalled and lost: 
 -- the write will never be executed by the cache.
 -- Fixed by stalling immediately after asserting DATA_MOSI_O.wr_be.
 -- FIXME the above fix has been tested but is still under trial (provisional)
-
--- The present code will not work in cache-less systems (such as the tb0) if 
--- it stalls the CPU. Solution: don't allow stalls in cache-less systems.
--- FIXME this little mess has to be documented.
-
 
 with p1_we_control select DATA_MOSI_O.wr_be <=
     "1000"  when "010000",    -- SB %0
