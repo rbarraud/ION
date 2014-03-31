@@ -118,8 +118,8 @@ begin
         CLK_I               => clk,
         RESET_I             => reset, 
 
-        --DATA_WB_MOSI_O      => data_wb_mosi,
-        --DATA_WB_MISO_I      => data_wb_miso,
+        DATA_WB_MOSI_O      => data_wb_mosi,
+        DATA_WB_MISO_I      => data_wb_miso,
         
         DATA_UC_WB_MOSI_O   => data_uc_wb_mosi,
         DATA_UC_WB_MISO_I   => data_uc_wb_miso,
