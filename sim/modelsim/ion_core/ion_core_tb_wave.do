@@ -35,11 +35,17 @@ add wave -noupdate -group Data -format Logic /ion_core_tb/core/data_miso.mwait
 add wave -noupdate -group {Code TCM -- D Bus}
 add wave -noupdate -group {Code TCM -- D Bus} -format Literal -radix hexadecimal /ion_core_tb/core/ctcm_d_miso.rd_data
 add wave -noupdate -group {Code TCM -- D Bus} -format Logic /ion_core_tb/core/ctcm_d_miso.mwait
+add wave -noupdate -divider D-Cache
+add wave -noupdate -format Literal /ion_core_tb/data_wait_ctr
+add wave -noupdate -format Literal /ion_core_tb/core/data_cache_present/data_cache/refill_ctr
+add wave -noupdate -color Pink -format Literal /ion_core_tb/core/data_cache_present/data_cache/ps
+add wave -noupdate -format Literal -radix hexadecimal -expand /ion_core_tb/data_wb_miso
+add wave -noupdate -format Literal -radix hexadecimal -expand /ion_core_tb/data_wb_mosi
 add wave -noupdate -divider Debug
-add wave -noupdate -format Literal -expand /ion_core_tb/core/data_ce
+add wave -noupdate -format Literal /ion_core_tb/core/data_ce
 add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/tcm_code_present/code_tcm/tcm_addr
 TreeUpdate [SetDefaultTree]
-WaveRestoreCursors {{Cursor 1} {329945 ps} 1} {{Cursor 2} {23730000 ps} 0}
+WaveRestoreCursors {{Cursor 1} {10550000 ps} 0}
 configure wave -namecolwidth 206
 configure wave -valuecolwidth 60
 configure wave -justifyvalue left
@@ -53,4 +59,4 @@ configure wave -gridperiod 1
 configure wave -griddelta 40
 configure wave -timeline 0
 update
-WaveRestoreZoom {23581988 ps} {23885413 ps}
+WaveRestoreZoom {10027964 ps} {11178060 ps}
