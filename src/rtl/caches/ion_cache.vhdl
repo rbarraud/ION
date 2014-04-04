@@ -1,5 +1,5 @@
 --------------------------------------------------------------------------------
--- ion_icache.vhdl -- Instruction Cache.
+-- ion_icache.vhdl -- Instruction/Data Cache.
 --------------------------------------------------------------------------------
 -- 
 --
@@ -7,6 +7,7 @@
 -- [1] ion_design_notes.pdf -- ION project design notes.
 --------------------------------------------------------------------------------
 --
+-- This is little more than an ampty shell...
 --
 --------------------------------------------------------------------------------
 -- This source file may be used and distributed without         
@@ -54,6 +55,7 @@ entity ION_CACHE is
         CACHE_CTRL_MOSI_I   : in t_cache_mosi;
         CACHE_CTRL_MISO_O   : out t_cache_miso;
         
+        CE_I                : in std_logic;
         CPU_MOSI_I          : in t_cpumem_mosi;
         CPU_MISO_O          : out t_cpumem_miso;
         
@@ -135,7 +137,7 @@ begin
         '0';
     
     lookup <= 
-        '1' when CPU_MOSI_I.rd_en='1'
+        '1' when CPU_MOSI_I.rd_en='1' and CE_I='1'
         else '0'; 
  
     -- Tag table ---------------------------------------------------------------
@@ -183,7 +185,7 @@ begin
     process(CLK_I)
     begin
         if CLK_I'event and CLK_I='1' then
-            if lookup = '1' then 
+            if lookup = '1' and ps=hitting then 
                 refill_line_address(LINE_ADDRESS_WIDTH-1 downto LINE_OFFSET_WIDTH) <= 
                 CPU_MOSI_I.addr(LINE_ADDRESS_WIDTH-1+2 downto LINE_OFFSET_WIDTH+2);
             end if;
@@ -193,7 +195,7 @@ begin
     
     
     line_table_we <=
-        '1' when ps = refilling else
+        '1' when ps = refilling and MEM_MISO_I.ack = '1' else
         '1' when ps = storing_last_word and store_delay_ctr = 2 else
         '0';
     
@@ -245,7 +247,7 @@ begin
     -- When the last word in the line has been read from the WB bus, we are done
     -- refilling.
     refill_done <= 
-        '1' when refill_ctr = (LINE_SIZE-1) and MEM_MISO_I.ack = '1'
+        '1' when refill_ctr = (LINE_SIZE-1) and MEM_MISO_I.stall = '0'
         else '0';
     
     refill_word_counter:
@@ -254,8 +256,8 @@ begin
         if CLK_I'event and CLK_I='1' then
             if RESET_I = '1' then
                 refill_ctr <= (others => '0');
-            elsif ps = refilling then
-                refill_ctr <= refill_ctr - 1;
+            elsif ps = refilling and MEM_MISO_I.stall = '0' then
+                refill_ctr <= refill_ctr + 1;
             end if;
         end if;
     end process refill_word_counter;
@@ -284,11 +286,13 @@ begin
         
     -- Refill WB interface -----------------------------------------------------
  
-    --MEM_MOSI_O.adr <= xxx;
+    MEM_MOSI_O.adr(31 downto LINE_ADDRESS_WIDTH+2) <= (others => '0');
+    MEM_MOSI_O.adr(LINE_ADDRESS_WIDTH-1+2 downto 2) <= refill_line_address;
+    MEM_MOSI_O.adr(1 downto 0) <= (others => '0');
     MEM_MOSI_O.stb <= '1' when ps = refilling else '0';
     MEM_MOSI_O.cyc <= '1' when ps = refilling else '0';
     MEM_MOSI_O.we <= '0';
-    MEM_MOSI_O.sel <= "1111";
+    MEM_MOSI_O.tga <= "1111";
     
     
     CACHE_CTRL_MISO_O.ready <= '1';

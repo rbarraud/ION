@@ -37,7 +37,7 @@ subtype t_word is std_logic_vector(31 downto 0);
 type t_wishbone_mosi is record
     adr :               t_word;
     dat :               t_word;
-    sel :               std_logic_vector(3 downto 0);
+    tga :               std_logic_vector(3 downto 0);
     we :                std_logic;
     cyc :               std_logic;
     stb :               std_logic;
@@ -45,6 +45,7 @@ end record t_wishbone_mosi;
 
 type t_wishbone_miso is record
     ack :               std_logic;
+    stall :             std_logic;
     dat :               t_word;
 end record t_wishbone_miso;
 

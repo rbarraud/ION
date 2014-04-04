@@ -88,6 +88,18 @@ signal irq :                std_logic_vector(7 downto 0);
 
 
 --------------------------------------------------------------------------------
+-- Memory refill ports.
+
+type t_natural_table is array(natural range <>) of natural;
+
+-- Wait states simulated by data refill port (elements used in succession).
+constant DATA_WS : t_natural_table (0 to 3) := (4,1,3,2);
+
+
+signal data_wait_ctr :      natural;
+signal data_cycle_count :   natural := 0;
+
+--------------------------------------------------------------------------------
 -- Logging signals & simulation control.
 
 signal done :               std_logic := '0';
@@ -167,11 +179,53 @@ begin
     
     -- Data refill port interface ----------------------------------------------
     
-    -- STUB: read zeros with no delay.
-    data_wb_miso.ack <= data_wb_mosi.stb;
-    data_wb_miso.dat <= (others => '0');
+    -- Crudely simulate a WB interface with a variable number of delay cycles.
+    -- The number of wait cycles is taken from a table for variety's sake, this 
+    -- model does not approach a real WB slave but should exercise the cache
+    -- sufficiently to flush out major bugs.
+    -- FIXME read data is a total fake and write cycles are not supported
     
+    -- Note that this interface does NOT overlap successive reads nor cycles 
+    -- with zero wait states!
+    -- TODO optional simulation of overlapped reads & zero waits.
     
+    data_refill_port:
+    process(clk)
+    begin
+        if clk'event and clk='1' then
+            if reset = '1' then
+                data_wait_ctr <= DATA_WS((data_cycle_count) mod DATA_WS'length);
+                data_wb_miso.ack <= '0';
+                data_wb_miso.dat <= (others => '1');
+            elsif data_wb_mosi.stb = '1' then
+                if data_wait_ctr > 0 then 
+                    data_wait_ctr <= data_wait_ctr - 1;
+                    data_wb_miso.ack <= '0';
+                else 
+                    data_wait_ctr <= DATA_WS((data_cycle_count+1) mod DATA_WS'length);
+                    data_wb_miso.ack <= '1';
+                    -- Fake data: low 16 bits of address replicated twice.
+                    data_wb_miso.dat <= data_wb_mosi.adr(15 downto 0) & 
+                                data_wb_mosi.adr(15 downto 0);
+                end if;
+            else
+                data_wait_ctr <= DATA_WS((data_cycle_count) mod DATA_WS'length);
+                data_wb_miso.ack <= '0';
+            end if;
+            
+            if data_wb_mosi.stb = '1' and data_wait_ctr = 0 then
+                data_cycle_count <= data_cycle_count + 1;
+            end if;
+            
+            
+        end if;
+    end process data_refill_port;
+    
+    data_wb_miso.stall <= 
+        '1' when data_wb_mosi.stb = '1' and data_wait_ctr > 0 else
+        '0';
+
+
     -- Logging process: launch logger function ---------------------------------
     log_execution:
     process

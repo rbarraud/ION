@@ -377,6 +377,7 @@ begin
             CACHE_CTRL_MOSI_I   => cache_ctrl_mosi,
             CACHE_CTRL_MISO_O   => cache_ctrl_miso,
             
+            CE_I                => data_ce(1),
             CPU_MOSI_I          => data_mosi,
             CPU_MISO_O          => dcache_miso,
             
