@@ -1470,7 +1470,11 @@ void cycle(t_state *s, int show_mode){
     case 0x2e:/*SWR*/   mem_swr(s, ptr, r[rt], 1);
                         //printf("SWR\n");
                         break;
-    case 0x2f:/*CACHE*/ unimplemented(s,"CACHE");
+    case 0x2f:/*CACHE*/ /* Since we don´t simulate the caches, the cache
+                        instruction will be ignored. It is implemented as
+                        a NOP. */
+                        /* FIXME check operation code. */
+                        // unimplemented(s,"CACHE");
                         break;
     case 0x30:/*LL*/    //unimplemented(s,"LL");
                         start_load(s, ptr, rt, mem_read(s,4,ptr,1));
