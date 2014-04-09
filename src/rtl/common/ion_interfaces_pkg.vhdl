@@ -35,18 +35,26 @@ package ION_INTERFACES_PKG is
 subtype t_word is std_logic_vector(31 downto 0);
 
 type t_wishbone_mosi is record
-    adr :               t_word;
-    dat :               t_word;
+    adr :               t_word; -- Address bus
+    dat :               t_word; -- Write data bus
+	-- Address tag type, contains information associated with the address bus
     tga :               std_logic_vector(3 downto 0);
+	-- write enable, indicates if the current local bus cycle is a READ or WRITE
     we :                std_logic;
+	-- Indicates that a valid bus cycle is in progress
     cyc :               std_logic;
+	-- Strobe output indicates a valid data transfer cycle
     stb :               std_logic;
 end record t_wishbone_mosi;
 
 type t_wishbone_miso is record
-    ack :               std_logic;
-    stall :             std_logic;
-    dat :               t_word;
+    -- Acknowledge from Slave for normal termination of a bus cycle at Master
+	ack :               std_logic;
+    -- Pipeline stall input, indicates current slave is busy
+	stall :             std_logic; 
+	-- Read data bus
+    dat :               t_word;  
+	
 end record t_wishbone_miso;
 
 end package;
