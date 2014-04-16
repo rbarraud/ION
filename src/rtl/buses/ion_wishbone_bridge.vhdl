@@ -40,42 +40,18 @@ use ieee.std_logic_1164.all;
 use ieee.std_logic_arith.all;
 use ieee.std_logic_unsigned.all;
 
---use work.ION_INTERFACES_PKG.all;
---use work.ION_INTERNAL_PKG.all;
+use work.ION_INTERFACES_PKG.all;
+use work.ION_INTERNAL_PKG.all;
 
 
 entity ION_WISHBONE_BRIDGE is
     port(
-		--CLK_I               : in std_logic;
-        --RESET_I             : in std_logic;
-        --ION_MOSI_I          : in t_cpumem_mosi;
-        --ION_MISO_O          : out t_cpumem_miso;        
-        --WISHBONE_MOSI_O     : out t_wishbone_mosi;
-        --WISHBONE_MISO_I     : in t_wishbone_miso
-		
-		-- ION-bus ports
-		-- MOSI
-		ION_addr		: in std_logic_vector(31 downto 0); -- Address bus
-		ION_rd_en		: in std_logic;					    -- Read Enable	
-		ION_wr_be		: in std_logic_vector(3 downto 0);  -- Write Byte Enable. Bit 0 is for wr_data[7..0]
-		ION_wr_data     : in std_logic_vector(31 downto 0); -- Write data bus
-		-- MISO
-		ION_rd_data     : out std_logic_vector(31 downto 0); -- Read data bus
-		ION_mwait       : out std_logic;	                 -- Asserted to stall a read or write cycle
-		
-		-- Wishbone ports
-		--CLK_I           : in std_logic;						-- System Interconnect clock
-		--RST_I			: in std_logic;						-- Reset input forces the WISHBONE interface to restart
-		DAT_I			: in std_logic_vector(31 downto 0); -- Read data bus
-		STALL_I			: in std_logic;						-- Pipeline stall input, indicates current slave is busy
-		ACK_I			: in std_logic;						-- Acknowledge from Slave for normal termination of a bus cycle at Master
-		
-		ADR_O			: out std_logic_vector(31 downto 0); -- Address bus
-		DAT_O			: out std_logic_vector(31 downto 0); -- Write data bus
-		TGA_O			: out std_logic_vector(3 downto 0);  -- Address tag type, contains information associated with the address bus
-		WE_O			: out std_logic;					 -- write enable output, indicates if the current local bus cycle is a READ or WRITE cycle	
-		STB_O			: out std_logic;					 -- Strobe output indicates a valid data transfer cycle
-		CYC_O			: out std_logic;					 -- Indicates that a valid bus cycle is in progress
+		CLK_I               : in std_logic;
+        RESET_I             : in std_logic;
+        ION_MOSI_I          : in t_cpumem_mosi;
+        ION_MISO_O          : out t_cpumem_miso;        
+        WISHBONE_MOSI_O     : out t_wishbone_mosi;
+        WISHBONE_MISO_I     : in t_wishbone_miso		
     );
 end; 
 
@@ -85,27 +61,77 @@ architecture ION_WISHBONE_BRIDGE_arc of ION_WISHBONE_BRIDGE is
           
 begin
 
-    -- FIXME This is a total fake! it's a placeholder until real stuff is done.
-
     --WISHBONE_MOSI_O <= ION_MOSI_I;
     --ION_MISO_O <= WISHBONE_MISO_I;
 	
-	process (ION_addr, ACK_I)
+	signal wishbone_ack    : std_logic;
 	
-		begin
-			-- Conversion to ION-bus signals
-			ION_rd_data <= DAT_I;
-			ION_mwait   <= STALL_I;
+	process (CLK_I, RESET_I, ION_MOSI_I.rd_en, ON_MOSI_I.wr_be, 
+	         WISHBONE_MISO_I.ack)
+	
+		-- variable cyc_var : boolean := false;
+		
+		begin	
+		
+		    -- Signal to register the value of Wb-signal STALL_I
+			stall_i_reg    : std_logic;
 			
-			-- Conversion to Wishbone-bus signals
-			ADR_O <= ION_addr;
-			DAT_O <= ION_wr_data;
-			TGA_O <= ION_wr_be;
-			WE_O  <= not(ION_rd_en);
+			-----------------------------------------------------------------
+			-- Generate ION-bus o/p signals
+			-----------------------------------------------------------------
+			ION_MISO_O.rd_data <= WISHBONE_MISO_I.dat;
+			ION_MISO_O.mwait   <= WISHBONE_MISO_I.stall;
 			
-			STB_O <=
 			
-			CYC_O <=
+			-----------------------------------------------------------------
+			-- Generate Wishbone o/p signals
+			-----------------------------------------------------------------
+			WISHBONE_MOSI_O.adr <= ION_MOSI_I.addr;
+			WISHBONE_MOSI_O.dat <= ION_MOSI_I.wr_data;
+			WISHBONE_MOSI_O.tga <= ION_MOSI_I.wr_be;
+			WISHBONE_MOSI_O.we  <= not(ION_MOSI_I.rd_en);
+			
+			-----------------------------------------------------------------
+			-- Generate the Wb STROBE signal from valid read or write cycles
+			-----------------------------------------------------------------
+			if ((ION_MOSI_I.rd_en = '1' and ION_MOSI_I.wr_be /= '1111') or 
+		    (ION_MOSI_I.rd_en = '0' and ION_MOSI_I.wr_be = '1111')) then
+				WISHBONE_MOSI_O.stb <= '1';				
+			else
+			    WISHBONE_MOSI_O.stb <= '0';				
+			end if;			
+			
+			-- Register the value of Wb signal STALL_I
+			if (RESET_I = '0') then
+			    stall_i_reg <= '0';
+			else
+			    if (CLK_I='1' and CLK_I'event) then
+				    stall_i_reg <= WISHBONE_MISO_I.stall;
+				end if;
+			end if;	
+		
+			-----------------------------------------------------------------
+			-- Generate the Wb CYCLIC signal from valid read/write cycles	
+			-----------------------------------------------------------------
+			if ((ION_MOSI_I.rd_en = '1' and ION_MOSI_I.wr_be /= '1111') or 
+		    (ION_MOSI_I.rd_en = '0' and ION_MOSI_I.wr_be = '1111')) then
+			    WISHBONE_MOSI_O.cyc <= '1';    
+			-- Check the STALL & ACK inputs in case of invalid read/write 
+			else			    
+				-- If STALL was LOW in the previous clk cycle
+			    if (stall_i_reg = '0') then
+				    -- CYC is de-asserted only if ACK is de-asserted
+				    if (WISHBONE_MISO_I.ack = '0') then
+					    WISHBONE_MOSI_O.cyc <= '0';
+					-- 	CYC remains asserted 
+					else
+					    WISHBONE_MOSI_O.cyc <= '1';
+					end if;	
+				-- If STALL was HIGH in previous clk cycle
+				else 
+       				WISHBONE_MOSI_O.cyc <= '1';
+				end if;
+			end if;	
 			
 		end process;
 
