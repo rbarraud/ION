@@ -1,12 +1,14 @@
 /*------------------------------------------------------------------------------
-* slite.c -- MIPS-I simulator based on Steve Rhoad's "mlite"
+* ion32sim.c -- MIPS32 simulator based on Steve Rhoad's "mlite"
 *
 * This is a heavily modified version of Steve Rhoad's "mlite" simulator, which
 * is part of his PLASMA project (original date: 1/31/01).
+* As part of the project ION, it is being progressively modified to emulate a
+* MIPS32r2 compatible ION core and it is no longer compatible to Plasma.
 *
 *-------------------------------------------------------------------------------
 * Usage:
-*     slite [options]
+*     ion32sim [options]
 *
 * See function 'usage' for a very brief explaination of the available options.
 *
@@ -29,9 +31,6 @@
 * more ease (no need to simulate the actual cycle count of TX/RX, etc.).
 *-------------------------------------------------------------------------------
 * KNOWN BUGS:
-*
-*-------------------------------------------------------------------------------
-* @date 2011-jan-16
 *
 *-------------------------------------------------------------------------------
 * COPYRIGHT:    Software placed into the public domain by the author.
@@ -82,13 +81,12 @@ typedef struct s_block {
     uint32_t start;
     uint32_t size;
     uint32_t mask;
-    uint32_t read_only;
+    uint32_t flags;
     uint8_t  *mem;
     char     *area_name;
 } t_block;
 
-#define NUM_MEM_BLOCKS      (4)
-#define NUM_MEM_MAPS        (4)
+#define NUM_MEM_BLOCKS      (5)
 
 /** Definition of a memory map */
 /* FIXME i/o addresses missing, hardcoded */
@@ -97,7 +95,7 @@ typedef struct s_map {
 } t_map;
 
 
-
+/* FIXME memory areas should be refactored to account for TCMs. */
 /*  Here's where we define the memory areas (blocks) of the system.
 
     The blocks should be defined in this order: BRAM, XRAM, FLASH
@@ -118,58 +116,42 @@ typedef struct s_map {
     Make sure the blocks don't overlap or the scheme will fail.
 */
 
-#define MAP_DEFAULT         (0)
-#define MAP_UCLINUX_BRAM    (1)  /* debug only */
-#define MAP_SMALL           (2)
-#define MAP_UCLINUX         (3)
+typedef enum {
+    MAP_DEFAULT =       0,
+    MAP_UCLINUX =       1,
+    NUM_MEM_MAPS =      2
+} t_mem_area;
+
+
+#define MEM_READONLY        (1<<0)
+#define MEM_TEST            (1<<1)
+
 
 t_map memory_maps[NUM_MEM_MAPS] = {
     {/* Experimental memory map (default) */
-        {/* Bootstrap BRAM, read only */
-        {VECTOR_RESET,  0x00010000, 0xf8000000, 1, NULL, "Boot BRAM"},
+        {/* Code TCM (Holds bootstrap code) */
+        {VECTOR_RESET,  0x00002000, 0xf8000000, MEM_READONLY, NULL, "Code TCM"},
+        /* Data TCM */
+        {0xa0000000,    0x00002000, 0xf8000000, 0, NULL, "Data TCM"},
         /* main external ram block  */
-        {0x00000000,    0x00080000, 0xf8000000, 0, NULL, "XRAM0"},
+        {0x80000000,    0x00080000, 0xf8000000, 0, NULL, "Cached RAM"},
         /* main external ram block  */
-        {0x80000000,    0x00080000, 0xf8000000, 0, NULL, "XRAM1"},
+        {0x90000000,    0x00080000, 0xf8000000, MEM_TEST, NULL, "Cached test ROM"},
         /* external flash block */
-        {0xb0000000,    0x00040000, 0xf8000000, 0, NULL, "Flash"},
+        {0x00000000,    0x00040000, 0xf8000000, 0, NULL, "Cached FLASH"},
         }
     },
 
     {/* uClinux memory map with bootstrap BRAM, debug only, to be removed */
         {/* Bootstrap BRAM, read only */
-        {VECTOR_RESET,  0x00008000, 0xf8000000, 1, NULL, "Boot BRAM"},
+        {VECTOR_RESET,  0x00008000, 0xf8000000, MEM_READONLY, NULL, "Code TCM"},
+        /* Data TCM */
+        {0x00000000,    0x00002000, 0xf8000000, 0, NULL, "Data TCM"},
         /* main external ram block  */
         {0x80000000,    0x00800000, 0xf8000000, 0, NULL, "XRAM0"},
-        {0x00000000,    0x00800000, 0xf8000000, 0, NULL, "XRAM1"},
+        {0x10000000,    0x00800000, 0xf8000000, 0, NULL, "XRAM1"},
         /* external flash block */
         {0xb0000000,    0x00100000, 0xf8000000, 0, NULL, "Flash"},
-        }
-    },
-
-    {/* Experimental memory map with small XRAM */
-        {/* Bootstrap BRAM, read only */
-        {VECTOR_RESET,  0x00008000, 0xf8000000, 1, NULL, "Boot BRAM"},
-        /* main external ram block  */
-        {0x00000000,    0x00001000, 0xf8000000, 0, NULL, "XRAM0"},
-        /* main external ram block  */
-        {0x80000000,    0x00001000, 0xf8000000, 0, NULL, "XRAM1"},
-        /* external flash block */
-        {0xb0000000,    0x00040000, 0xf8000000, 0, NULL, "Flash"},
-        }
-    },
-
-    {/* uClinux memory map with FLASH and XRAM */
-        {/* Flash mapped at two different addresses is actually meant to be
-            a single chip (note they have the same size). */
-         /* E.g. put the bootloader at 0xbfc00000 and the romfs at 0xb0020000;
-            chip offsets will be 0x0 and 0x20000. */
-         /* Don't forget there's no address translation here. */
-        {0xbfc00000,    0x00400000, 0xf8000000, 1, NULL, "Flash (bootloader)"},
-        {0xb0000000,    0x00400000, 0xf8000000, 1, NULL, "Flash (romfs)"},
-        /* main external ram block (kernal & user areas ) */
-        {0x80000000,    0x00200000, 0xf8000000, 0, NULL, "XRAM (kernel)"},
-        {0x00000000,    0x00400000, 0xf8000000, 0, NULL, "XRAM (user)"},
         }
     },
 };
@@ -285,11 +267,11 @@ void slite_sleep(unsigned int value){
 /* Much of this is a remnant from Plasma's mlite and is  no longer used. */
 /* FIXME Refactor HW system params */
 
-#define DBG_REGS          (0x20010000)
-#define UART_WRITE        (0x20000000)
-#define UART_READ         (0x20000000)
-#define UART_STATUS       (0x20000004)
-#define TIMER_READ        (0x20000100)
+#define DBG_REGS          (0xffff0200)
+#define UART_WRITE        (0xffff0000)
+#define UART_READ         (0xffff0000)
+#define UART_STATUS       (0xffff0004)
+#define TIMER_READ        (0xffff0100)
 
 #define DEFAULT_TIMER_PRESCALER (50)
 
@@ -550,13 +532,23 @@ void log_read(t_state *s, int full_address, int word_value, int size, int log){
     }
 }
 
+
+int test_pattern(unsigned int base, unsigned int address){
+
+    address &= 0x0ffff;
+    address = address + (address << 16);
+
+    return address;
+}
+
+
 /** Read memory, optionally logging */
 int mem_read(t_state *s, int size, unsigned int address, int log){
     unsigned int value=0, word_value=0, i, ptr;
     unsigned int full_address = address;
 
     /* Handle access to debug register block */
-    if((address&0xffff0000)==(DBG_REGS&0xffff0000)){
+    if((address&0xffffff00)==(DBG_REGS&0xffffff00)){
         return debug_reg_read(s, size, address);
     }
 
@@ -618,6 +610,10 @@ int mem_read(t_state *s, int size, unsigned int address, int log){
                 s->pc, full_address, 0);
         }
         return 0;
+    }
+
+    if((s->blocks[i].flags & MEM_TEST)){
+        return test_pattern(s->blocks[i].start, address);
     }
 
     /* get the whole word */
@@ -739,7 +735,7 @@ void mem_write(t_state *s, int size, unsigned address, unsigned value, int log){
     }
 
     /* Print anything that's written to a debug register, otherwise ignore it */
-    if((address&0xffff0000)==(DBG_REGS&0xffff0000)){
+    if((address&0xffffff00)==(DBG_REGS&0xffffff00)){
         debug_reg_write(s, address, value);
         return;
     }
@@ -770,7 +766,7 @@ void mem_write(t_state *s, int size, unsigned address, unsigned value, int log){
             ptr = (unsigned)(s->blocks[i].mem) +
                             ((address - s->blocks[i].start) % s->blocks[i].size);
 
-            if(s->blocks[i].read_only){
+            if(s->blocks[i].flags & MEM_READONLY){
                 if(log_enabled(s) && log!=0){
                     fprintf(s->t.log, "(%08X) [%08X] |%02X|=%08X WR READ ONLY\n",
                     s->op_addr, address, mask, dvalue);
@@ -1852,7 +1848,7 @@ int main(int argc,char *argv[]){
     reset_cpu(s);
 
     /* Simulate the work of the uClinux bootloader */
-    if(cmd_line_args.memory_map == MAP_UCLINUX_BRAM){
+    if(cmd_line_args.memory_map == MAP_UCLINUX){
         /* FIXME this 'bootloader' is a stub, flesh it out */
         s->pc = 0x80002400;
     }
@@ -2143,7 +2139,7 @@ int init_cpu(t_state *s, t_args *args){
         s->blocks[i].size =         memory_maps[k].blocks[i].size;
         s->blocks[i].area_name =    memory_maps[k].blocks[i].area_name;
         s->blocks[i].mask =         memory_maps[k].blocks[i].mask;
-        s->blocks[i].read_only =    memory_maps[k].blocks[i].read_only;
+        s->blocks[i].flags =        memory_maps[k].blocks[i].flags;
 
         s->blocks[i].mem = (unsigned char*)malloc(s->blocks[i].size);
 
@@ -2186,18 +2182,12 @@ int32_t parse_cmd_line(uint32_t argc, char **argv, t_args *args){
 
     /* parse actual cmd line args */
     for(i=1;i<argc;i++){
-        if(strcmp(argv[i],"--plasma")==0){
-            /* plasma simulation not supported, error*/
-            printf("Error: program compiled for compatibility to MIPS-I\n");
-            return 0;
-        }
-        else if(strcmp(argv[i],"--uclinux")==0){
-            args->memory_map = MAP_UCLINUX_BRAM;
+        if(strncmp(argv[i],"--memory=", strlen("--memory="))==0){
+            args->memory_map = atoi(&(argv[i][strlen("--memory=")]));
             /* FIXME selecting uClinux enables unaligned L/S emulation */
-            args->do_unaligned = 1;
-        }
-        else if(strcmp(argv[i],"--small")==0){
-            args->memory_map = MAP_SMALL;
+            if (args->memory_map == MAP_UCLINUX){
+                args->do_unaligned = 1;
+            }
         }
         else if(strcmp(argv[i],"--unaligned")==0){
             args->do_unaligned = 1;
@@ -2214,6 +2204,7 @@ int32_t parse_cmd_line(uint32_t argc, char **argv, t_args *args){
         else if(strcmp(argv[i],"--nomips32")==0){
             args->emulate_some_mips32 = 0;
         }
+        // FIXME simplify object code file options
         else if(strncmp(argv[i],"--bram=", strlen("--bram="))==0){
             args->bin_filename[0] = &(argv[i][strlen("--bram=")]);
         }
@@ -2276,12 +2267,16 @@ void usage(void){
     printf("--start=<hex number>    : Start here instead of at reset vector\n");
     printf("--notrap                : Reserved opcodes are NOPs and don't trap\n");
     printf("--nomips32              : Do not emulate any mips32 opcodes\n");
-    printf("--plasma                : Simulate Plasma instead of MIPS-I\n");
-    printf("--uclinux               : Use memory map tailored to uClinux\n");
+    printf("--memory=<dec number>   : Select emulated memory map\n");
+    printf("    N=0 -- Development memory map (DEFAULT):\n");
+    printf("        Code TCM at     0xbfc00000 (64KB)\n");
+    printf("        Cached RAM at   0x80000000 (512KB)\n");
+    printf("        Cached ROM at   0x90000000 (512KB) (dummy hardwired data)\n");
+    printf("        Cached FLASH at 0xa0000000 (256KB)\n");
+    printf("    N=1 -- Experimental uClinux map (under construction, do not use)\n");
     printf("--unaligned             : Implement unaligned load/store instructions\n");
     printf("--noprompt              : Run in batch mode\n");
     printf("--stop_at_zero          : Stop simulation when fetching from address 0x0\n");
     printf("--stop_on_unimplemented : Stop simulation when executing unimplemented opcode\n");
     printf("--help, -h              : Show this usage text\n");
 }
-
