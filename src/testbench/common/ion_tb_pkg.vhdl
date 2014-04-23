@@ -51,7 +51,7 @@ use work.txt_util.all;
 package ION_TB_PKG is
 
 -- Address of the simulated UART; a single TxB register.
-constant TB_UART_ADDRESS : t_word := X"20000000";
+constant TB_UART_ADDRESS : t_word := X"FFFF0000";
 
 -- Maximum line size of for console output log. Lines longer than this will be
 -- truncated.

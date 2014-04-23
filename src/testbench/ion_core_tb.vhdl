@@ -2,42 +2,50 @@
 -- ion_core_tb.vhdl -- Test bench for full ION core.
 --
 -- Simulates the full ION core, which includes TCM and caches.
--- FIXME no simulated external memory yet.
--- The size and contents of the simulated memory are defined in package 
--- sim_params_pkg.
+-- 
 --------------------------------------------------------------------------------
 -- FIXME no support for simulating external IRQs.
 --------------------------------------------------------------------------------
 -- SIMULATED IO DEVICES:
--- Apart from the fake UART implemented in package ion_tb_pkg, this test bench 
--- simulates the following ports:
 --
--- 20010020: Debug register 0 (R/W).    -- FIXME unimplemented
--- 20010024: Debug register 1 (R/W).    -- FIXME unimplemented
--- 20010028: Debug register 2 (R/W).    -- FIXME unimplemented
--- 2001002c: Debug register 3 (R/W).    -- FIXME unimplemented
+-- This TB simulates the following IO devices as support for the test SW:
 --
--- NOTE: these addresses are for write accesses only. for read accesses, the 
--- debug registers 0..3 are mirrored over all the io address range 2001xxxxh.
+-- Address   Name         Size    Access  Purpose
+---------------------------------------------------------------------------
+-- ffff0000: DbgTxD     : 8     : b     : Debug UART TX buffer (W/o).
+-- ffff0100: DbgRW0     : 32    : b/w   : Debug register 0 (R/W). 
+-- ffff0104: DbgRW1     : 32    : b/w   : Debug register 1 (R/W).
 --
--- The debug registers 0 to 3 can only be used to test 32-bit i/o.
--- All of these registers can only be addressed as 32-bit words. Any other type
--- of access will yield undefined results.
+-- (b support byte access, w support word access).
+-- 
+-- The fake UART is implemented in package ion_tb_pkg, not as a proper WB 
+-- register but directly on the CPU buses.
+-- All other debug registers are simulated as WB registers so they can be used
+-- to verify the operation of the WB bridge.
+--
+--------------------------------------------------------------------------------
+-- SIMULATED MEMORY:
+--
+-- Data cache refill port 
+-----------------------------
+-- 80000000     4KB     RAM (word access only).
+-- 90000000     256MB   ROM (test pattern).
+--
 --------------------------------------------------------------------------------
 -- Console logging:
 --
--- Console output (at address 0x20000000) is logged to text file
+-- Console output (at address 0xffff0000) is logged to text file
 -- "hw_sim_console_log.txt".
 --
 -- IMPORTANT: The code that echoes UART TX data to the simulation console does
 -- line buffering; it will not print anything until it gets a CR (0x0d), and
--- will ifnore LFs (0x0a). Bear this in mind if you see no output when you 
+-- will ignore LFs (0x0a). Bear this in mind if you see no output when you 
 -- expect it.
 --
 -- Console logging is done by monitoring CPU writes to the UART, NOT by looking
 -- at the TxD pin. It will NOT catch baud-related problems, etc.
 --------------------------------------------------------------------------------
--- WARNING: Will only work on Modelsim; uses custom library SignalSpy.
+-- WARNING: Will only work on Modelsim 6.3+; uses proprietary library SignalSpy.
 --##############################################################################
 
 library ieee;
@@ -81,8 +89,8 @@ signal reset :              std_logic := '1';
 signal data_wb_mosi :       t_wishbone_mosi;
 signal data_wb_miso :       t_wishbone_miso;
 
-signal data_uc_wb_mosi :    t_cpumem_mosi;
-signal data_uc_wb_miso :    t_cpumem_miso;
+signal data_uc_wb_mosi :    t_wishbone_mosi;
+signal data_uc_wb_miso :    t_wishbone_miso;
 
 signal irq :                std_logic_vector(7 downto 0);
 
@@ -95,9 +103,12 @@ type t_natural_table is array(natural range <>) of natural;
 -- Wait states simulated by data refill port (elements used in succession).
 constant DATA_WS : t_natural_table (0 to 3) := (4,1,3,2);
 
-
 signal data_wait_ctr :      natural;
 signal data_cycle_count :   natural := 0;
+signal data_address :       t_word;
+
+type t_ram_table is array(natural range <>) of t_word;
+shared variable ram :       t_ram_table(0 to 4096);
 
 --------------------------------------------------------------------------------
 -- Logging signals & simulation control.
@@ -140,8 +151,8 @@ begin
     );
 
     
-    data_uc_wb_miso.mwait <= '0';
-    data_uc_wb_miso.rd_data <= (others => '0');
+    data_uc_wb_miso.stall <= '0';
+    data_uc_wb_miso.dat <= (others => '0');
 
     -- Master clock: free running clock used as main module clock --------------
     run_master_clock:
@@ -183,7 +194,6 @@ begin
     -- The number of wait cycles is taken from a table for variety's sake, this 
     -- model does not approach a real WB slave but should exercise the cache
     -- sufficiently to flush out major bugs.
-    -- FIXME read data is a total fake and write cycles are not supported
     
     -- Note that this interface does NOT overlap successive reads nor cycles 
     -- with zero wait states!
@@ -197,30 +207,60 @@ begin
                 data_wait_ctr <= DATA_WS((data_cycle_count) mod DATA_WS'length);
                 data_wb_miso.ack <= '0';
                 data_wb_miso.dat <= (others => '1');
+                data_address <= (others => '0');
             elsif data_wb_mosi.stb = '1' then
                 if data_wait_ctr > 0 then 
+                    -- Access in progress, decrement wait counter...
                     data_wait_ctr <= data_wait_ctr - 1;
                     data_wb_miso.ack <= '0';
+                    data_address <= data_wb_mosi.adr;
                 else 
+                    -- Access finished, wait counter reached zero.
+                    -- Prepare the wait counter for the next access...
                     data_wait_ctr <= DATA_WS((data_cycle_count+1) mod DATA_WS'length);
+                    -- ...and drive the slave WB bus.
                     data_wb_miso.ack <= '1';
-                    -- Fake data: low 16 bits of address replicated twice.
-                    data_wb_miso.dat <= data_wb_mosi.adr(15 downto 0) & 
-                                data_wb_mosi.adr(15 downto 0);
+                    -- Termination is different for read and write accesses:
+                    if data_wb_mosi.we = '1' then 
+                        -- Write access: do the simulated write.
+                        -- FIXME do address decoding.
+                        -- FIXME support byte & halfword writes.
+                        ram(conv_integer(data_address(13 downto 2))) := data_wb_mosi.dat;
+                    else
+                        -- Read access: simulate read & WB slave multiplexor.
+                        -- For simplicity´s sake, do the address decoding 
+                        -- right here and select between RAM and ROM.
+                        if data_address(31 downto 28) = X"9" then
+                            -- Fake data: low 16 bits of address replicated twice.
+                            data_wb_miso.dat <= data_wb_mosi.adr(15 downto 0) & 
+                                    data_wb_mosi.adr(15 downto 0);
+                        elsif data_address(31 downto 28) = X"8" then
+                            -- Simulated RAM.
+                            data_wb_miso.dat <= ram(conv_integer(data_address(13 downto 2)));
+                        else 
+                            -- Unmapped area: read zeros.
+                            -- TODO should raise some sort of alert.
+                            data_wb_miso.dat <= (others => '0');
+                        end if;
+                    end if;
                 end if;
             else
+                -- No WB access is going on: restore the wait counter to its 
+                -- idle state and deassert ACK.
                 data_wait_ctr <= DATA_WS((data_cycle_count) mod DATA_WS'length);
                 data_wb_miso.ack <= '0';
             end if;
             
+            -- Keep track of how many accesses we have performed. 
+            -- We use this to select a number of wait states from a table.
             if data_wb_mosi.stb = '1' and data_wait_ctr = 0 then
                 data_cycle_count <= data_cycle_count + 1;
             end if;
             
-            
         end if;
     end process data_refill_port;
     
+    -- stall the WB bus as long as the wait counter is not zero.
     data_wb_miso.stall <= 
         '1' when data_wb_mosi.stb = '1' and data_wait_ctr > 0 else
         '0';
