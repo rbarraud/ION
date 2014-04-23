@@ -3,11 +3,19 @@
 --------------------------------------------------------------------------------
 -- 
 --
+-- NOTES:
+--
+-- @note1: 
+--      All supported CACHE instruction functions involve invalidating a line
+--      or explicity zeroing a tag. So the valid flag is always written as 0 
+--      except when REFILL.
+--      Remember our "Store Tag" implementation uses a hardwired zero TagLo.
+--
 -- REFERENCES
 -- [1] ion_design_notes.pdf -- ION project design notes.
 --------------------------------------------------------------------------------
 --
--- This is little more than an ampty shell...
+-- This is little more than an empty shell...
 --
 --------------------------------------------------------------------------------
 -- This source file may be used and distributed without         
@@ -84,10 +92,15 @@ subtype t_tag is std_logic_vector(TAG_WIDTH+1-1 downto 0);
 
 type t_tag_table is array(0 to NUM_LINES-1) of t_tag;
 
-signal tag_table :          t_tag_table;
+-- FIXME tag table initial value only used in TB! to be removed!
+signal tag_table :          t_tag_table := (others => '1' & X"90000");
 signal tag :                t_tag_address;
+signal cached_tag_addr :    t_tag_address;
 signal line_index :         t_index;
 signal line_address :       t_line_address;
+
+signal new_valid_flag :     std_logic;
+signal cached_tag_valid :   std_logic;
 
 signal cached_tag :         t_tag;
 
@@ -99,6 +112,7 @@ type t_line_table is array(0 to LINE_TABLE_SIZE-1) of t_word;
 signal line_table :         t_line_table;
 
 signal refill_line_address : t_line_address;
+signal refill_line_address_reg : t_line_address;
 signal cached_word :        t_word;
 signal line_table_we :      std_logic;
 
@@ -107,14 +121,21 @@ signal line_table_we :      std_logic;
 
 signal miss :               std_logic;
 signal lookup :             std_logic;
+signal lookup_reg :         std_logic;
+signal write_cycle :        std_logic;
+signal update_tag :         std_logic;
+signal data_wr_reg :        t_word;
+signal addr_reg :           t_word;
+signal wr_be_reg :          std_logic_vector(3 downto 0);
 
 
 -- Refill state machine signals.
 
 type t_refill_state is (
-    hitting,
-    refilling,
-    storing_last_word
+    HIT,
+    REFILL,
+    WRITETHROUGH,
+    REFILL_LAST_WORD
 );
 
 signal ns, ps :             t_refill_state;
@@ -131,14 +152,36 @@ begin
 
     CPU_MISO_O.rd_data <= cached_word;
     CPU_MISO_O.mwait <=
-        '1' when ps = refilling else
-        '1' when ps = storing_last_word else 
-        '1' when ps = hitting and miss = '1' else
+        '1' when ps = REFILL else
+        '1' when ps = REFILL_LAST_WORD else 
+        '1' when ps = HIT and miss = '1' else
+        '1' when ps = WRITETHROUGH else
         '0';
     
-    lookup <= 
-        '1' when CPU_MOSI_I.rd_en='1' and CE_I='1'
-        else '0'; 
+    lookup <= '1' when CPU_MOSI_I.rd_en='1' and CE_I='1' else '0';
+    
+    process(CLK_I)
+    begin
+        if CLK_I'event and CLK_I='1' then
+            if RESET_I='1' then
+                lookup_reg <= '0';
+            else
+                lookup_reg <= lookup;
+                if CPU_MOSI_I.wr_be/="0000" then
+                    data_wr_reg <= CPU_MOSI_I.wr_data;
+                    wr_be_reg <= CPU_MOSI_I.wr_be;
+                end if;
+                if CPU_MOSI_I.rd_en='1' or CPU_MOSI_I.wr_be/="0000" then
+                    addr_reg <= CPU_MOSI_I.addr;
+                end if;
+            end if;
+        end if;
+    end process;
+ 
+    update_tag <= '1' when 
+        CACHE_CTRL_MOSI_I.data_cache = '1' and -- FIXME I/D
+        CACHE_CTRL_MOSI_I.function_en = '1'
+        else '0';
  
     -- Tag table ---------------------------------------------------------------
 
@@ -152,19 +195,33 @@ begin
     begin
         if CLK_I'event and CLK_I='1' then
             if tag_table_we='1' then 
-                tag_table(conv_integer(line_index)) <= '1' & tag;
+                tag_table(conv_integer(line_index)) <= new_valid_flag & tag;
             end if;
             
             cached_tag <= tag_table(conv_integer(line_index));
         end if;
     end process synchronous_tag_table;
 
+    cached_tag_valid <= cached_tag(cached_tag'high);
+    cached_tag_addr <= cached_tag(cached_tag'high-1 downto 0);
     
-    -- The miss signal needs only be valid in the "hitting" state.
+    
+    -- When REFILL, set valid flag. Otherwise reset it.
+    with ps select new_valid_flag <= 
+        '1' when        REFILL,
+        '1' when        WRITETHROUGH,
+        '0' when        others; -- see @note1
+  
+    
+    -- The miss signal needs only be valid in the "HIT" state.
     miss <= 
-        '1' when (cached_tag(TAG_WIDTH-2 downto 0) /= tag) and lookup='1'
+        '1' when ((cached_tag_addr /= tag) or 
+                  (cached_tag_valid = '0')) and 
+            lookup_reg = '1'
         else '0';
     
+    write_cycle <= '1' when CPU_MOSI_I.wr_be/="0000" and CE_I='1' else '0';
+
     
     -- Line table --------------------------------------------------------------
     
@@ -173,7 +230,7 @@ begin
     begin
         if CLK_I'event and CLK_I='1' then
             if line_table_we='1' then 
-                line_table(conv_integer(refill_line_address)) <= MEM_MISO_I.dat;
+                line_table(conv_integer(refill_line_address_reg)) <= MEM_MISO_I.dat;
             end if;
             
             cached_word <= line_table(conv_integer(line_address));
@@ -185,18 +242,19 @@ begin
     process(CLK_I)
     begin
         if CLK_I'event and CLK_I='1' then
-            if lookup = '1' and ps=hitting then 
+            if lookup = '1' and ps=HIT then 
                 refill_line_address(LINE_ADDRESS_WIDTH-1 downto LINE_OFFSET_WIDTH) <= 
                 CPU_MOSI_I.addr(LINE_ADDRESS_WIDTH-1+2 downto LINE_OFFSET_WIDTH+2);
             end if;
+            refill_line_address_reg <= refill_line_address;
         end if;
     end process refill_addr_register;
     refill_line_address(LINE_OFFSET_WIDTH-1 downto 0) <= refill_ctr;
     
     
     line_table_we <=
-        '1' when ps = refilling and MEM_MISO_I.ack = '1' else
-        '1' when ps = storing_last_word and store_delay_ctr = 2 else
+        '1' when ps = REFILL and MEM_MISO_I.ack = '1' else
+        '1' when ps = REFILL_LAST_WORD and store_delay_ctr = 2 else
         '0';
     
     
@@ -207,7 +265,7 @@ begin
     begin
        if CLK_I'event and CLK_I='1' then
             if RESET_I='1' then
-                ps <= hitting;
+                ps <= HIT;
             else
                 ps <= ns;
             end if;
@@ -216,36 +274,44 @@ begin
     
     
     refill_state_machine_transitions:
-    process(ps, miss, refill_done, store_delay_ctr)
+    process(ps, miss, refill_done, write_cycle, MEM_MISO_I.stall, store_delay_ctr)
     begin
         case ps is
-        when hitting =>
+        when HIT =>
             if miss='1' then 
-                ns <= refilling;
+                ns <= REFILL;
+            elsif write_cycle='1' then
+                ns <= WRITETHROUGH;
             else
                 ns <= ps;
             end if;
-        when refilling =>
+        when REFILL =>
             if refill_done='1' then
-                ns <= storing_last_word;
+                ns <= REFILL_LAST_WORD;
             else
                 ns <= ps;
             end if;
-        when storing_last_word =>
+        when REFILL_LAST_WORD =>
             if store_delay_ctr = 0 then
-                ns <= hitting;
+                ns <= HIT;
+            else
+                ns <= ps;
+            end if;
+        when WRITETHROUGH =>
+            if MEM_MISO_I.stall='0' then
+                ns <= HIT; -- FIXME test back to back WR-RD cycles!
             else
                 ns <= ps;
             end if;
         when others =>
             -- NOTE: We´re not detecting here a real derailed HW state machine, 
             -- only a buggy rtl.
-            ns <= hitting;
+            ns <= HIT;
         end case;
     end process refill_state_machine_transitions;
     
     -- When the last word in the line has been read from the WB bus, we are done
-    -- refilling.
+    -- REFILL.
     refill_done <= 
         '1' when refill_ctr = (LINE_SIZE-1) and MEM_MISO_I.stall = '0'
         else '0';
@@ -256,7 +322,7 @@ begin
         if CLK_I'event and CLK_I='1' then
             if RESET_I = '1' then
                 refill_ctr <= (others => '0');
-            elsif ps = refilling and MEM_MISO_I.stall = '0' then
+            elsif ps = REFILL and MEM_MISO_I.stall = '0' then
                 refill_ctr <= refill_ctr + 1;
             end if;
         end if;
@@ -268,7 +334,7 @@ begin
         if CLK_I'event and CLK_I='1' then
             if RESET_I = '1' then
                 store_delay_ctr <= 2;
-            elsif ps = storing_last_word then
+            elsif ps = REFILL_LAST_WORD then
                 if store_delay_ctr /= 0 then 
                     store_delay_ctr <= store_delay_ctr - 1;
                 end if;
@@ -279,22 +345,27 @@ begin
     end process store_delay_counter;
 
     tag_table_we <= 
-        '1' when ps = refilling and MEM_MISO_I.ack = '1' else
-        '1' when ps = storing_last_word and store_delay_ctr = 2 else
+        '1' when ps = REFILL and MEM_MISO_I.ack = '1' and refill_ctr="001" else
+        '1' when ps = WRITETHROUGH and MEM_MISO_I.stall = '0' else
+        '1' when update_tag = '1' else -- see @note1
         '0';
 
         
     -- Refill WB interface -----------------------------------------------------
  
-    MEM_MOSI_O.adr(31 downto LINE_ADDRESS_WIDTH+2) <= (others => '0');
-    MEM_MOSI_O.adr(LINE_ADDRESS_WIDTH-1+2 downto 2) <= refill_line_address;
+    MEM_MOSI_O.adr(31 downto LINE_ADDRESS_WIDTH+2) <= addr_reg(31 downto LINE_ADDRESS_WIDTH+2);
+    with ps select MEM_MOSI_O.adr(LINE_ADDRESS_WIDTH-1+2 downto 2) <= 
+        refill_line_address                         when REFILL,
+        addr_reg(LINE_ADDRESS_WIDTH-1+2 downto 2)   when others;
     MEM_MOSI_O.adr(1 downto 0) <= (others => '0');
-    MEM_MOSI_O.stb <= '1' when ps = refilling else '0';
-    MEM_MOSI_O.cyc <= '1' when ps = refilling else '0';
-    MEM_MOSI_O.we <= '0';
-    MEM_MOSI_O.tga <= "1111";
+    MEM_MOSI_O.dat <= data_wr_reg;
+    MEM_MOSI_O.stb <= '1' when (ps = REFILL or ps = WRITETHROUGH) else '0';
+    MEM_MOSI_O.cyc <= '1' when (ps = REFILL or ps = WRITETHROUGH) else '0';
+    MEM_MOSI_O.we <= '1' when ps = WRITETHROUGH else '0';
+    MEM_MOSI_O.tga <= wr_be_reg;
     
     
+    -- FIXME refactor cache control interface.
     CACHE_CTRL_MISO_O.ready <= '1';
     
 
