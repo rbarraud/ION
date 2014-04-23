@@ -250,7 +250,6 @@ p0_rt_num <= std_logic_vector(CODE_MISO_I.rd_data(20 downto 16));
 --------------------------------------------------------------------------------
 -- Data input register and input shifter & masker (LB,LBU,LH,LHU,LW)
 
-
 -- If data can't be latched form the bus when it´s valid due to a stall, it will
 -- be registered here.
 data_input_register:
@@ -829,7 +828,30 @@ p1_ac.shift_amount <= p1_ir_reg(10 downto 6) when p1_ir_fn(2)='0' else p1_rs(4 d
 
 
 --------------------------------------------------------------------------------
+-- Decoding of CACHE instruction functions
+
+with p1_ir_op select CACHE_CTRL_MOSI_O.function_en <=
+    '1' when "101111",
+    '0' when others;
+    
+with p1_ir_reg(20 downto 16) select CACHE_CTRL_MOSI_O.function_code <= 
+    "001" when "00000",   -- I Index Invalidate
+    "001" when "00001",   -- D Index Invalidate
+    "010" when "01000",   -- I Index Store Tag
+    "010" when "01001",   -- D Index Store Tag
+    "101" when "10000",   -- I Hit Invalidate
+    "101" when "10001",   -- D Hit Invalidate
+    "100" when "10101",   -- D Hit Writeback Invalidate
+    "000" when others;
+
+CACHE_CTRL_MOSI_O.data_cache <= p1_ir_reg(16); -- 0 for I, 1 for D.
+    
+    
+--------------------------------------------------------------------------------
 -- Decoding of unimplemented and privileged instructions
+
+-- NOTE: This is a MIPS-I CPU transitioning into a MIPS32r2, therefore the 
+-- unimplemented set is going to change over time.
 
 -- Unimplemented instructions include:
 --  1.- All instructions above architecture MIPS-I except:
@@ -837,7 +859,6 @@ p1_ac.shift_amount <= p1_ir_reg(10 downto 6) when p1_ir_fn(2)='0' else p1_rs(4 d
 --  2.- Unaligned stores and loads (LWL,LWR,SWL,SWR)
 --  3.- All CP0 instructions other than mfc0 and mtc0
 --  4.- All CPi instructions
---  5.- All cache instructions
 -- For the time being, we'll decode them all together.
 
 -- FIXME: some of these should trap but others should just NOP (e.g. EHB)
@@ -851,7 +872,6 @@ p1_unknown_opcode <= '1' when
         (p1_ir_op(28 downto 26)/="000" and      -- COP0 is valid
          p1_ir_op(28 downto 26)/="100" and     -- BEQL is valid
          p1_ir_op(28 downto 26)/="101")) or     -- BNEL is valid
-    p1_ir_op="101111" or    -- CACHE
     p1_ir_op="100010" or    -- LWL
     p1_ir_op="100110" or    -- LWR
     p1_ir_op="101010" or    -- SWL
@@ -1115,11 +1135,6 @@ cp0_mosi.unknown_opcode <= p1_unknown_opcode;
 cp0_mosi.missing_cop <= p1_cp_unavailable;
 cp0_mosi.syscall <= not p1_ir_fn(0);
 cp0_mosi.stall <= stall_pipeline;
-
-
-CACHE_CTRL_MOSI_O.enable <= cp0_miso.idcache_enable;
-CACHE_CTRL_MOSI_O.invalidate <= cp0_miso.icache_invalidate;
-
 
 cop0 : entity work.ION_COP0
     port map (

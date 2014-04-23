@@ -13,8 +13,6 @@
 -- uncached data, necessary to hang peripherals on.
 --
 --------------------------------------------------------------------------------
--- Copyright (C) 2014 Jose A. Ruiz
---                                                              
 -- This source file may be used and distributed without         
 -- restriction provided that this copyright statement is not    
 -- removed from the file and that any derivative work contains  
@@ -45,6 +43,7 @@ use ieee.std_logic_unsigned.all;
 use work.ION_INTERFACES_PKG.all;
 use work.ION_INTERNAL_PKG.all;
 
+--use work.OBJ_CODE_PKG.all;
 
 entity ion_core is
     generic(
@@ -53,6 +52,7 @@ entity ion_core is
         TCM_CODE_SIZE : integer := 2048;
         -- Contents of code TCM.
         TCM_CODE_INIT : t_obj_code := zero_objcode(2048);
+        --TCM_CODE_INIT : t_obj_code := OBJ_CODE;
         
         -- Size of data TCM block in bytes.
         -- Set to a power of 2 or to zero to disable data TCM.
@@ -81,9 +81,9 @@ entity ion_core is
         -- FIXME code cache refill ports missing
         -- FIXME uncached wishbone ports missing
         
-        -- Fixme this should be a Wishbone port, not an ION port.
-        DATA_UC_WB_MOSI_O   : out t_cpumem_mosi;
-        DATA_UC_WB_MISO_I   : in t_cpumem_miso;
+        -- Uncached data WB bridge port.
+        DATA_UC_WB_MOSI_O   : out t_wishbone_mosi;
+        DATA_UC_WB_MISO_I   : in t_wishbone_miso;
         
         IRQ_I               : in std_logic_vector(7 downto 0)
     );
@@ -142,32 +142,32 @@ signal dtcm_ce :            std_logic;
 signal ctcm_d_miso :        t_cpumem_miso;
 
 -- Uncached Data, external WB bridge MISO bus & enable signal.
+signal ucd_wb_mosi :        t_cpumem_mosi;
 signal ucd_wb_miso :        t_cpumem_miso;
-signal ucd_wb_ce :          std_logic;
+
 
 signal void_miso :          t_cpumem_miso;
 
 --------------------------------------------------------------------------------
 -- Address decoding constant & constant functions.
 
--- FIXME this should come from a generic.
-constant DTCM_BASE : t_word :=          X"00000000";          
+-- Data TCM mapped to the start of KSEG1 uncached area.
+constant DTCM_BASE : t_word :=          X"A0000000";          
 constant DTCM_ASIZE : integer :=        log2(TCM_DATA_SIZE);
--- FIXME this should come from a generic.
+-- Code TCM mapped to reset vector within KSEG1 uncached area.
 constant CTCM_BASE : t_word :=          X"BFC00000";
 constant CTCM_ASIZE : integer :=        log2(TCM_CODE_SIZE);
+-- Code TCM accessible on data bus on the same address as on the code bus.
 constant DCTCM_BASE : t_word :=         X"BFC00000";
 
--- FIXME D/I-Cache area decoding unfinished.
-constant ICACHE_BASE : t_word :=        X"80000000";
-constant ICACHE_ASIZE : integer :=      28; 
-constant DCACHE_BASE : t_word :=        X"80000000";
-constant DCACHE_ASIZE : integer :=      28; 
-constant DWB_BASE : t_word :=           X"20000000";
-constant DWB_ASIZE : integer :=         28; 
+-- Wishbone port is mapped to high 1GB area, meant for I/O mostly.
+constant DWB_BASE : t_word :=           X"c0000000";
+constant DWB_ASIZE : integer :=         30; 
 
--- Note this function is a "constant function": can be used in synthesizable
--- rtl as long as its parameters are constants.
+-- NOTE: all the functions defined in this entity are "constant functions" that
+-- can be used in synthesizable rtl as long as their parameters are constants.
+
+-- Return '1' if high 's' of address 'a' match those of address 'b'.
 function adecode(a : t_word; b : t_word; s : integer) return std_logic is
 begin
     if a(31 downto s) = b(31 downto s) then
@@ -176,6 +176,19 @@ begin
         return '0';
     end if;
 end function adecode;
+
+-- Decode address to see if it is within the cached area.
+-- (Cached addresses are all addresses from 0x00000000 to 0x9fffffff.)
+-- Return '1' if address 'a' is cached, '0' otherwise.
+function cached(a : t_word) return std_logic is
+begin
+    if a(31 downto 29) = "101" or a(31 downto 30) = "11" then
+        return '0';
+    else
+        return '1';
+    end if;
+end function cached;
+
 
 
 begin
@@ -203,23 +216,18 @@ begin
         IRQ_I               => IRQ_I
     );
 
-    -- FIXME caches missing.
     -- FIXME cache control interface to be refactored.
-    cache_ctrl_miso.ready <= '1';
-    
-    -- MISO to be fed by the code-data MISO mux when no valid area is addressed.
-    void_miso.mwait <= '0';
-    void_miso.rd_data <= (others => '0');
-    
+    cache_ctrl_miso.ready <= '1';    
+        
 --------------------------------------------------------------------------------
--- Code Bus interconnect
+-- Code Bus interconnect.
 
     -- Address decoding --------------------------------------------------------
     
     -- Decode the index of the slave being addressed.
     code_mux_ctrl <=
         "01" when adecode(code_mosi.addr, CTCM_BASE, CTCM_ASIZE) = '1' else
-        "10" when adecode(code_mosi.addr, ICACHE_BASE, ICACHE_ASIZE) = '1' else
+        "10" when cached(code_mosi.addr) = '1' else
         "00";
 
     -- Convert slave index to one-hot enable signal vector.
@@ -246,7 +254,13 @@ begin
         ctcm_c_miso     when "01",
         icache_miso     when "10",
         void_miso       when others;
- 
+
+        
+    -- MISO to be fed to the CPU by the code and data MISO multiplexors when 
+    -- no valid area is addressed.
+    void_miso.mwait <= '0';
+    void_miso.rd_data <= (others => '0');        
+        
         
     -- Code cache ----------------------------------------------------------
     
@@ -262,6 +276,7 @@ begin
     code_cache_missing:
     if CODE_CACHE_LINES = 0 generate
 
+        -- FIXME code cache missing.
         icache_miso.mwait <= '0';
         icache_miso.rd_data <= (others => '0');
         
@@ -319,17 +334,17 @@ begin
     
     
 --------------------------------------------------------------------------------
--- Data Bus.
+-- Data Bus interconnect.
 
     -- Address decoding --------------------------------------------------------
     
-    -- Decode the index of the slave being addressed.
+    -- Decode the index of the slave being addressed. 
     data_mux_ctrl <=
         "001" when adecode(data_mosi.addr, DTCM_BASE, DTCM_ASIZE) = '1' else
-        "010" when adecode(data_mosi.addr, DCACHE_BASE, DCACHE_ASIZE) = '1' else
         "011" when adecode(data_mosi.addr, DCTCM_BASE, CTCM_ASIZE) = '1' else
+        "010" when cached(data_mosi.addr) = '1' else
         "100" when adecode(data_mosi.addr, DWB_BASE, DWB_ASIZE) = '1' else
-        "000";
+        "100";
 
     -- Convert slave index to one-hot enable signal vector.
     with data_mux_ctrl select data_ce <=
@@ -426,12 +441,33 @@ begin
     end generate tcm_data_missing;
     
     
---------------------------------------------------------------------------------
--- Wishbone Bridge & access arbiter.
+    -- Wishbone Bridge ---------------------------------------------------------
 
-    -- FIXME there should be a wishbone bridge here, this is a synth stub.
-    DATA_UC_WB_MOSI_O <= data_mosi;
-    ucd_wb_miso <= DATA_UC_WB_MISO_I;
+    -- The CPU side of the WB bridge will only be enabled if addressed.
+    with data_ce(3) select ucd_wb_mosi.rd_en <= 
+        data_mosi.rd_en         when '1',
+        '0'                     when others;
+        
+    with data_ce(3) select ucd_wb_mosi.wr_be <= 
+        data_mosi.wr_be         when '1',
+        "0000"                  when others;
+    
+    ucd_wb_mosi.addr <= data_mosi.addr;
+    ucd_wb_mosi.wr_data <= data_mosi.wr_data;
+        
+    -- WB bridge instance.
+    data_wb_bridge: entity work.ION_WISHBONE_BRIDGE
+        port map (
+            CLK_I               => CLK_I,
+            RESET_I             => RESET_I, 
+            
+            ION_MOSI_I          => ucd_wb_mosi,
+            ION_MISO_O          => ucd_wb_miso,        
+            
+            WISHBONE_MOSI_O     => DATA_UC_WB_MOSI_O,
+            WISHBONE_MISO_I     => DATA_UC_WB_MISO_I
+        );
+    
 
 
 end architecture rtl;
