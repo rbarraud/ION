@@ -13,6 +13,7 @@ vcom -reportprogress 300 -work work ../../../src/rtl/buses/ion_ctcm_arbiter.vhdl
 vcom -reportprogress 300 -work work ../../../src/rtl/buses/ion_tcm_code.vhdl
 vcom -reportprogress 300 -work work ../../../src/rtl/buses/ion_tcm_data.vhdl
 vcom -reportprogress 300 -work work ../../../src/rtl/caches/ion_cache.vhdl
+vcom -reportprogress 300 -work work ../../../src/rtl/caches/ion_wishbone_bridge.vhdl
 vcom -reportprogress 300 -work work ../../../src/rtl/cpu/ion_core.vhdl
 # Compile the package that contains the object code & other config constants.
 vcom -reportprogress 300 -work work ../../../src/rtl/obj/obj_code_pkg.vhdl

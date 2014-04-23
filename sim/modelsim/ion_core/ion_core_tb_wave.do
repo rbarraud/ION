@@ -36,16 +36,22 @@ add wave -noupdate -group {Code TCM -- D Bus}
 add wave -noupdate -group {Code TCM -- D Bus} -format Literal -radix hexadecimal /ion_core_tb/core/ctcm_d_miso.rd_data
 add wave -noupdate -group {Code TCM -- D Bus} -format Logic /ion_core_tb/core/ctcm_d_miso.mwait
 add wave -noupdate -divider D-Cache
+add wave -noupdate -format Logic /ion_core_tb/core/data_cache_present/data_cache/ce_i
+add wave -noupdate -format Logic /ion_core_tb/core/data_cache_present/data_cache/miss
+add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/data_address
+add wave -noupdate -format Logic /ion_core_tb/core/data_cache_present/data_cache/lookup
 add wave -noupdate -format Literal /ion_core_tb/data_wait_ctr
 add wave -noupdate -format Literal /ion_core_tb/core/data_cache_present/data_cache/refill_ctr
 add wave -noupdate -color Pink -format Literal /ion_core_tb/core/data_cache_present/data_cache/ps
 add wave -noupdate -format Literal -radix hexadecimal -expand /ion_core_tb/data_wb_miso
 add wave -noupdate -format Literal -radix hexadecimal -expand /ion_core_tb/data_wb_mosi
+add wave -noupdate -format Logic /ion_core_tb/core/data_cache_present/data_cache/new_valid_flag
+add wave -noupdate -format Logic /ion_core_tb/core/data_cache_present/data_cache/cached_tag_valid
+add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/data_cache_present/data_cache/cached_tag
 add wave -noupdate -divider Debug
-add wave -noupdate -format Literal /ion_core_tb/core/data_ce
-add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/tcm_code_present/code_tcm/tcm_addr
+add wave -noupdate -format Literal -expand /ion_core_tb/core/data_cache_present/data_cache/cache_ctrl_mosi_i
 TreeUpdate [SetDefaultTree]
-WaveRestoreCursors {{Cursor 1} {10550000 ps} 0}
+WaveRestoreCursors {{Cursor 1} {12470000 ps} 0}
 configure wave -namecolwidth 206
 configure wave -valuecolwidth 60
 configure wave -justifyvalue left
@@ -59,4 +65,4 @@ configure wave -gridperiod 1
 configure wave -griddelta 40
 configure wave -timeline 0
 update
-WaveRestoreZoom {10027964 ps} {11178060 ps}
+WaveRestoreZoom {12355091 ps} {12616252 ps}
