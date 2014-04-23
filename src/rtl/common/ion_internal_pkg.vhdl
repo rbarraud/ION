@@ -60,12 +60,13 @@ type t_cpumem_miso is record
 end record t_cpumem_miso;
 
 type t_cache_mosi is record
-    enable :            std_logic;
-    invalidate :        std_logic;
+    function_code :     std_logic_vector(2 downto 0);
+    function_en :       std_logic;  -- 1 to perform function_code operation.
+    data_cache :        std_logic;  -- 1 to operate on D-cache, 0 for I-Cache.
 end record t_cache_mosi;
 
 type t_cache_miso is record
-    ready :             std_logic;
+    ready :             std_logic;  -- FIXME might not be necessary in new cache
 end record t_cache_miso;
 
 type t_cop0_mosi is record
