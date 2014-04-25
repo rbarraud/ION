@@ -159,9 +159,7 @@ init:
     ori     $30,$0,0            # Total error count.
     
     
-    la      $9,0xffff0200       #
-    lw      $2,0($9)
-  
+    .ifgt   1
     # Test access to debug registers over uncached data WB bridge.
 debug_regs:
     INIT_TEST msg_debug_regs
@@ -175,7 +173,7 @@ debug_regs:
     addi    $28,$28,1
 debug_regs_0:    
     PRINT_RESULT
-  
+    .endif
     
     # Test load interlock.
 interlock:
