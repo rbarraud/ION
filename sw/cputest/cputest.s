@@ -59,6 +59,12 @@
     .set    HitInvalidateWritebackD,    0x15
 
     
+    #-- Core addresses ---------------------------------------------------------
+    
+    # Address of debug register block (16 word registers addressable as bytes).
+    # These regs are implemented in sw simulator and simulation test bench.
+    .set ADDR_DEBUG_REGS, 0xffff0200
+    
     
     #-- Utility macros ---------------------------------------------------------
 
@@ -151,6 +157,25 @@ init:
     # Reset error counters.
     ori     $28,$0,0            # Error count for the test in course. 
     ori     $30,$0,0            # Total error count.
+    
+    
+    la      $9,0xffff0200       #
+    lw      $2,0($9)
+  
+    # Test access to debug registers over uncached data WB bridge.
+debug_regs:
+    INIT_TEST msg_debug_regs
+    la      $9,ADDR_DEBUG_REGS  #
+    
+    # Debug regs reset to zero; let's see if we can read them.
+    addi    $2,$0,-1            # Put some nonzero value in $2...
+    lw      $2,0($9)            # ...then read a zero from a debug reg.
+    beqz    $2,debug_regs_0     # If not zero, increment error count.
+    nop
+    addi    $28,$28,1
+debug_regs_0:    
+    PRINT_RESULT
+  
     
     # Test load interlock.
 interlock:
@@ -340,6 +365,7 @@ msg_program_pass:       .asciiz     "\nTest PASSED\n\n"
 msg_program_fail:       .asciiz     "\nTest FAILED\n\n"
 
 msg_dcache:             .asciiz     "Data Cache basic test........ "
+msg_debug_regs:         .asciiz     "Access to debug registers.... "
 msg_interlock:          .asciiz     "Load interlocks.............. "
 msg_arith:              .asciiz     "Add*/Sub* opcodes............ "
 msg_logic:              .asciiz     "Logic opcodes................ "
