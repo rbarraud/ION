@@ -13,8 +13,8 @@
 -- Address   Name         Size    Access  Purpose
 ---------------------------------------------------------------------------
 -- ffff0000: DbgTxD     : 8     : b     : Debug UART TX buffer (W/o).
--- ffff0100: DbgRW0     : 32    : b/w   : Debug register 0 (R/W). 
--- ffff0104: DbgRW1     : 32    : b/w   : Debug register 1 (R/W).
+-- ffff0200: DbgRW0     : 32    : b/w   : Debug register 0 (R/W). 
+-- ffff0204: DbgRW1     : 32    : b/w   : Debug register 1 (R/W).
 --
 -- (b support byte access, w support word access).
 -- 
@@ -108,7 +108,20 @@ signal data_cycle_count :   natural := 0;
 signal data_address :       t_word;
 
 type t_ram_table is array(natural range <>) of t_word;
-shared variable ram :       t_ram_table(0 to 4096);
+shared variable ram :       t_ram_table(0 to 4095);
+
+--------------------------------------------------------------------------------
+-- Memory refill ports.
+
+-- Wait states simulated by uncached WB port (elements used in succession).
+constant UNCACHED_WS : t_natural_table (0 to 3) := (4,1,3,2);
+
+signal uwb_wait_ctr :       natural;
+signal uwb_cycle_count :    natural := 0;
+signal uwb_address :        t_word;
+
+shared variable debug_regs: t_ram_table(0 to 15);
+
 
 --------------------------------------------------------------------------------
 -- Logging signals & simulation control.
@@ -151,9 +164,6 @@ begin
     );
 
     
-    data_uc_wb_miso.stall <= '0';
-    data_uc_wb_miso.dat <= (others => '0');
-
     -- Master clock: free running clock used as main module clock --------------
     run_master_clock:
     process(done, clk)
@@ -266,6 +276,62 @@ begin
         '0';
 
 
+    -- Uncached WB port --------------------------------------------------------
+    
+    uncached_wb_port:
+    process(clk)
+    begin
+        if clk'event and clk='1' then
+            if reset = '1' then
+                uwb_wait_ctr <= UNCACHED_WS((uwb_cycle_count) mod UNCACHED_WS'length);
+                data_uc_wb_miso.ack <= '0';
+                data_uc_wb_miso.dat <= (others => '1');
+                uwb_address <= (others => '0');
+            elsif data_uc_wb_mosi.stb = '1' then
+                if uwb_wait_ctr > 0 then 
+                    -- Access in progress, decrement wait counter...
+                    uwb_wait_ctr <= data_wait_ctr - 1;
+                    data_uc_wb_miso.ack <= '0';
+                    uwb_address <= data_wb_mosi.adr;
+                else 
+                    -- Access finished, wait counter reached zero.
+                    -- Prepare the wait counter for the next access...
+                    uwb_wait_ctr <= UNCACHED_WS((uwb_cycle_count+1) mod UNCACHED_WS'length);
+                    -- ...and drive the slave WB bus.
+                    data_uc_wb_miso.ack <= '1';
+                    -- Termination is different for read and write accesses:
+                    if data_uc_wb_mosi.we = '1' then 
+                        -- Write access: do the simulated write.
+                        -- FIXME simulate write to debug reg
+                    else
+                        -- Read access: simulate read & WB slave multiplexor.
+                        -- FIXME simulate read from debug reg
+                        data_uc_wb_miso.dat <= (others => '0');
+                    end if;
+                end if;
+            else
+                -- No WB access is going on: restore the wait counter to its 
+                -- idle state and deassert ACK.
+                uwb_wait_ctr <= UNCACHED_WS((uwb_cycle_count) mod UNCACHED_WS'length);
+                data_uc_wb_miso.ack <= '0';
+            end if;
+            
+            -- Keep track of how many accesses we have performed. 
+            -- We use this to select a number of wait states from a table.
+            if data_uc_wb_mosi.stb = '1' and uwb_wait_ctr = 0 then
+                uwb_cycle_count <= uwb_cycle_count + 1;
+            end if;
+            
+        end if;
+    end process uncached_wb_port;
+
+    -- stall the WB bus as long as the wait counter is not zero.
+    data_uc_wb_miso.stall <= 
+        '1' when data_uc_wb_mosi.stb = '1' and uwb_wait_ctr > 0 else
+        '0';
+
+    
+        
     -- Logging process: launch logger function ---------------------------------
     log_execution:
     process
