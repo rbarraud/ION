@@ -48,10 +48,14 @@ add wave -noupdate -format Literal -radix hexadecimal -expand /ion_core_tb/data_
 add wave -noupdate -format Logic /ion_core_tb/core/data_cache_present/data_cache/new_valid_flag
 add wave -noupdate -format Logic /ion_core_tb/core/data_cache_present/data_cache/cached_tag_valid
 add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/data_cache_present/data_cache/cached_tag
+add wave -noupdate -divider {Uncached Port}
+add wave -noupdate -format Literal -radix hexadecimal -expand /ion_core_tb/data_uc_wb_mosi
+add wave -noupdate -format Literal -radix hexadecimal -expand /ion_core_tb/data_uc_wb_miso
+add wave -noupdate -format Literal /ion_core_tb/uwb_wait_ctr
 add wave -noupdate -divider Debug
 add wave -noupdate -format Literal -expand /ion_core_tb/core/data_cache_present/data_cache/cache_ctrl_mosi_i
 TreeUpdate [SetDefaultTree]
-WaveRestoreCursors {{Cursor 1} {12470000 ps} 0}
+WaveRestoreCursors {{Cursor 1} {4330000 ps} 0}
 configure wave -namecolwidth 206
 configure wave -valuecolwidth 60
 configure wave -justifyvalue left
@@ -65,4 +69,4 @@ configure wave -gridperiod 1
 configure wave -griddelta 40
 configure wave -timeline 0
 update
-WaveRestoreZoom {12355091 ps} {12616252 ps}
+WaveRestoreZoom {4259574 ps} {4525060 ps}
