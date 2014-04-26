@@ -16,11 +16,18 @@
 --      is invalidated. The CPU address is only valid in this cycle so we
 --      do it right now and save a register and a mux.
 --
+-- @note3: 
+--      When a RD comes the cycle after a WR, we'll lose it unless we register
+--      the fact. This happens because the rd_en signal is asserted for a single
+--      clock cycle, even if the RD instruction is stalled waiting for the WR
+--      to finish.
+--      The same thing happens when a WR follows a RD.
+--
 -- REFERENCES
 -- [1] ion_design_notes.pdf -- ION project design notes.
 --------------------------------------------------------------------------------
+-- NOTES:
 --
--- This is little more than an empty shell...
 --
 --------------------------------------------------------------------------------
 -- This source file may be used and distributed without         
@@ -93,37 +100,36 @@ subtype t_offset is std_logic_vector(LINE_OFFSET_WIDTH-1 downto 0);
 subtype t_line_address is std_logic_vector(LINE_ADDRESS_WIDTH-1 downto 0);
 subtype t_tag_address is std_logic_vector(TAG_WIDTH-1 downto 0);
 
+-- Valid bit appended to address tag; this is what's stored in the tag table.
 subtype t_tag is std_logic_vector(TAG_WIDTH+1-1 downto 0);  
 
+-- Tag table implemented as (inferred) synchronous BRAM.
 type t_tag_table is array(0 to NUM_LINES-1) of t_tag;
-
--- FIXME tag table initial value only used in TB! to be removed!
-signal tag_table :          t_tag_table := (others => '1' & X"90000");
+-- Initial value meant for TB only. Helps catch errors in invalidation opcodes.
+signal tag_table :          t_tag_table; -- := (others => '1' & X"90000");
+-- Signals used to access the tag table.
 signal tag :                t_tag_address;
 signal cached_tag_addr :    t_tag_address;
 signal line_index :         t_index;
 signal line_address :       t_line_address;
-
-signal new_valid_flag :     std_logic;
-signal cached_tag_valid :   std_logic;
-
 signal cached_tag :         t_tag;
-
 signal tag_table_we :       std_logic;
 
--- Line table signals.
+-- Valid flag to be stored in tag table.
+signal new_valid_flag :     std_logic;
+-- Valid flag read from tag table during a lookup.
+signal cached_tag_valid :   std_logic;
 
+-- Line table implemented as (inferred) BRAM table.
 type t_line_table is array(0 to LINE_TABLE_SIZE-1) of t_word;
 signal line_table :         t_line_table;
-
+-- Signals used to access the line table.
 signal refill_line_address : t_line_address;
 signal refill_line_address_reg : t_line_address;
 signal cached_word :        t_word;
 signal line_table_we :      std_logic;
 
-
--- Misc signals.
-
+-- Misc control signals.
 signal miss :               std_logic;
 signal lookup :             std_logic;
 signal lookup_reg :         std_logic;
@@ -132,10 +138,9 @@ signal update_tag :         std_logic;
 signal data_wr_reg :        t_word;
 signal addr_reg :           t_word;
 signal wr_be_reg :          std_logic_vector(3 downto 0);
-
+signal read_pending :       std_logic;
 
 -- Refill state machine signals.
-
 type t_refill_state is (
     HIT,
     REFILL,
@@ -147,23 +152,26 @@ signal ns, ps :             t_refill_state;
     
 signal refill_ctr :         t_offset;
 signal store_delay_ctr :    integer range 0 to 2;
-
 signal refill_done :        std_logic;
+
           
 begin
  
     -- CPU interface -----------------------------------------------------------
- 
 
     CPU_MISO_O.rd_data <= cached_word;
     CPU_MISO_O.mwait <=
         '1' when ps = REFILL else
         '1' when ps = REFILL_LAST_WORD else 
         '1' when ps = HIT and miss = '1' else
+        '1' when ps = HIT and read_pending = '1' else -- see @note3
         '1' when ps = WRITETHROUGH else
         '0';
     
-    lookup <= '1' when CPU_MOSI_I.rd_en='1' and CE_I='1' else '0';
+    lookup <= 
+        '1' when CPU_MOSI_I.rd_en='1' and CE_I='1' else 
+        '1' when read_pending='1' and ps=HIT else 
+        '0';
     
     process(CLK_I)
     begin
@@ -184,18 +192,21 @@ begin
     end process;
  
     -- Assert update_tag for special CACHE instructions only.
+    -- FIXME control interface is crude and needs to be defined & refactored
     update_tag <= '1' when 
-        CACHE_CTRL_MOSI_I.data_cache = '1' and -- FIXME I/D
+        CACHE_CTRL_MOSI_I.data_cache = '1' and
         CACHE_CTRL_MOSI_I.function_en = '1'
         else '0';
  
+ 
     -- Tag table ---------------------------------------------------------------
 
+    -- Extract all relevand fields from incoming CPU address.
     tag <= CPU_MOSI_I.addr(31 downto LINE_ADDRESS_WIDTH+2);
     line_index <= CPU_MOSI_I.addr(LINE_ADDRESS_WIDTH+1 downto LINE_OFFSET_WIDTH + 2);
     line_address <= CPU_MOSI_I.addr(LINE_ADDRESS_WIDTH+1 downto 2);
  
-     
+    -- Tag table inferred BRAM.
     synchronous_tag_table:
     process(CLK_I)
     begin
@@ -208,15 +219,14 @@ begin
         end if;
     end process synchronous_tag_table;
 
+    -- Extract fields from the word we just read from the tag table.
     cached_tag_valid <= cached_tag(cached_tag'high);
     cached_tag_addr <= cached_tag(cached_tag'high-1 downto 0);
     
-    
-    -- When REFILL, set valid flag. Otherwise reset it.
+    -- When in REFILL, set valid flag. Otherwise reset it.
     with ps select new_valid_flag <= 
         '1' when        REFILL,
         '0' when        others; -- see @note1
-  
     
     -- The miss signal needs only be valid in the "HIT" state.
     miss <= 
@@ -229,7 +239,8 @@ begin
 
     
     -- Line table --------------------------------------------------------------
-    
+
+    -- Line table (inferred) BRAM.
     synchronous_line_table:
     process(CLK_I)
     begin
@@ -242,7 +253,8 @@ begin
         end if;
     end process synchronous_line_table;
     
-    
+    -- Since the target address is only present in the ION CPU bus for a single
+    -- cycle, we need to register it to use it along the refill operation.
     refill_addr_register:
     process(CLK_I)
     begin
@@ -254,9 +266,11 @@ begin
             refill_line_address_reg <= refill_line_address;
         end if;
     end process refill_addr_register;
+    -- The low bits of the refill address come from the refill counter.
     refill_line_address(LINE_OFFSET_WIDTH-1 downto 0) <= refill_ctr;
     
-    
+    -- We write onto the line table only in the cycles in which there is valid
+    -- refill data in the refill WB bus.
     line_table_we <=
         '1' when ps = REFILL and MEM_MISO_I.ack = '1' else
         '1' when ps = REFILL_LAST_WORD and store_delay_ctr = 2 else
@@ -279,7 +293,8 @@ begin
     
     
     refill_state_machine_transitions:
-    process(ps, miss, refill_done, write_cycle, MEM_MISO_I.stall, store_delay_ctr)
+    process(ps, miss, refill_done, write_cycle, MEM_MISO_I.stall, 
+            store_delay_ctr, read_pending)
     begin
         case ps is
         when HIT =>
@@ -304,7 +319,7 @@ begin
             end if;
         when WRITETHROUGH =>
             if MEM_MISO_I.stall='0' then
-                ns <= HIT; -- FIXME test back to back WR-RD cycles!
+                ns <= HIT;
             else
                 ns <= ps;
             end if;
@@ -375,5 +390,26 @@ begin
     CACHE_CTRL_MISO_O.ready <= '1';
     
 
+    -- Back-to-back access support logic ---------------------------------------
+    
+    -- This flag will be raised when a READ comes immediately aftr a write (in
+    -- the following clock cycle). Since the ION bus control signals are valid
+    -- for only one cycle we need to remember the request here.
+    -- The address is not going to change in the meantime.
+    read_pending_register:
+    process(CLK_I)
+    begin
+        if CLK_I'event and CLK_I='1' then
+            if RESET_I='1' then 
+                read_pending <= '0';
+            elsif ps=WRITETHROUGH and CPU_MOSI_I.rd_en='1' then
+                read_pending <= '1';
+            elsif ps/=WRITETHROUGH then
+                read_pending <= '0';
+            end if;
+        end if;
+    end process read_pending_register;
+    
+    -- FIXME support RD-WR operations too.
         
 end architecture rtl;

@@ -39,7 +39,7 @@ add wave -noupdate -format Logic /ion_application_tb/mpu/core/data_cache_present
 add wave -noupdate -format Logic /ion_application_tb/mpu/core/data_cache_present/data_cache/cached_tag_valid
 add wave -noupdate -format Literal -radix hexadecimal /ion_application_tb/mpu/core/data_cache_present/data_cache/cached_tag
 add wave -noupdate -divider SRAM
-add wave -noupdate -format Literal -radix hexadecimal /ion_application_tb/mpu/sram_port/wb_mosi_i
+add wave -noupdate -format Literal -radix hexadecimal -expand /ion_application_tb/mpu/sram_port/wb_mosi_i
 add wave -noupdate -format Literal -radix hexadecimal /ion_application_tb/mpu/sram_port/wb_miso_o
 add wave -noupdate -color Pink -format Literal /ion_application_tb/mpu/sram_port/ps
 add wave -noupdate -expand -group SRAM
@@ -50,7 +50,7 @@ add wave -noupdate -group SRAM -format Logic /ion_application_tb/sram_wen
 add wave -noupdate -group SRAM -format Literal -radix hexadecimal /ion_application_tb/sram_addr
 add wave -noupdate -group SRAM -format Literal -radix hexadecimal /ion_application_tb/sram_data
 TreeUpdate [SetDefaultTree]
-WaveRestoreCursors {{Cursor 1} {32529863 ps} 0}
+WaveRestoreCursors {{Cursor 1} {27130000 ps} 0}
 configure wave -namecolwidth 150
 configure wave -valuecolwidth 100
 configure wave -justifyvalue left
@@ -64,4 +64,4 @@ configure wave -gridperiod 1000
 configure wave -griddelta 40
 configure wave -timeline 0
 update
-WaveRestoreZoom {32489262 ps} {32818960 ps}
+WaveRestoreZoom {27022479 ps} {27306666 ps}

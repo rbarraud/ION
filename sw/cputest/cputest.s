@@ -228,34 +228,50 @@ cache_init_0:
     NOP
     # Now, store a test byte and read it back. Repeat a few times with 
     # different byte alignments. We'll want a macro to do this comfortably:
-    .macro  BYTE_READBACK r1, r2, r3, bexp, off
-    li      \r1,\bexp
-    sb      \r1,\off(\r3)
-    nop     # FIXME back to back SW/LW fails!
-    lb      \r2,\off(\r3)
-    addi    \r2,-\bexp
-    beqz    \r2,1100f
+    .macro  BYTE_READBACK r3, bexp, off
+    ori     $6,$0,\bexp
+    ori     $8,$0,\bexp
+    ori     $10,$0,\bexp
+    ori     $12,$0,\bexp
+    sb      $6,\off(\r3)
+    # Note we're doing a RD-WR back-to-back here; this is intended.
+    lb      $7,\off(\r3)
+    sb      $8,(\off+0x40)(\r3) # RD-WR-RD-WR sequence tested here.
+    lb      $9,(\off+0x40)(\r3)
+    addi    $7,-\bexp
+    beqz    $7,1100f
+    addi    $8,-\bexp
+    beqz    $8,1100f
+    nop
+    sb      $10,(\off+0x70)(\r3)    # Now try sequence WR-WR-RD-RD    
+    sb      $12,(\off+0x90)(\r3)
+    lb      $13,(\off+0x90)(\r3)
+    lb      $11,(\off+0x70)(\r3)
+    addi    $11,-\bexp
+    beqz    $11,1100f
+    addi    $13,-\bexp
+    beqz    $13,1100f
     nop
     addi    $28,$28,1
     1100:
     .endm
     # Ok, we'll try first the same cached area we've been using for word tests.
     # Alignment 0 to 3
-    BYTE_READBACK $6, $7, $3, 0x42, 0x00
-    BYTE_READBACK $6, $7, $3, 0x34, 0x01
-    BYTE_READBACK $6, $7, $3, 0x74, 0x02
-    BYTE_READBACK $6, $7, $3, 0x29, 0x03
+    BYTE_READBACK $3, 0x42, 0x00
+    BYTE_READBACK $3, 0x34, 0x01
+    BYTE_READBACK $3, 0x74, 0x02
+    BYTE_READBACK $3, 0x29, 0x03
     # Same deal, different offsets and read first the last address in the cache 
     # line. This'll catch some classes of errors in the tag invalidation logic.
-    BYTE_READBACK $6, $7, $3, 0x24, 0x133
-    BYTE_READBACK $6, $7, $3, 0x43, 0x131
-    BYTE_READBACK $6, $7, $3, 0x47, 0x132
-    BYTE_READBACK $6, $7, $3, 0x77, 0x130
+    BYTE_READBACK $3, 0x24, 0x133
+    BYTE_READBACK $3, 0x43, 0x131
+    BYTE_READBACK $3, 0x47, 0x132
+    BYTE_READBACK $3, 0x77, 0x130
     # Same again, only mixing different areas.
-    BYTE_READBACK $6, $7, $3, 0x24, 0x233
-    BYTE_READBACK $6, $7, $3, 0x43, 0x331
-    BYTE_READBACK $6, $7, $3, 0x47, 0x232
-    BYTE_READBACK $6, $7, $3, 0x77, 0x330
+    BYTE_READBACK $3, 0x24, 0x233
+    BYTE_READBACK $3, 0x43, 0x331
+    BYTE_READBACK $3, 0x47, 0x232
+    BYTE_READBACK $3, 0x77, 0x330
     
 dcache_end:    
     PRINT_RESULT

@@ -12,7 +12,7 @@ LINK_SCRIPT = $(SW_ROOT)/common/link/internal.lds
 
 # Code memory parameters -- Code TCM.
 CODE_MEM_START  = 0xbfc00000
-CODE_MEM_SIZE   = 4096
+CODE_MEM_SIZE   = 8192
 # Data memory parameters -- Data TCM.
 DATA_MEM_START  = 0x00000000
 DATA_MEM_SIZE   = 1024
