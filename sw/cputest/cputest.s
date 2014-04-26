@@ -159,20 +159,23 @@ init:
     ori     $28,$0,0            # Error count for the test in course. 
     ori     $30,$0,0            # Total error count.
     
-    
-    .ifgt   0
+    .ifle   TARGET_HARDWARE
     # Test access to debug registers over uncached data WB bridge.
 debug_regs:
     INIT_TEST msg_debug_regs
     la      $9,ADDR_DEBUG_REGS  #
     
     # Debug regs reset to zero; let's see if we can read them.
-    addi    $2,$0,-1            # Put some nonzero value in $2...
-    lw      $2,0($9)            # ...then read a zero from a debug reg.
-    beqz    $2,debug_regs_0     # If not zero, increment error count.
+    #addi    $2,$0,-1            # Put some nonzero value in $2...
+    #lw      $2,0($9)            # ...then read a zero from a debug reg.
+    #beqz    $2,debug_regs_0     # If not zero, increment error count.
+    #CMP     $3,$2,0x0
+    li      $2,0x12345678
+    sw      $2,0x0($9)
     nop
-    addi    $28,$28,1
-debug_regs_0:    
+    lw      $3,0x0($9)
+    CMP     $4,$3,0x12345678
+debug_regs_0:       
     PRINT_RESULT
     .endif
     

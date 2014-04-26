@@ -5,18 +5,21 @@ add wave -noupdate -divider Fetch
 add wave -noupdate -color Gold -format Literal -radix hexadecimal /ion_application_tb/mpu/core/cpu/p1_ir_reg
 add wave -noupdate -color Blue -format Literal -radix hexadecimal /ion_application_tb/mpu/core/cpu/p0_pc_reg
 add wave -noupdate -divider {Interconnect -- Code}
-add wave -noupdate -format Literal -radix hexadecimal -expand /ion_application_tb/mpu/core/tcm_code_present/code_arbiter/master_c_mosi_i
+add wave -noupdate -format Literal -radix hexadecimal /ion_application_tb/mpu/core/tcm_code_present/code_arbiter/master_c_mosi_i
 add wave -noupdate -format Literal -radix hexadecimal /ion_application_tb/mpu/core/tcm_code_present/code_arbiter/master_d_mosi_i
 add wave -noupdate -format Logic /ion_application_tb/mpu/core/tcm_code_present/code_arbiter/data_request
 add wave -noupdate -format Logic /ion_application_tb/mpu/core/tcm_code_present/code_arbiter/clash
-add wave -noupdate -format Literal -radix hexadecimal -expand /ion_application_tb/mpu/core/tcm_code_present/code_arbiter/master_c_miso_o
-add wave -noupdate -expand -group Code
+add wave -noupdate -format Literal -radix hexadecimal /ion_application_tb/mpu/core/tcm_code_present/code_arbiter/master_c_miso_o
+add wave -noupdate -group Code
 add wave -noupdate -group Code -format Literal -radix hexadecimal /ion_application_tb/mpu/core/code_mosi.addr
 add wave -noupdate -group Code -format Logic -radix hexadecimal /ion_application_tb/mpu/core/code_mosi.rd_en
 add wave -noupdate -group Code -format Literal -radix hexadecimal /ion_application_tb/mpu/core/code_mosi.wr_be
 add wave -noupdate -group Code -format Literal -radix hexadecimal /ion_application_tb/mpu/core/code_mosi.wr_data
 add wave -noupdate -group Code -format Literal -radix hexadecimal /ion_application_tb/mpu/core/code_miso.rd_data
 add wave -noupdate -group Code -format Logic -radix hexadecimal /ion_application_tb/mpu/core/code_miso.mwait
+add wave -noupdate -group {Code TCM -- D Bus}
+add wave -noupdate -group {Code TCM -- D Bus} -format Literal -radix hexadecimal /ion_application_tb/mpu/core/ctcm_d_miso.rd_data
+add wave -noupdate -group {Code TCM -- D Bus} -format Logic /ion_application_tb/mpu/core/ctcm_d_miso.mwait
 add wave -noupdate -expand -group Data
 add wave -noupdate -group Data -format Literal -radix hexadecimal /ion_application_tb/mpu/core/data_mosi.addr
 add wave -noupdate -group Data -format Logic /ion_application_tb/mpu/core/data_mosi.rd_en
@@ -24,9 +27,11 @@ add wave -noupdate -group Data -format Literal /ion_application_tb/mpu/core/data
 add wave -noupdate -group Data -format Literal -radix hexadecimal /ion_application_tb/mpu/core/data_mosi.wr_data
 add wave -noupdate -group Data -format Literal -radix hexadecimal /ion_application_tb/mpu/core/data_miso.rd_data
 add wave -noupdate -group Data -format Logic /ion_application_tb/mpu/core/data_miso.mwait
-add wave -noupdate -group {Code TCM -- D Bus}
-add wave -noupdate -group {Code TCM -- D Bus} -format Literal -radix hexadecimal /ion_application_tb/mpu/core/ctcm_d_miso.rd_data
-add wave -noupdate -group {Code TCM -- D Bus} -format Logic /ion_application_tb/mpu/core/ctcm_d_miso.mwait
+add wave -noupdate -divider {UC WB Bridge}
+add wave -noupdate -format Literal -radix hexadecimal -expand /ion_application_tb/mpu/core/data_wb_bridge/ion_mosi_i
+add wave -noupdate -format Literal -radix hexadecimal -expand /ion_application_tb/mpu/core/data_wb_bridge/ion_miso_o
+add wave -noupdate -format Literal -radix hexadecimal -expand /ion_application_tb/mpu/core/data_wb_bridge/wishbone_mosi_o
+add wave -noupdate -format Literal -radix hexadecimal -expand /ion_application_tb/mpu/core/data_wb_bridge/wishbone_miso_i
 add wave -noupdate -divider D-Cache
 add wave -noupdate -format Logic /ion_application_tb/mpu/core/data_cache_present/data_cache/ce_i
 add wave -noupdate -format Logic /ion_application_tb/mpu/core/data_cache_present/data_cache/miss
@@ -50,7 +55,7 @@ add wave -noupdate -group SRAM -format Logic /ion_application_tb/sram_wen
 add wave -noupdate -group SRAM -format Literal -radix hexadecimal /ion_application_tb/sram_addr
 add wave -noupdate -group SRAM -format Literal -radix hexadecimal /ion_application_tb/sram_data
 TreeUpdate [SetDefaultTree]
-WaveRestoreCursors {{Cursor 1} {27130000 ps} 0}
+WaveRestoreCursors {{Cursor 1} {9430000 ps} 0}
 configure wave -namecolwidth 150
 configure wave -valuecolwidth 100
 configure wave -justifyvalue left
@@ -64,4 +69,4 @@ configure wave -gridperiod 1000
 configure wave -griddelta 40
 configure wave -timeline 0
 update
-WaveRestoreZoom {27022479 ps} {27306666 ps}
+WaveRestoreZoom {9377320 ps} {9589511 ps}

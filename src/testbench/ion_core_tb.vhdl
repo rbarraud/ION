@@ -111,7 +111,7 @@ type t_ram_table is array(natural range <>) of t_word;
 shared variable ram :       t_ram_table(0 to 4095);
 
 --------------------------------------------------------------------------------
--- Memory refill ports.
+-- Uncached data WB bridge.
 
 -- Wait states simulated by uncached WB port (elements used in succession).
 constant UNCACHED_WS : t_natural_table (0 to 3) := (4,1,3,2);
@@ -303,10 +303,11 @@ begin
                     if data_uc_wb_mosi.we = '1' then 
                         -- Write access: do the simulated write.
                         -- FIXME simulate write to debug reg
+                        debug_regs(0) := data_uc_wb_mosi.dat;
                     else
                         -- Read access: simulate read & WB slave multiplexor.
                         -- FIXME simulate read from debug reg
-                        data_uc_wb_miso.dat <= (others => '0');
+                        data_uc_wb_miso.dat <= debug_regs(0);
                     end if;
                 end if;
             else
