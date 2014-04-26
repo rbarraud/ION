@@ -37,6 +37,8 @@ subtype t_word is std_logic_vector(31 downto 0);
 type t_wishbone_mosi is record
     adr :               t_word; -- Address bus
     dat :               t_word; -- Write data bus
+    -- Byte lane selection. 3 is MSB, 0 is LSB.
+    sel :               std_logic_vector(3 downto 0);
 	-- Address tag type, contains information associated with the address bus
     tga :               std_logic_vector(3 downto 0);
 	-- write enable, indicates if the current local bus cycle is a READ or WRITE
