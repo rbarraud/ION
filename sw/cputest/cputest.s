@@ -29,6 +29,7 @@
     #-- Set flags below to >0 to enable/disable test assembly ------------------
 
    
+    .set TARGET_HARDWARE, 1                 # Don't use simulation-only features
     .set TEST_DCACHE, 1                     # Initialize and test D-Cache
     
     # FIXME these values should be read from COP0 register!
@@ -159,7 +160,7 @@ init:
     ori     $30,$0,0            # Total error count.
     
     
-    .ifgt   1
+    .ifgt   0
     # Test access to debug registers over uncached data WB bridge.
 debug_regs:
     INIT_TEST msg_debug_regs
@@ -209,19 +210,53 @@ cache_init_0:
     # First, read a few hardcoded values from the test ROM area.
     # (This is a fake ROM which only exists in the SW simulator and in the 
     # core test bench.)
+    .ifle   TARGET_HARDWARE
     li      $5,0x90000000       # $5 points to base of test pattern ROM.
     lw      $4,0x04($5)         # Ok, get a couple of words...
     lw      $6,0x08($5)         
     CMP     $20,$6,0x00080008   # ...and see if we got what we expected.
     CMP     $20,$4,0x00040004
     nop
+    .endif
     # Now do a write-read test on cached RAM (also simulated in swsin and TB).
     li      $3,0x80000000       # $3 points to base of cached RAM.
     li      $6,0x18026809 
     sw      $6,0x08($3)         # Store test pattern...
     nop     # FIXME back to back SW/LW fails!
     lw      $7,0x08($3)         # ...and see if we can read it back.
-    CMPR    $6,$7   
+    CMPR    $6,$7
+    NOP
+    # Now, store a test byte and read it back. Repeat a few times with 
+    # different byte alignments. We'll want a macro to do this comfortably:
+    .macro  BYTE_READBACK r1, r2, r3, bexp, off
+    li      \r1,\bexp
+    sb      \r1,\off(\r3)
+    nop     # FIXME back to back SW/LW fails!
+    lb      \r2,\off(\r3)
+    addi    \r2,-\bexp
+    beqz    \r2,1100f
+    nop
+    addi    $28,$28,1
+    1100:
+    .endm
+    # Ok, we'll try first the same cached area we've been using for word tests.
+    # Alignment 0 to 3
+    BYTE_READBACK $6, $7, $3, 0x42, 0x00
+    BYTE_READBACK $6, $7, $3, 0x34, 0x01
+    BYTE_READBACK $6, $7, $3, 0x74, 0x02
+    BYTE_READBACK $6, $7, $3, 0x29, 0x03
+    # Same deal, different offsets and read first the last address in the cache 
+    # line. This'll catch some classes of errors in the tag invalidation logic.
+    BYTE_READBACK $6, $7, $3, 0x24, 0x133
+    BYTE_READBACK $6, $7, $3, 0x43, 0x131
+    BYTE_READBACK $6, $7, $3, 0x47, 0x132
+    BYTE_READBACK $6, $7, $3, 0x77, 0x130
+    # Same again, only mixing different areas.
+    BYTE_READBACK $6, $7, $3, 0x24, 0x233
+    BYTE_READBACK $6, $7, $3, 0x43, 0x331
+    BYTE_READBACK $6, $7, $3, 0x47, 0x232
+    BYTE_READBACK $6, $7, $3, 0x77, 0x330
+    
 dcache_end:    
     PRINT_RESULT
     .endif
