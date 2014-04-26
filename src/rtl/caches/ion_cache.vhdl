@@ -11,6 +11,11 @@
 --      except when REFILL.
 --      Remember our "Store Tag" implementation uses a hardwired zero TagLo.
 --
+-- @ note2:
+--      In the first clock cycle of all write accesses, the addressed line 
+--      is invalidated. The CPU address is only valid in this cycle so we
+--      do it right now and save a register and a mux.
+--
 -- REFERENCES
 -- [1] ion_design_notes.pdf -- ION project design notes.
 --------------------------------------------------------------------------------
@@ -178,6 +183,7 @@ begin
         end if;
     end process;
  
+    -- Assert update_tag for special CACHE instructions only.
     update_tag <= '1' when 
         CACHE_CTRL_MOSI_I.data_cache = '1' and -- FIXME I/D
         CACHE_CTRL_MOSI_I.function_en = '1'
@@ -209,7 +215,6 @@ begin
     -- When REFILL, set valid flag. Otherwise reset it.
     with ps select new_valid_flag <= 
         '1' when        REFILL,
-        '1' when        WRITETHROUGH,
         '0' when        others; -- see @note1
   
     
@@ -346,7 +351,7 @@ begin
 
     tag_table_we <= 
         '1' when ps = REFILL and MEM_MISO_I.ack = '1' and refill_ctr="001" else
-        '1' when ps = WRITETHROUGH and MEM_MISO_I.stall = '0' else
+        '1' when ps = HIT and CPU_MOSI_I.wr_be/="0000" else -- see @note2
         '1' when update_tag = '1' else -- see @note1
         '0';
 
@@ -362,7 +367,8 @@ begin
     MEM_MOSI_O.stb <= '1' when (ps = REFILL or ps = WRITETHROUGH) else '0';
     MEM_MOSI_O.cyc <= '1' when (ps = REFILL or ps = WRITETHROUGH) else '0';
     MEM_MOSI_O.we <= '1' when ps = WRITETHROUGH else '0';
-    MEM_MOSI_O.tga <= wr_be_reg;
+    MEM_MOSI_O.tga <= "0000"; -- FIXME tag use unspecified yet
+    MEM_MOSI_O.sel <= wr_be_reg;
     
     
     -- FIXME refactor cache control interface.
