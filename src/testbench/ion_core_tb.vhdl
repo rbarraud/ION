@@ -86,6 +86,9 @@ constant T : time               := (1.0e9/real(CLOCK_RATE)) * 1 ns;
 signal clk :                std_logic := '0';
 signal reset :              std_logic := '1';
 
+signal code_wb_mosi :       t_wishbone_mosi;
+signal code_wb_miso :       t_wishbone_miso;
+
 signal data_wb_mosi :       t_wishbone_mosi;
 signal data_wb_miso :       t_wishbone_miso;
 
@@ -109,6 +112,11 @@ signal data_address :       t_word;
 
 type t_ram_table is array(natural range <>) of t_word;
 shared variable ram :       t_ram_table(0 to 4095);
+
+signal code_wait_ctr :      natural;
+signal code_cycle_count :   natural := 0;
+signal code_address :       t_word;
+
 
 --------------------------------------------------------------------------------
 -- Uncached data WB bridge.
@@ -148,12 +156,16 @@ begin
         TCM_CODE_INIT =>        OBJ_CODE,
         TCM_DATA_SIZE =>        DATA_MEM_SIZE,
         
+        CODE_CACHE_LINES =>     128,
         DATA_CACHE_LINES =>     128
     )
     port map (
         CLK_I               => clk,
         RESET_I             => reset, 
 
+        CODE_WB_MOSI_O      => code_wb_mosi,
+        CODE_WB_MISO_I      => code_wb_miso,
+        
         DATA_WB_MOSI_O      => data_wb_mosi,
         DATA_WB_MISO_I      => data_wb_miso,
         
@@ -275,6 +287,71 @@ begin
         '1' when data_wb_mosi.stb = '1' and data_wait_ctr > 0 else
         '0';
 
+    -- Code refill port interface ----------------------------------------------
+    
+    -- We do the same as for the data refill port, except we don't need to 
+    -- support write cycles here.
+    -- the memory we will be reading is the same as the data bus -- no need to 
+    -- simulate any arbitration.
+    -- Also, there's no test pattern ROM in this bus.
+    
+    code_refill_port:
+    process(clk)
+    begin
+        if clk'event and clk='1' then
+            if reset = '1' then
+                code_wait_ctr <= DATA_WS((code_cycle_count) mod DATA_WS'length);
+                code_wb_miso.ack <= '0';
+                code_wb_miso.dat <= (others => '1');
+                code_address <= (others => '0');
+            elsif code_wb_mosi.stb = '1' then
+                if code_wait_ctr > 0 then 
+                    -- Access in progress, decrement wait counter...
+                    code_wait_ctr <= code_wait_ctr - 1;
+                    code_wb_miso.ack <= '0';
+                    code_address <= code_wb_mosi.adr;
+                else 
+                    -- Access finished, wait counter reached zero.
+                    -- Prepare the wait counter for the next access...
+                    code_wait_ctr <= DATA_WS((code_cycle_count+1) mod DATA_WS'length);
+                    -- ...and drive the slave WB bus.
+                    code_wb_miso.ack <= '1';
+                    -- We will ignore write accesses on this bus. 
+                    -- (We are already asserting that there aren't any anyway.)
+                    -- FIXME add assertion
+                    if data_wb_mosi.we = '0' then 
+                        -- Read access: simulate read & WB slave multiplexor.
+                        if code_address(31 downto 28) = X"8" then
+                            -- Simulated RAM.
+                            code_wb_miso.dat <= ram(conv_integer(code_address(13 downto 2)));
+                        else 
+                            -- Cached, unmapped area: read zeros.
+                            -- TODO should raise some sort of alert.
+                            code_wb_miso.dat <= (others => '0');
+                        end if;
+                    end if;
+                end if;
+            else
+                -- No WB access is going on: restore the wait counter to its 
+                -- idle state and deassert ACK.
+                code_wait_ctr <= DATA_WS((code_cycle_count) mod DATA_WS'length);
+                code_wb_miso.ack <= '0';
+            end if;
+            
+            -- Keep track of how many accesses we have performed. 
+            -- We use this to select a number of wait states from a table.
+            if code_wb_mosi.stb = '1' and code_wait_ctr = 0 then
+                code_cycle_count <= code_cycle_count + 1;
+            end if;
+            
+        end if;
+    end process code_refill_port;
+    
+    -- stall the WB bus as long as the wait counter is not zero.
+    code_wb_miso.stall <= 
+        '1' when code_wb_mosi.stb = '1' and code_wait_ctr > 0 else
+        '0';
+        
 
     -- Uncached WB port --------------------------------------------------------
     

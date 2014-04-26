@@ -280,6 +280,37 @@ dcache_end:
     PRINT_RESULT
     .endif
     
+    # Test code cache minimally.
+    # (We're gonna execute only a few instructions off the cache.)
+icache:
+    INIT_TEST msg_icache
+
+    # Initialize the CODE cache with CACHE Hit Invalidate instructions.
+icache_init:
+    li      $9,0x80000000
+    li      $8,128              # FIXME number of tags hardcoded!
+icache_init_0:
+    cache   IndexStoreTagI,0x0($9)
+    addi    $8,$8,-1
+    bnez    $8,icache_init_0
+    addi    $9,$9,0x04
+
+    # First, we write a single "JR RA" (a return) instruction at the start of
+    # the cached RAM, and jump to it. 
+    # Failure in this test will crash the program, of course.
+    li      $3,0x03e00008       
+    sw      $3,0x0($9)
+    sw      $0,0x4($9)
+    nop
+    jalr    $9
+    nop
+    # Now we should copy a chunk of position independent code onto RAM and call
+    # it; that test will have to wait FIXME write it.
+    
+icache_0:    
+    PRINT_RESULT    
+    
+    
     # Add/Sub instructions: add, addi, sub, subi.
 arith:
     INIT_TEST msg_arith
@@ -417,6 +448,7 @@ msg_program_pass:       .asciiz     "\nTest PASSED\n\n"
 msg_program_fail:       .asciiz     "\nTest FAILED\n\n"
 
 msg_dcache:             .asciiz     "Data Cache basic test........ "
+msg_icache:             .asciiz     "Code Cache basic test........ "
 msg_debug_regs:         .asciiz     "Access to debug registers.... "
 msg_interlock:          .asciiz     "Load interlocks.............. "
 msg_arith:              .asciiz     "Add*/Sub* opcodes............ "

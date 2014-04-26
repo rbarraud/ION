@@ -43,7 +43,7 @@ use ieee.std_logic_unsigned.all;
 use work.ION_INTERFACES_PKG.all;
 use work.ION_INTERNAL_PKG.all;
 
---use work.OBJ_CODE_PKG.all;
+use work.OBJ_CODE_PKG.all;
 
 entity ion_core is
     generic(
@@ -51,8 +51,8 @@ entity ion_core is
         -- Set to a power of 2 or to zero to disable code TCM.
         TCM_CODE_SIZE : integer := 2048;
         -- Contents of code TCM.
-        TCM_CODE_INIT : t_obj_code := zero_objcode(2048);
-        --TCM_CODE_INIT : t_obj_code := OBJ_CODE;
+        --TCM_CODE_INIT : t_obj_code := zero_objcode(2048);
+        TCM_CODE_INIT : t_obj_code := OBJ_CODE;
         
         -- Size of data TCM block in bytes.
         -- Set to a power of 2 or to zero to disable data TCM.
@@ -62,10 +62,10 @@ entity ion_core is
         
         -- Size of data cache in lines. 
         -- Set to a power of 2 or 0 to disable the data cache.
-        DATA_CACHE_LINES : integer := 0;
+        DATA_CACHE_LINES : integer := 128;
         -- Size of code cache in lines. 
         -- Set to a power of 2 or 0 to disable the code cache.
-        CODE_CACHE_LINES : integer := 0;
+        CODE_CACHE_LINES : integer := 128;
         
         -- Type of memory to be used for register bank in xilinx HW
         XILINX_REGBANK  : string    := "distributed" -- {distributed|block}
@@ -74,12 +74,13 @@ entity ion_core is
         CLK_I               : in std_logic;
         RESET_I             : in std_logic;
 
+        -- Code cache refill port.
+        CODE_WB_MOSI_O      : out t_wishbone_mosi;
+        CODE_WB_MISO_I      : in t_wishbone_miso;
+
         -- Data cache refill port.
         DATA_WB_MOSI_O      : out t_wishbone_mosi;
         DATA_WB_MISO_I      : in t_wishbone_miso;
-        
-        -- FIXME code cache refill ports missing
-        -- FIXME uncached wishbone ports missing
         
         -- Uncached data WB bridge port.
         DATA_UC_WB_MOSI_O   : out t_wishbone_mosi;
@@ -113,7 +114,6 @@ signal code_ce :            std_logic_vector(1 downto 0);
 
 -- Instruction Cache MISO bus & enable signal.
 signal icache_miso :        t_cpumem_miso;
-signal icache_ce :          std_logic;
 
 -- Code TCM MISO bus & enable signal.
 signal ctcm_c_miso :        t_cpumem_miso;
@@ -216,8 +216,6 @@ begin
         IRQ_I               => IRQ_I
     );
 
-    -- FIXME cache control interface to be refactored.
-    cache_ctrl_miso.ready <= '1';    
         
 --------------------------------------------------------------------------------
 -- Code Bus interconnect.
@@ -267,18 +265,36 @@ begin
     code_cache_present:
     if CODE_CACHE_LINES > 0 generate
 
-        assert 1=0
-        report "Code cache unimplemented, set CODE_CACHE_SIZE => 0."
-        severity failure;
+        code_cache: entity work.ION_CACHE 
+        generic map (
+            NUM_LINES => CODE_CACHE_LINES
+        )
+        port map (
+            CLK_I               => CLK_I,
+            RESET_I             => RESET_I,
+
+            -- FIXME there should be a MISO for each cache in the control port
+            CACHE_CTRL_MOSI_I   => cache_ctrl_mosi,
+            CACHE_CTRL_MISO_O   => OPEN,
+            
+            CE_I                => code_ce(1),
+            CPU_MOSI_I          => code_mosi,
+            CPU_MISO_O          => icache_miso,
+            
+            MEM_MOSI_O          => CODE_WB_MOSI_O,
+            MEM_MISO_I          => CODE_WB_MISO_I
+        );
         
     end generate code_cache_present;
 
     code_cache_missing:
     if CODE_CACHE_LINES = 0 generate
 
-        -- FIXME code cache missing.
         icache_miso.mwait <= '0';
         icache_miso.rd_data <= (others => '0');
+        
+        CODE_WB_MOSI_O.cyc <= '0';
+        CODE_WB_MOSI_O.stb <= '0';
         
     end generate code_cache_missing;
 
@@ -407,6 +423,9 @@ begin
 
         dcache_miso.mwait <= '0';
         dcache_miso.rd_data <= (others => '0');
+        
+        DATA_WB_MOSI_O.cyc <= '0';
+        DATA_WB_MOSI_O.stb <= '0';
         
     end generate data_cache_missing;
 

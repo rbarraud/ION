@@ -109,6 +109,7 @@ type t_tag_table is array(0 to NUM_LINES-1) of t_tag;
 signal tag_table :          t_tag_table; -- := (others => '1' & X"90000");
 -- Signals used to access the tag table.
 signal tag :                t_tag_address;
+signal tag_reg :            t_tag_address;
 signal cached_tag_addr :    t_tag_address;
 signal line_index :         t_index;
 signal line_address :       t_line_address;
@@ -163,7 +164,7 @@ begin
     CPU_MISO_O.mwait <=
         '1' when ps = REFILL else
         '1' when ps = REFILL_LAST_WORD else 
-        '1' when ps = HIT and miss = '1' else
+        '1' when ps = HIT and miss = '1' else -- !!
         '1' when ps = HIT and read_pending = '1' else -- see @note3
         '1' when ps = WRITETHROUGH else
         '0';
@@ -203,6 +204,7 @@ begin
 
     -- Extract all relevand fields from incoming CPU address.
     tag <= CPU_MOSI_I.addr(31 downto LINE_ADDRESS_WIDTH+2);
+    tag_reg <= addr_reg(31 downto LINE_ADDRESS_WIDTH+2);
     line_index <= CPU_MOSI_I.addr(LINE_ADDRESS_WIDTH+1 downto LINE_OFFSET_WIDTH + 2);
     line_address <= CPU_MOSI_I.addr(LINE_ADDRESS_WIDTH+1 downto 2);
  
@@ -230,7 +232,7 @@ begin
     
     -- The miss signal needs only be valid in the "HIT" state.
     miss <= 
-        '1' when ((cached_tag_addr /= tag) or 
+        '1' when ((cached_tag_addr /= tag_reg) or 
                   (cached_tag_valid = '0')) and 
             lookup_reg = '1'
         else '0';

@@ -123,7 +123,8 @@ begin
         
         SRAM_SIZE =>            SRAM_SIZE,
         
-        DATA_CACHE_LINES =>     128
+        DATA_CACHE_LINES =>     128,
+        CODE_CACHE_LINES =>     128
     )
     port map (
         CLK_I               => clk,
