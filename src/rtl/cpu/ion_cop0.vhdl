@@ -252,6 +252,7 @@ privileged <= not ((not sr_reg.erl) and (not sr_reg.exl) and sr_reg.um);
 -- logic need to be valid only in that case.
 cause_exc_code <= 
     "00000" when CPU_I.exception='0' else
+    "00000" when CPU_I.hw_irq='1' else
     "01010" when CPU_I.unknown_opcode='1' else      -- bad opcode ('reserved')
     -- this triggers for mtc0/mfc0 in user mode too
     "01011" when CPU_I.missing_cop='1' else         -- CP* unavailable
