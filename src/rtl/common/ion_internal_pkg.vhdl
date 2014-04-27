@@ -77,6 +77,7 @@ type t_cop0_mosi is record
     in_delay_slot :     std_logic;
     pipeline_stalled :  std_logic;
     exception :         std_logic;
+    hw_irq :            std_logic;
     eret :              std_logic;
     rfe :               std_logic;
     unknown_opcode :    std_logic;

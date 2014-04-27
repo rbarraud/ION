@@ -191,6 +191,10 @@ signal p1_muldiv_stall :    std_logic;
 
 signal p1_unknown_opcode :  std_logic;
 signal p1_cp_unavailable :  std_logic;
+signal p1_hw_irq :          std_logic; 
+signal p1_hw_irq_pending :  std_logic; 
+signal p1_delay_hw_irq :    std_logic;
+signal p0_irq_reg :         std_logic_vector(7 downto 0);
 
 --------------------------------------------------------------------------------
 -- Pipeline stage 2
@@ -540,6 +544,7 @@ begin
             -- that case, it the instruction preceding the victim.
             -- I.e. all as per the mips32r2 specs.
             cp0_mosi.pc_restart <= p0_pc_next_exceptions;
+            -- FIXME move this logic out of the if; must work after pc_load_en
             if (p1_jump_type="00" or p0_jump_cond_value='0') then 
                 -- remember if we are in delay slot, in case there's a trap
                 cp0_mosi.in_delay_slot <= '0'; -- NOT in a delay slot
@@ -686,7 +691,8 @@ with p1_jump_cond_sel select p0_jump_cond_value <=
 p1_exception <= '1' when 
     (p1_op_special='1' and p1_ir_reg(5 downto 1)="00110") or -- syscall/break
     p1_unknown_opcode='1' or
-    p1_cp_unavailable='1'
+    p1_cp_unavailable='1' or
+    p1_hw_irq='1' 
     else '0';
 
 -- Decode MTC0/MFC0 instructions (see @note3)
@@ -907,6 +913,44 @@ p1_cp_unavailable <= '1' when
                      and cp0_miso.kernel='0') -- COP0 user mode
     -- FIXME CP1..3 logic missing
     else '0';
+
+
+--##############################################################################
+-- HW interrupt interface.
+
+-- Register incoming IRQ lines and keep track of a pending but not yet 
+-- acknowledged HW interrupt.
+interrupt_registers:
+process(CLK_I)
+begin
+    if CLK_I'event and CLK_I='1' then
+        if RESET_I='1' then
+            p0_irq_reg <= (others => '0');
+        else
+            p0_irq_reg <= IRQ_I;
+            
+            if IRQ_I/=X"00" and p0_irq_reg=X"00" then
+                -- Raise the IRQ pending flag when any IRQ input is raised...
+                p1_hw_irq_pending <= '1';
+            elsif p1_delay_hw_irq='0' then
+                -- ...and clear it when it is acknowledged.
+                p1_hw_irq_pending <= '0';
+            end if;
+        end if;
+    end if;
+end process interrupt_registers;
+
+-- HW interrupts will not be acknowledged (i.e. will be delayed) in certain 
+-- circumstances (see @note5):
+-- FIXME this may not be acceptable in the final version of the core.
+p1_delay_hw_irq <= 
+    '1' when p1_jump_type(1)='1' else   -- In a delay slot.
+    '0';
+    
+-- Acknowledge (i.e. pass on to COP0) HW interrupt if the delay conditions 
+-- are false.
+p1_hw_irq <= '0' when p1_delay_hw_irq='1' else p1_hw_irq_pending;
+
     
 --##############################################################################
 -- Pipeline registers & pipeline control logic
@@ -1129,6 +1173,7 @@ cp0_mosi.we <= p1_set_cp0;
 cp0_mosi.data <= p1_rt;
 cp0_mosi.pipeline_stalled <= pipeline_stalled;
 cp0_mosi.exception <= p1_exception;
+cp0_mosi.hw_irq <= p1_hw_irq;
 cp0_mosi.rfe <= p1_rfe;
 cp0_mosi.eret <= p1_eret;
 cp0_mosi.unknown_opcode <= p1_unknown_opcode;
@@ -1183,4 +1228,12 @@ end architecture rtl;
 -- and that means it needs to be valid from the deassertion of code_miso.mwait
 -- to the edge after code_mosi.addr changes. See {[2], sec. ?}.
 --
+-- @note5:
+-- The fact that an interrupt will be delayed when it hits a delay slot means 
+-- that, at least formally, interrupt response time in non deterministic and 
+-- even unbounded. But if your code consists mostly of delay slots I guess you 
+-- have worse problems than that anyway...
+-- Note that even the worst common case (two-instruction infinite loop) can be 
+-- interrupted with this scheme. It is fringe cases like jump-only loops that 
+-- will result in uninterruptible code.
 --------------------------------------------------------------------------------

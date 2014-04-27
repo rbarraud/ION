@@ -43,16 +43,13 @@ use ieee.std_logic_unsigned.all;
 use work.ION_INTERFACES_PKG.all;
 use work.ION_INTERNAL_PKG.all;
 
-use work.OBJ_CODE_PKG.all;
-
 entity ion_core is
     generic(
         -- Size of code TCM block in bytes. 
         -- Set to a power of 2 or to zero to disable code TCM.
         TCM_CODE_SIZE : integer := 2048;
         -- Contents of code TCM.
-        --TCM_CODE_INIT : t_obj_code := zero_objcode(2048);
-        TCM_CODE_INIT : t_obj_code := OBJ_CODE;
+        TCM_CODE_INIT : t_obj_code := zero_objcode(2048);
         
         -- Size of data TCM block in bytes.
         -- Set to a power of 2 or to zero to disable data TCM.
