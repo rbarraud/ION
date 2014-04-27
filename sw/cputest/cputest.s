@@ -62,10 +62,15 @@
     
     #-- Core addresses ---------------------------------------------------------
     
-    # Address of debug register block (16 word registers addressable as bytes).
-    # These regs are implemented in sw simulator and simulation test bench.
-    .set ADDR_DEBUG_REGS, 0xffff0200
-    
+    # TB registers. These are only available in the SW simulator and in the 
+    # RTL simulation test bench, not on real hardware.
+
+    # Simulated UART TX buffer register.
+    .set TB_UART_TX,        0xffff8000    
+    # Block of 4 32-bit byte-addressable registers.
+    .set TB_DEBUG,          0xffff8020
+    # Register connected to HW interrupt lines.
+    .set TB_HW_IRQ,         0xffff8010
     
     #-- Utility macros ---------------------------------------------------------
 
@@ -148,22 +153,63 @@ entry:
     .org    0x0180
     
 interrupt_vector:
+    mfc0    $27,$13             # Get trap cause code into $27
+    srl     $27,$27,2
+    andi    $27,$27,0x01f
+    li      $26,0x2901
+    move    $25,$24
     eret
     nop
     
 
 init:
+
+    # Clear ERL bit from SR, otherwise we can't handle exceptions.
+    mfc0    $k0,$12
+    li      $k1,0xfffffffb
+    and     $k0,$k0,$k1
+    mtc0    $k0,$12
+
+    # Display a welcome message. Remember all output is line buffered!
     PUTS    msg_welcome
     
     # Reset error counters.
     ori     $28,$0,0            # Error count for the test in course. 
     ori     $30,$0,0            # Total error count.
     
+    
+    # Test BREAK and SYSCALL opcodes. Remember we're in user mode.
+break_syscall:
+    INIT_TEST msg_break_syscall
+    
+    .macro  TRAP_OP op, code
+    li      $24,0x42
+    li      $25,0x99
+    \op
+    addi    $24,$0,1
+    CMP     $23,$25,0x42
+    CMP     $23,$26,0x2901
+    CMP     $23,$27,\code
+    .endm
+    
+    TRAP_OP break, 0x09
+    TRAP_OP "syscall 0", 0x08
+    
+break_syscall_0:
+    PRINT_RESULT
+    
+    # FIXME test HW interrupts
+    #la      $9,TB_HW_IRQ
+    #li      $2,0x42
+    #sb      $2,0($9)
+    
+    
+    
     .ifle   TARGET_HARDWARE
     # Test access to debug registers over uncached data WB bridge.
 debug_regs:
     INIT_TEST msg_debug_regs
-    la      $9,ADDR_DEBUG_REGS  #
+    la      $9,TB_DEBUG          # Base of debug register block.
     
     # Debug regs reset to zero; let's see if we can read them.
     #addi    $2,$0,-1            # Put some nonzero value in $2...
@@ -426,7 +472,7 @@ cputest_fail:
 
  
  puts:
-    li      $a1,0xffff0000
+    li      $a1,TB_UART_TX
  puts_loop:
     lb      $v0,0($a0)
     beqz    $v0,puts_end
@@ -454,7 +500,7 @@ msg_interlock:          .asciiz     "Load interlocks.............. "
 msg_arith:              .asciiz     "Add*/Sub* opcodes............ "
 msg_logic:              .asciiz     "Logic opcodes................ "
 msg_muldiv:             .asciiz     "Mul*/Div* opcodes............ "
-
+msg_break_syscall:      .asciiz     "Break/Syscall opcodes........ "
 
     .end entry
  
