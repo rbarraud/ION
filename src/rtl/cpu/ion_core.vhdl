@@ -83,7 +83,7 @@ entity ion_core is
         DATA_UC_WB_MOSI_O   : out t_wishbone_mosi;
         DATA_UC_WB_MISO_I   : in t_wishbone_miso;
         
-        IRQ_I               : in std_logic_vector(7 downto 0)
+        IRQ_I               : in std_logic_vector(5 downto 0)
     );
 end; --entity ion_cpu
 

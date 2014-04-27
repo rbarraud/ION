@@ -58,13 +58,14 @@ type t_sr_reg is record
     erl :                   std_logic;
     exl :                   std_logic;
     ie :                    std_logic;
+    im :                    std_logic_vector(7 downto 0);
 end record;
 
 -- CP0[12]: status register flags.
 signal sr_reg :             t_sr_reg;
 signal sr_reg_mtc0 :        t_sr_reg;
 
-signal cp0_status :         std_logic_vector(4 downto 0);
+signal cp0_status :         std_logic_vector(15 downto 0);
 
 signal cp0_cache_control_d :  std_logic_vector(17 downto 16);
 
@@ -104,6 +105,7 @@ begin
             sr_reg.erl <= '1'; -- Error level: Reset
             sr_reg.exl <= '0'; -- Exception level: None
             sr_reg.ie <= '0'; -- Interrupt Enable: No
+            sr_reg.im <= (others => '0');
             -- Other CP0 register resets.
             cp0_cache_control <= "00";
             cause_exc_code_reg <= "00000";
@@ -183,6 +185,7 @@ begin
                     sr_reg_mtc0.um <= CPU_I.data(4);
                     sr_reg_mtc0.bev <= CPU_I.data(22);
                     cp0_cache_control_d <= CPU_I.data(17 downto 16);
+                    sr_reg_mtc0.im <= CPU_I.data(15 downto 8);
                 else 
                     cp0_we_delayed <= '0';
                 end if;
@@ -266,20 +269,23 @@ CPU_O.idcache_enable <= cp0_cache_control(17);
 CPU_O.icache_invalidate <= cp0_cache_control(16);
 CPU_O.kernel <= privileged;
 CPU_O.pc_load_en <= pc_load_en_reg;
+CPU_O.hw_irq_enable_mask <= sr_reg.im(7 downto 2);
 CPU_O.pc_load_value <= vector_reg when CPU_I.eret='0' else epc_reg; -- FIXME @hack5
 
 
 --#### Read register mux #######################################################
 
 -- Build up the READ registers from the bits and pieces that make them up.
-cp0_status <= sr_reg.um & '0' & sr_reg.erl & sr_reg.exl & sr_reg.ie;
+cp0_status <= 
+    sr_reg.im & "000" &
+    sr_reg.um & '0' & sr_reg.erl & sr_reg.exl & sr_reg.ie;
 cp0_cause_ce <= "00"; -- FIXME CP* traps merged with unimplemented opcode traps
 cp0_cause <= cause_bd_reg & '0' & cp0_cause_ce & 
              X"00000" & '0' & cause_exc_code_reg & "00";
 
 -- FIXME the mux should mask to zero for any unused reg index
 with CPU_I.index select CPU_O.data <=
-    X"00" & "0" & sr_reg.bev & X"0000" & "0" & cp0_status   when "01100",
+    X"00" & "0" & sr_reg.bev & "000000" & cp0_status        when "01100",
     cp0_cause                                               when "01101",
     epc_reg & "00"                                          when others;
 

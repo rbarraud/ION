@@ -90,6 +90,7 @@ type t_cop0_miso is record
     data :              t_word;
     pc_load_en :        std_logic;
     pc_load_value :     t_pc;
+    hw_irq_enable_mask: std_logic_vector(5 downto 0);
     kernel :            std_logic;
     idcache_enable :    std_logic;
     icache_invalidate : std_logic;

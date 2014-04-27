@@ -745,7 +745,7 @@ void mem_write(t_state *s, int size, unsigned address, unsigned value, int log){
         return;
     case TB_HW_IRQ:
         /* HW interrupt trigger register */
-        s->t.irq_trigger_countdown = 5;
+        s->t.irq_trigger_countdown = 3;
         s->t.irq_trigger_inputs = value;
         return;
     case IRQ_MASK:
@@ -1012,12 +1012,15 @@ void process_traps(t_state *s, uint32_t epc, uint32_t rSave, uint32_t rt){
     else{
         /* If there's any hardware interrupt pending, deal with it */
         if(s->t.irq_trigger_countdown==0){
+            uint32_t mask;
+            // FIXME should delay if victim instruction is in delay slot
             /* trigger interrupt IF it is not masked */
-            /* FIXME masks to be implemented */
-            s->t.irq_current_inputs = s->t.irq_trigger_inputs;
+            mask = (s->cp0_status >> (8+2) & 0x3f);
+            s->t.irq_current_inputs = (s->t.irq_trigger_inputs & mask);
             s->t.irq_trigger_inputs = 0;
+            printf("MASK = %02x\n", mask);
+            printf("Z    = %02x\n", s->t.irq_current_inputs);
             if (s->t.irq_current_inputs != 0) {
-                printf(">>>>>>>>>>>>\n");
                 cause = 0; /* cause = hardware interrupt */
             }
             s->t.irq_trigger_countdown--;
@@ -1970,7 +1973,7 @@ uint32_t log_cycle(t_state *s){
         // We update the register after checking for a change (above), so the
         // logged value will be correct.
         if (s->sr_load_pending) {
-            s->cp0_status = s->sr_load_pending_value & 0xf048fe17;
+            s->cp0_status = s->sr_load_pending_value & 0xf048ff17;
             s->sr_load_pending = false;
         }
 

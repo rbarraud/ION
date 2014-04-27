@@ -68,7 +68,7 @@ type t_log_info is record
     epc_reg :               t_pc;
     prev_epc :              t_pc;
     sr_bev_reg :            std_logic;
-    cp0_status :            std_logic_vector(4 downto 0);
+    cp0_status :            std_logic_vector(15 downto 0);
     cp0_cache_control :     std_logic_vector(1 downto 0);
     prev_status :           t_word;
     p1_set_cp0 :            std_logic;
@@ -120,7 +120,7 @@ type t_log_info is record
     debug :                 t_word;
     
     -- Meant to be connected to the CPU IRQ lines in the TB.
-    hw_irq :                std_logic_vector(7 downto 0);
+    hw_irq :                std_logic_vector(5 downto 0);
     
     -- Console log line buffer --------------------------------------
     con_line_buf :         string(1 to CONSOLE_LOG_LINE_SIZE);
@@ -299,8 +299,7 @@ begin
         end if;
         
         -- Build SR from separate CPU signals
-        temp := X"00" & "0" & info.sr_bev_reg & X"0000" & "0" &
-                info.cp0_status;
+        temp := X"00" & "0" & info.sr_bev_reg & "000000" & info.cp0_status;
         if info.prev_status /= temp and info.cp0_status(0)/='U' then
             if info.log_triggered then
                 --if log_trap_status then
@@ -408,7 +407,7 @@ begin
             log_pseudoconsole(info.io_wr_data(7 downto 0), con_file, info);
         elsif info.present_data_wr_addr = TB_HW_IRQ_ADDRESS then
             -- Simulated HW interrupt register.
-            info.hw_irq <= info.io_wr_data(7 downto 0);
+            info.hw_irq <= info.io_wr_data(5 downto 0);
         else
             -- Ignore all other bus writes.
         end if;

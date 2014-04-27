@@ -81,7 +81,7 @@ entity ion_cpu is
         CACHE_CTRL_MOSI_O   : out t_cache_mosi;
         CACHE_CTRL_MISO_I   : in t_cache_miso;
         
-        IRQ_I               : in std_logic_vector(7 downto 0)
+        IRQ_I               : in std_logic_vector(5 downto 0)
     );
 end; --entity ion_cpu
 
@@ -194,7 +194,8 @@ signal p1_cp_unavailable :  std_logic;
 signal p1_hw_irq :          std_logic; 
 signal p1_hw_irq_pending :  std_logic; 
 signal p1_delay_hw_irq :    std_logic;
-signal p0_irq_reg :         std_logic_vector(7 downto 0);
+signal p0_irq_reg :         std_logic_vector(5 downto 0);
+signal irq_masked :         std_logic_vector(5 downto 0);
 
 --------------------------------------------------------------------------------
 -- Pipeline stage 2
@@ -927,9 +928,9 @@ begin
         if RESET_I='1' then
             p0_irq_reg <= (others => '0');
         else
-            p0_irq_reg <= IRQ_I;
+            p0_irq_reg <= irq_masked;
             
-            if IRQ_I/=X"00" and p0_irq_reg=X"00" then
+            if irq_masked/=X"00" and p0_irq_reg=X"00" then
                 -- Raise the IRQ pending flag when any IRQ input is raised...
                 p1_hw_irq_pending <= '1';
             elsif p1_delay_hw_irq='0' then
@@ -939,6 +940,9 @@ begin
         end if;
     end if;
 end process interrupt_registers;
+
+-- FIXME this should be done after registering!
+irq_masked <= IRQ_I and cp0_miso.hw_irq_enable_mask;
 
 -- HW interrupts will not be acknowledged (i.e. will be delayed) in certain 
 -- circumstances (see @note5):

@@ -37,7 +37,7 @@
     #-- Set flags below to >0 to enable/disable test assembly ------------------
 
    
-    .set TARGET_HARDWARE, 1                 # Don't use simulation-only features
+    .set TARGET_HARDWARE, 0                 # Don't use simulation-only features
     .set TEST_DCACHE, 1                     # Initialize and test D-Cache
     
     # FIXME these values should be read from COP0 register!
@@ -183,15 +183,16 @@ init:
     # So far, we were in supervisor mode and ERL=1, which means we'll be unable 
     # to return from exceptions properly. 
     # We'll run the rest of the test in user mode. 
+    # (Note we'll enable HW interrupt 0 too.)
     PUTS    msg_user_mode
-    li      $2,0x00400010       # Enter user mode...
+    li      $2,0x00400410       # Enter user mode...
     mtc0    $2,$12              # ...NOW
     nop                         # @hack7: COP0 hazard, we need a nop here.
 
     mfc0    $3,$12              # This should trigger a COP0 missing exception.
     nop
     CMP     $4,$27,1            # Check that we got an exception...
-    CMP     $4,$26,0x0b         # ...and cjeck the cause code.
+    CMP     $4,$26,0x0b         # ...and check the cause code.
     
     PRINT_RESULT 
     
@@ -216,14 +217,28 @@ break_syscall:
 break_syscall_0:
     PRINT_RESULT
     
-    # FIXME test HW interrupts
-    #la      $9,TB_HW_IRQ
-    #li      $2,0x42
-    #sb      $2,0($9)
+    # Test HW interrupts using the support logic in the TB.
+    .ifle   TARGET_HARDWARE
+hardware_interrupts:
+    INIT_TEST msg_hw_interrupts
     
+    la      $9,TB_HW_IRQ        # Prepare to load value in the IRQ test reg...
+    li      $2,0x01
+    sb      $2,0($9)            # ...and load it, triggering the IRQ countdown.
+    nop                         # FIXME indicate IRQ expected victim.                                    
+    nop                         # FIXME try several kinds of IRQ victim.
+    nop
+    nop                         # FIXME we need this many NOPs for landing space
     
+    CMP     $4,$27,4            # Check that we got an exception...
+    CMP     $4,$26,0x00         # ...and check the cause code.
+
+hardware_interrupts_0:
+    PRINT_RESULT
+    .endif
     
     .ifle   TARGET_HARDWARE
+    .ifgt   0
     # Test access to debug registers over uncached data WB bridge.
 debug_regs:
     INIT_TEST msg_debug_regs
@@ -241,6 +256,7 @@ debug_regs:
     CMP     $4,$3,0x12345678
 debug_regs_0:       
     PRINT_RESULT
+    .endif
     .endif
     
     # Test load interlock.
@@ -520,6 +536,7 @@ msg_arith:              .asciiz     "Add*/Sub* opcodes............ "
 msg_logic:              .asciiz     "Logic opcodes................ "
 msg_muldiv:             .asciiz     "Mul*/Div* opcodes............ "
 msg_break_syscall:      .asciiz     "Break/Syscall opcodes........ "
+msg_hw_interrupts:      .asciiz     "HW interrupts (TB only)...... "
 
     .end entry
  

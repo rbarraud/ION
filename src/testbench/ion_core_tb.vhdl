@@ -95,7 +95,7 @@ signal data_wb_miso :       t_wishbone_miso;
 signal data_uc_wb_mosi :    t_wishbone_mosi;
 signal data_uc_wb_miso :    t_wishbone_miso;
 
-signal irq :                std_logic_vector(7 downto 0);
+signal irq :                std_logic_vector(5 downto 0);
 
 
 --------------------------------------------------------------------------------
