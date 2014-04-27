@@ -153,47 +153,52 @@ entry:
     .org    0x0180
     
 interrupt_vector:
-    mfc0    $27,$13             # Get trap cause code into $27
-    srl     $27,$27,2
-    andi    $27,$27,0x01f
-    li      $26,0x2901
-    move    $25,$24
+    mfc0    $26,$13             # Return with trap cause code into $26
+    srl     $26,$26,2
+    andi    $26,$26,0x01f
+    move    $25,$24             # Copy $24 into $25.
+    addi    $27,$27,1           # Increment exception count.
     eret
-    nop
+    addi    $27,$27,1           # Increment exception count. Should NOT execute.
     
 
 init:
-
-    # Clear ERL bit from SR, otherwise we can't handle exceptions.
-    mfc0    $k0,$12
-    li      $k1,0xfffffffb
-    and     $k0,$k0,$k1
-    mtc0    $k0,$12
-
     # Display a welcome message. Remember all output is line buffered!
     PUTS    msg_welcome
-    
-    # Reset error counters.
+
+    # Reset error and exception counters.
     ori     $28,$0,0            # Error count for the test in course. 
-    ori     $30,$0,0            # Total error count.
+    ori     $30,$0,0            # Total test error count.
+    ori     $27,$0,0            # Total exception count.
+
+    
+    # So far, we were in supervisor mode and ERL=1, which means we'll be unable 
+    # to return from exceptions properly. 
+    # We'll run the rest of the test in user mode. 
+    
+    li      $k0,0x00400010      # Enter user mode...
+    mtc0    $k0,$12             # ...NOW
+
+
     
     
-    # Test BREAK and SYSCALL opcodes. Remember we're in user mode.
+    
+    # Test BREAK and SYSCALL opcodes. Remember we're in user mode (ERL=0).
 break_syscall:
     INIT_TEST msg_break_syscall
     
-    .macro  TRAP_OP op, code
+    .macro  TRAP_OP op, code, count
     li      $24,0x42
     li      $25,0x99
     \op
     addi    $24,$0,1
     CMP     $23,$25,0x42
-    CMP     $23,$26,0x2901
-    CMP     $23,$27,\code
+    CMP     $23,$26,\code
+    CMP     $23,$27,\count
     .endm
     
-    TRAP_OP break, 0x09
-    TRAP_OP "syscall 0", 0x08
+    TRAP_OP break, 0x09, 1
+    TRAP_OP "syscall 0", 0x08, 2
     
 break_syscall_0:
     PRINT_RESULT
