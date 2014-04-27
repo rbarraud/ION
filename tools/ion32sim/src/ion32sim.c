@@ -47,6 +47,8 @@
 #include <ctype.h>
 #include <assert.h>
 
+#include <stdbool.h>
+
 /** CPU identification code (contents of register CP0[15], PRId */
 #define CPU_ID (0x00000200)
 /** Reset value of CP0.Config register */
@@ -264,12 +266,21 @@ void slite_sleep(unsigned int value){
 
 /*---- Hardware system parameters --------------------------------------------*/
 
+
+/* Debug registers present only in this simulator and in the TB. */
+#define TB_UART_TX        (0xffff8000)
+#define TB_UART_RX        (0xffff8000)
+#define TB_HW_IRQ         (0xffff8010)
+#define TB_DEBUG          (0xffff8020)
+#define TB_DEBUG_0        (0xffff8020)
+#define TB_DEBUG_1        (0xffff8024)
+#define TB_DEBUG_2        (0xffff8028)
+#define TB_DEBUG_3        (0xffff802c)
+
+
 /* Much of this is a remnant from Plasma's mlite and is  no longer used. */
 /* FIXME Refactor HW system params */
 
-#define DBG_REGS          (0xffff0200)
-#define UART_WRITE        (0xffff0000)
-#define UART_READ         (0xffff0000)
 #define UART_STATUS       (0xffff0004)
 #define TIMER_READ        (0xffff0100)
 
@@ -278,10 +289,6 @@ void slite_sleep(unsigned int value){
 /* FIXME The following addresses are remnants of Plasma to be removed */
 #define IRQ_MASK          0x20000010
 #define IRQ_STATUS        0x20000020
-#define CONFIG_REG        0x20000070
-#define MMU_PROCESS_ID    0x20000080
-#define MMU_FAULT_ADDR    0x20000090
-#define MMU_TLB           0x200000a0
 
 #define IRQ_UART_READ_AVAILABLE  0x002
 #define IRQ_UART_WRITE_AVAILABLE 0x001
@@ -315,8 +322,10 @@ typedef struct s_trace {
    int pr[32];                            /**< last value of register bank */
    int hi, lo, epc, status;               /**< last value of internal regs */
    int disasm_ptr;                        /**< disassembly pointer */
-   /** Instruction cycles remaining to trigger irq[i], or -1 if irq inactive */
-   int32_t irq_trigger_countdown[NUM_HW_IRQS];  /**< (in instructions) */
+   /** Instruction cycles remaining to trigger, or -1 if irq inactive */
+   int32_t irq_trigger_countdown;         /**< (in instructions) */
+   int8_t irq_trigger_inputs;             /**< HW interrupt to be triggered */
+   int8_t irq_current_inputs;             /**< HW interrupt inputs */
 } t_trace;
 
 typedef struct s_state {
@@ -343,9 +352,6 @@ typedef struct s_state {
    uint32_t cp0_config0;
    uint32_t cp0_compare;
 
-   int userMode;                /**< DEPRECATED, to be removed */
-   int processId;               /**< DEPRECATED, to be removed */
-   int faultAddr;               /**< DEPRECATED, to be removed */
    int irqStatus;               /**< DEPRECATED, to be removed */
    int skip;
    int eret_delay_slot;
@@ -353,6 +359,8 @@ typedef struct s_state {
    t_block blocks[NUM_MEM_BLOCKS];
    int wakeup;
    int big_endian;
+   bool sr_load_pending;
+   uint32_t sr_load_pending_value;
 } t_state;
 
 static char *reg_names[]={
@@ -548,13 +556,13 @@ int mem_read(t_state *s, int size, unsigned int address, int log){
     unsigned int full_address = address;
 
     /* Handle access to debug register block */
-    if((address&0xffffff00)==(DBG_REGS&0xffffff00)){
+    if((address&0xfffffff0)==(TB_DEBUG&0xfffffff0)){
         return debug_reg_read(s, size, address);
     }
 
     s->irqStatus |= IRQ_UART_WRITE_AVAILABLE;
     switch(address){
-    case UART_READ:
+    case TB_UART_RX:
         /* FIXME Take input from text file */
         /* Wait for incoming character */
         while(!kbhit());
@@ -583,10 +591,6 @@ int mem_read(t_state *s, int size, unsigned int address, int log){
        word_value = 0x00000003; /* Ready to TX and RX */
        //log_read(s, full_address, word_value, size, log);
        return word_value;
-    case MMU_PROCESS_ID:
-       return s->processId;
-    case MMU_FAULT_ADDR:
-       return s->faultAddr;
     }
 
     /* point ptr to the byte in the block, or NULL is the address is unmapped */
@@ -664,24 +668,16 @@ int mem_read(t_state *s, int size, unsigned int address, int log){
 }
 
 int debug_reg_read(t_state *s, int size, unsigned int address){
-    /* FIXME should mirror debug registers 0..3 */
-    return s->debug_regs[(address >> 2)&0x0f];
+    /* Four 32 bit registers available */
+    return s->debug_regs[(address >> 2)&0x03];
 }
 
 
 /** Write to debug register */
 void debug_reg_write(t_state *s, uint32_t address, uint32_t data){
-
-    if((address>= 0x0000f000) && (address < 0x0000f008)){
-        /* HW interrupt trigger register */
-        s->t.irq_trigger_countdown[address-0x0000f000] = data;
-        printf("DEBUG REG[%04x]=%08x\n", address & 0xffff, data);
-    }
-    else{
-        /* all other registers are used for display (like LEDs) */
-        printf("DEBUG REG[%04x]=%08x\n", address & 0xffff, data);
-        s->debug_regs[(address >> 2)&0x0f] = data;
-    }
+    /* all other registers are used for display (like LEDs) */
+    printf("DEBUG REG[%1d]=%08x\n", (address >> 2)&0x03, data);
+    s->debug_regs[(address >> 2)&0x03] = data;
 }
 
 /** Write to memory, including simulated i/o */
@@ -735,27 +731,28 @@ void mem_write(t_state *s, int size, unsigned address, unsigned value, int log){
     }
 
     /* Print anything that's written to a debug register, otherwise ignore it */
-    if((address&0xffffff00)==(DBG_REGS&0xffffff00)){
+    if((address&0xfffffff0)==(TB_DEBUG&0xfffffff0)){
         debug_reg_write(s, address, value);
         return;
     }
 
+    // Capture accesses to simulated registers.
+    // FIXME should be enabled with command line argument
     switch(address){
-    case UART_WRITE:
+    case TB_UART_TX:
         putch(value);
         fflush(stdout);
+        return;
+    case TB_HW_IRQ:
+        /* HW interrupt trigger register */
+        s->t.irq_trigger_countdown = 5;
+        s->t.irq_trigger_inputs = value;
         return;
     case IRQ_MASK:
         HWMemory[1] = value;
         return;
     case IRQ_STATUS:
         s->irqStatus = value;
-        return;
-    case CONFIG_REG:
-        return;
-    case MMU_PROCESS_ID:
-        //printf("processId=%d\n", value);
-        s->processId = value;
         return;
     }
 
@@ -1014,21 +1011,20 @@ void process_traps(t_state *s, uint32_t epc, uint32_t rSave, uint32_t rt){
     }
     else{
         /* If there's any hardware interrupt pending, deal with it */
-        // FIXME refactor
-        #if 0
-        for(int i=0;i<NUM_HW_IRQS;i++){
-            if(s->t.irq_trigger_countdown[i]==0){
-                /* trigger interrupt i IF it is not masked */
-                if(s->cp0_status & (1 << (8 + i))){
-                    cause = 0; /* cause = hardware interrupt */
-                }
-                s->t.irq_trigger_countdown[i]--;
+        if(s->t.irq_trigger_countdown==0){
+            /* trigger interrupt IF it is not masked */
+            /* FIXME masks to be implemented */
+            s->t.irq_current_inputs = s->t.irq_trigger_inputs;
+            s->t.irq_trigger_inputs = 0;
+            if (s->t.irq_current_inputs != 0) {
+                printf(">>>>>>>>>>>>\n");
+                cause = 0; /* cause = hardware interrupt */
             }
-            else if (s->t.irq_trigger_countdown[i]>0){
-                s->t.irq_trigger_countdown[i]--;
-            }
+            s->t.irq_trigger_countdown--;
         }
-        #endif
+        else if (s->t.irq_trigger_countdown>0){
+            s->t.irq_trigger_countdown--;
+        }
     }
 
     /* Now, whatever the cause was, do the trap handling */
@@ -1051,7 +1047,6 @@ void process_traps(t_state *s, uint32_t epc, uint32_t rSave, uint32_t rt){
         s->pc_next = VECTOR_TRAP;
         /* Simulation control flags... */
         s->skip = 1; /* skip instruction following victim */
-        s->userMode = 0;
     }
 }
 
@@ -1366,7 +1361,9 @@ void cycle(t_state *s, int show_mode){
             else{                         //move to CP0 (mtc0)
                 switch (rd){
                     case 11: s->cp0_compare = r[rt]; break;
-                    case 12: s->cp0_status = r[rt] & 0xf048fe17; break;
+                    case 12: s->sr_load_pending_value = r[rt];
+                             s->sr_load_pending = true;
+                             break;
                              //printf("mtc0: [SR]=0x%08x @ [0x%08x]\n", s->cp0_status, epc);
                     case 13: s->cp0_cause = r[rt] & 0xb0c0fefc; break;
                     case 16:
@@ -1564,7 +1561,7 @@ void reserved_opcode(uint32_t pc, uint32_t opcode, t_state* s){
 /** Dump CPU state to console */
 void show_state(t_state *s){
     int i,j;
-    printf("pid=%d userMode=%d, epc=0x%x\n", s->processId, s->userMode, s->epc);
+    printf("pid=%d userMode=%d, epc=0x%x\n", 0, 0, s->epc);
     printf("hi=0x%08x lo=0x%08x\n", s->hi, s->lo);
 
     /* print register values */
@@ -1927,7 +1924,6 @@ uint32_t log_cycle(t_state *s){
     static unsigned int last_pc = 0;
     int i;
     uint32_t log_pc;
-    uint32_t logged = 0;
 
     /* store PC in trace buffer only if there was a jump */
     if(s->pc != (last_pc+4)){
@@ -1945,7 +1941,6 @@ uint32_t log_cycle(t_state *s){
         for(i=1;i<32;i++){
             if(s->t.pr[i] != s->r[i]){
                 fprintf(s->t.log, "(%08X) [%02X]=%08X\n", log_pc, i, s->r[i]);
-                logged = 1;
             }
             s->t.pr[i] = s->r[i];
         }
@@ -1962,22 +1957,24 @@ uint32_t log_cycle(t_state *s){
         /* Catch changes in EPC by direct write (mtc0) and by exception */
         if(s->epc != s->t.epc){
             fprintf(s->t.log, "(%08X) [EP]=%08X\n", log_pc, s->epc);
-            logged = 1;
         }
         s->t.epc = s->epc;
 
         if(s->cp0_status != s->t.status){
             //@hack3 fprintf(s->t.log, "(%08X) [SR]=%08X\n", log_pc, s->cp0_status);
             fprintf(s->t.log, "(%08X) [SR]=%08X\n", 0x0, s->cp0_status);
-            logged = 1;
         }
         s->t.status = s->cp0_status;
-    }
 
-    // FIXME this should be conditional on command line argument
-    //if (!logged){
-    //    fprintf(s->t.log, "(%08X)\n", log_pc);
-    //}
+        // When SR is loaded via a MTC0, the load is delayed by one cycle.
+        // We update the register after checking for a change (above), so the
+        // logged value will be correct.
+        if (s->sr_load_pending) {
+            s->cp0_status = s->sr_load_pending_value & 0xf048fe17;
+            s->sr_load_pending = false;
+        }
+
+    }
 
 #if 0
     /* FIXME Try to detect a code crash by looking at SP */
@@ -2097,11 +2094,10 @@ void free_cpu(t_state *s){
 }
 
 void reset_cpu(t_state *s){
-    uint32_t i;
-
     s->cp0_cause = 0;
     s->cp0_compare = 0;
     s->cp0_config0 = CP0_CONFIG0;
+    s->sr_load_pending = false;
 
     s->pc = cmd_line_args.start_addr; /* reset start vector or cmd line address */
     s->delay_slot = 0;
@@ -2110,9 +2106,9 @@ void reset_cpu(t_state *s){
     s->cp0_status = SR_BEV | SR_ERL;
     s->instruction_ctr = 0;
     s->inst_ctr_prescaler = 0;
-    for(i=0;i<NUM_HW_IRQS;i++){
-        s->t.irq_trigger_countdown[i] = -1;
-    }
+    s->t.irq_trigger_countdown = -1;
+    s->t.irq_trigger_inputs = 0;
+    s->t.irq_current_inputs = 0;
     /* init trace struct to prevent spurious logs */
     s->t.status = s->cp0_status;
 }
