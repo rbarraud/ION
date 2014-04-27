@@ -18,6 +18,14 @@
 # stands.
 #
 ################################################################################
+# KNOWN BUGS:
+# (Note: I'm using tags like @hack7 from my personal notes, to be cleaned up.)
+#
+# @hack7: 
+#   Entry into user mode is effective in the 2nd instruction after mtc0.
+#   This need to be checked against the specs.
+# 
+################################################################################
 #
 #   -# Supply a version of this test suitable for real HW.
 #   -# Test HW interrupts.
@@ -175,12 +183,17 @@ init:
     # So far, we were in supervisor mode and ERL=1, which means we'll be unable 
     # to return from exceptions properly. 
     # We'll run the rest of the test in user mode. 
-    
-    li      $k0,0x00400010      # Enter user mode...
-    mtc0    $k0,$12             # ...NOW
+    PUTS    msg_user_mode
+    li      $2,0x00400010       # Enter user mode...
+    mtc0    $2,$12              # ...NOW
+    nop                         # @hack7: COP0 hazard, we need a nop here.
 
-
+    mfc0    $3,$12              # This should trigger a COP0 missing exception.
+    nop
+    CMP     $4,$27,1            # Check that we got an exception...
+    CMP     $4,$26,0x0b         # ...and cjeck the cause code.
     
+    PRINT_RESULT 
     
     
     # Test BREAK and SYSCALL opcodes. Remember we're in user mode (ERL=0).
@@ -197,8 +210,8 @@ break_syscall:
     CMP     $23,$27,\count
     .endm
     
-    TRAP_OP break, 0x09, 1
-    TRAP_OP "syscall 0", 0x08, 2
+    TRAP_OP break, 0x09, 2
+    TRAP_OP "syscall 0", 0x08, 3
     
 break_syscall_0:
     PRINT_RESULT
@@ -498,6 +511,7 @@ msg_fail:               .asciiz     "ERROR\n"
 msg_program_pass:       .asciiz     "\nTest PASSED\n\n"
 msg_program_fail:       .asciiz     "\nTest FAILED\n\n"
 
+msg_user_mode:          .asciiz     "Entering user mode........... "
 msg_dcache:             .asciiz     "Data Cache basic test........ "
 msg_icache:             .asciiz     "Code Cache basic test........ "
 msg_debug_regs:         .asciiz     "Access to debug registers.... "

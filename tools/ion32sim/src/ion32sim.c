@@ -1384,11 +1384,11 @@ void cycle(t_state *s, int show_mode){
         }
         else{
             /* tried to execute mtc* or mfc* in user mode: trap */
-            printf("COP0 UNAVAILABLE [0x%08x] = 0x%x %c -- ",
-                   epc, opcode, (s->delay_slot? 'D':' '));
-            print_opcode_fields(opcode);
-            printf("\n");
-            printf("STATUS = %08x\n", s->cp0_status);
+            //fprintf(stderr, "COP0 UNAVAILABLE [0x%08x] = 0x%x %c -- \n",
+            //       epc, opcode, (s->delay_slot? 'D':' '));
+            //print_opcode_fields(opcode);
+            //printf("\n");
+            //printf("STATUS = %08x\n", s->cp0_status);
             //exit(0);
 
             s->trap_cause = 11; /* unavailable coprocessor */
