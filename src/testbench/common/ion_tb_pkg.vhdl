@@ -51,7 +51,8 @@ use work.txt_util.all;
 package ION_TB_PKG is
 
 -- Address of the simulated UART; a single TxB register.
-constant TB_UART_ADDRESS : t_word := X"FFFF0000";
+constant TB_UART_ADDRESS : t_word           := X"FFFF8000";
+constant TB_HW_IRQ_ADDRESS : t_word         := X"FFFF8010";
 
 -- Maximum line size of for console output log. Lines longer than this will be
 -- truncated.
@@ -118,6 +119,9 @@ type t_log_info is record
     write_pending :         boolean;
     debug :                 t_word;
     
+    -- Meant to be connected to the CPU IRQ lines in the TB.
+    hw_irq :                std_logic_vector(7 downto 0);
+    
     -- Console log line buffer --------------------------------------
     con_line_buf :         string(1 to CONSOLE_LOG_LINE_SIZE);
     con_line_ix :          integer;
@@ -127,6 +131,11 @@ type t_log_info is record
     log_trigger_address :   t_word;
     log_triggered :         boolean;
 end record t_log_info;
+
+procedure log_pseudoconsole(
+                signal data : t_byte; 
+                file con_file : TEXT; 
+                signal info : inout t_log_info);
 
 procedure log_cpu_activity(
                 signal clk :    in std_logic;
@@ -154,7 +163,7 @@ variable ri : std_logic_vector(7 downto 0);
 variable full_pc, temp, temp2 : t_word;
 variable k : integer := 2;
 variable log_trap_status :      boolean := false;
-variable uart_data : integer;
+
 
 begin
     
@@ -391,36 +400,51 @@ begin
 
     info.prev_count_reg <= info.mdiv_count_reg;
 
-    -- Log data sent to simulated UART -----------------------------------------
+    -- Monitor bus activity for access to simulated debug registers ------------
     
-    -- Decode the simulated UART single TX register at address 0x20000000.
-    -- TODO this should be parameterizable.
-    -- TX data comes from the low byte.
-    if info.present_data_wr_addr = TB_UART_ADDRESS and info.wr_be /= "0000" then
-        uart_data := conv_integer(unsigned(info.io_wr_data(7 downto 0)));
-    
-        -- UART TX data goes to output after a bit of line-buffering
-        -- and editing
-        if uart_data = 10 then
-            -- CR received: print output string and clear it
-            print(con_file, info.con_line_buf(1 to info.con_line_ix));
-            info.con_line_ix <= 1;
-            for i in 1 to info.con_line_buf'high loop
-               info.con_line_buf(i) <= ' ';
-            end loop;
-        elsif uart_data = 13 then
-            -- ignore LF
+    if info.wr_be /= "0000" then 
+        if info.present_data_wr_addr = TB_UART_ADDRESS then
+            -- Simulated UART TX register: data comes from low byte.
+            log_pseudoconsole(info.io_wr_data(7 downto 0), con_file, info);
+        elsif info.present_data_wr_addr = TB_HW_IRQ_ADDRESS then
+            -- Simulated HW interrupt register.
+            info.hw_irq <= info.io_wr_data(7 downto 0);
         else
-            -- append char to output string
-            if info.con_line_ix < info.con_line_buf'high then
-                info.con_line_buf(info.con_line_ix) <= character'val(uart_data);
-                info.con_line_ix <= info.con_line_ix + 1;
-            end if;
+            -- Ignore all other bus writes.
         end if;
     end if;
     
     
 end procedure log_cpu_status;
+
+procedure log_pseudoconsole(
+                signal data : t_byte; 
+                file con_file : TEXT;
+                signal info : inout t_log_info
+                ) is
+variable uart_data : integer;
+begin
+    uart_data := conv_integer(unsigned(data));
+    
+    -- UART TX data goes to output after a bit of line-buffering
+    -- and editing
+    if uart_data = 10 then
+        -- CR received: print output string and clear it
+        print(con_file, info.con_line_buf(1 to info.con_line_ix));
+        info.con_line_ix <= 1;
+        for i in 1 to info.con_line_buf'high loop
+           info.con_line_buf(i) <= ' ';
+        end loop;
+    elsif uart_data = 13 then
+        -- ignore LF
+    else
+        -- append char to output string
+        if info.con_line_ix < info.con_line_buf'high then
+            info.con_line_buf(info.con_line_ix) <= character'val(uart_data);
+            info.con_line_ix <= info.con_line_ix + 1;
+        end if;
+    end if;    
+end procedure log_pseudoconsole;
 
 procedure log_cpu_activity(
                 signal clk :    in std_logic;
@@ -473,6 +497,7 @@ begin
             info.log_trigger_address <= trigger_addr;
             info.log_triggered <= false;
             info.debug <= (others => '0');
+            info.hw_irq <= (others => '0');
             
             info.con_line_ix <= 1; -- uart log line buffer is empty
         else

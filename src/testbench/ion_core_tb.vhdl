@@ -409,6 +409,20 @@ begin
         '0';
 
     
+    -- HW interrupt simulation -------------------------------------------------
+       
+    -- FIXME work in progress
+    interrupt_registers:
+    process(clk)
+    begin
+        if clk'event and clk='1' then
+            if reset='1' then
+                irq <= (others => '0');
+            else
+                irq <= log_info.hw_irq;
+            end if;
+        end if;
+    end process interrupt_registers;    
         
     -- Logging process: launch logger function ---------------------------------
     log_execution:

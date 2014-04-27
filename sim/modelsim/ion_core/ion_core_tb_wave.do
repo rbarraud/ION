@@ -6,12 +6,20 @@ add wave -noupdate -divider Fetch
 add wave -noupdate -color Gold -format Literal -radix hexadecimal /ion_core_tb/core/cpu/p1_ir_reg
 add wave -noupdate -color Blue -format Literal -radix hexadecimal /ion_core_tb/core/cpu/p0_pc_reg
 add wave -noupdate -divider {Interconnect -- Code}
+add wave -noupdate -format Logic /ion_core_tb/core/cpu/cop0/sr_reg.erl
+add wave -noupdate -format Logic /ion_core_tb/core/cpu/cop0/sr_reg.exl
+add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/cpu/cop0/epc_reg
+add wave -noupdate -format Literal /ion_core_tb/core/cpu/p1_jump_type
+add wave -noupdate -format Logic /ion_core_tb/core/cpu/cop0/cpu_o.pc_load_en
+add wave -noupdate -format Logic /ion_core_tb/core/cpu/cop0/cpu_i.in_delay_slot
+add wave -noupdate -color Pink -format Logic /ion_core_tb/core/cpu/cop0/cpu_i.exception
+add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/log_info.hw_irq
+add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/irq
 add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/tcm_code_present/code_arbiter/master_c_mosi_i
 add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/tcm_code_present/code_arbiter/master_d_mosi_i
 add wave -noupdate -format Logic /ion_core_tb/core/tcm_code_present/code_arbiter/data_request
 add wave -noupdate -format Logic /ion_core_tb/core/tcm_code_present/code_arbiter/clash
 add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/tcm_code_present/code_arbiter/master_c_miso_o
-add wave -noupdate -format Literal -expand /ion_core_tb/core/code_ce
 add wave -noupdate -expand -group Code
 add wave -noupdate -group Code -format Literal -radix hexadecimal /ion_core_tb/core/code_mosi.addr
 add wave -noupdate -group Code -format Logic -radix hexadecimal /ion_core_tb/core/code_mosi.rd_en
@@ -56,7 +64,7 @@ add wave -noupdate -format Literal /ion_core_tb/uwb_wait_ctr
 add wave -noupdate -divider Debug
 add wave -noupdate -format Literal /ion_core_tb/core/data_cache_present/data_cache/cache_ctrl_mosi_i
 TreeUpdate [SetDefaultTree]
-WaveRestoreCursors {{Cursor 1} {63270000 ps} 0}
+WaveRestoreCursors {{Cursor 1} {10230000 ps} 0}
 configure wave -namecolwidth 206
 configure wave -valuecolwidth 60
 configure wave -justifyvalue left
@@ -70,4 +78,4 @@ configure wave -gridperiod 1
 configure wave -griddelta 40
 configure wave -timeline 0
 update
-WaveRestoreZoom {63072965 ps} {63467036 ps}
+WaveRestoreZoom {9135408 ps} {10736787 ps}
