@@ -1018,8 +1018,8 @@ void process_traps(t_state *s, uint32_t epc, uint32_t rSave, uint32_t rt){
             mask = (s->cp0_status >> (8+2) & 0x3f);
             s->t.irq_current_inputs = (s->t.irq_trigger_inputs & mask);
             s->t.irq_trigger_inputs = 0;
-            printf("MASK = %02x\n", mask);
-            printf("Z    = %02x\n", s->t.irq_current_inputs);
+            //printf("MASK = %02x\n", mask);
+            //printf("Z    = %02x\n", s->t.irq_current_inputs);
             if (s->t.irq_current_inputs != 0) {
                 cause = 0; /* cause = hardware interrupt */
             }
@@ -1033,7 +1033,8 @@ void process_traps(t_state *s, uint32_t epc, uint32_t rSave, uint32_t rt){
     /* Now, whatever the cause was, do the trap handling */
     if(cause >= 0){
         s->trap_cause = cause;
-        s->r[rt] = rSave; /* 'undo' current instruction (?) */
+        /* 'undo' current instruction EXCEPT if this is a HW interrupt. */
+        if (cause > 0) s->r[rt] = rSave;
         /* set cause field ... */
         s->cp0_cause = (s->delay_slot & 0x1) << 31 | (s->trap_cause & 0x1f) << 2;
         /* ...and raise EXL status flag */
