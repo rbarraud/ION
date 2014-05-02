@@ -103,7 +103,7 @@ signal p0_pc_incremented :  t_pc;
 signal p0_pc_jump :         t_pc;
 signal p0_pc_branch :       t_pc;
 signal p0_pc_target :       t_pc;
-signal p0_pc_next_exceptions : t_pc;
+signal p0_pc_restart :      t_pc;
 signal p0_pc_load_pending : std_logic;
 signal p0_pc_increment :    std_logic;
 signal p0_pc_next :         t_pc;
@@ -497,16 +497,16 @@ p0_pc_next <=
         and stall_pipeline='0'
     else p0_pc_incremented;
 
--- FIXME this is super costly, refactor RTL to share area.
-p0_pc_next_exceptions <= 
-    p0_pc_target when
-        -- We jump on jump instructions whose condition is met...
+
+-- Compute the restart address for this instruction.
+-- TODO evaluate cost of this and maybe simplify.
+p0_pc_restart <= 
+    p0_pc_reg -1 when -- EPC = Instruction BEFORE jump instruction...
+        -- ...when the jump conditions are met.
         ((p1_jump_type(1)='1' and p0_jump_cond_value='1' and 
-        -- ...except we abort any jump that follows the victim of an exception
           p2_exception='0'))
-        -- FIXME explain this
-        -- ... but we only jump at all if the pipeline is not stalled
         and stall_pipeline='0'
+    -- Otherwise EPC points to the next instruction.
     else p0_pc_reg + 1;--p0_pc_incremented;
   
 
@@ -539,20 +539,21 @@ begin
         else
             -- p0_pc_reg holds the same value as external sync ram addr reg
             p0_pc_reg <= p0_pc_next;
-            -- p0_pc_restart = addr saved to EPC on interrupts (@note2)
+            -- pc_restart = addr saved to EPC on interrupts (@note2)
             -- It's the addr of the instruction that "follows" the victim,
             -- except when the triggering instruction is in a delay slot. In 
             -- that case, it the instruction preceding the victim.
             -- I.e. all as per the mips32r2 specs.
-            cp0_mosi.pc_restart <= p0_pc_next_exceptions;
-            -- FIXME move this logic out of the if; must work after pc_load_en
-            if (p1_jump_type="00" or p0_jump_cond_value='0') then 
-                -- remember if we are in delay slot, in case there's a trap
-                cp0_mosi.in_delay_slot <= '0'; -- NOT in a delay slot
-            else
-                cp0_mosi.in_delay_slot <= '1'; -- in a delay slot
-            end if;
+            cp0_mosi.pc_restart <= p0_pc_restart;
         end if;
+
+        -- Remember if we are in delay slot, in case there's a trap
+        if (p1_jump_type="00" or p0_jump_cond_value='0') then 
+            cp0_mosi.in_delay_slot <= '0'; -- NOT in a delay slot
+        else
+            cp0_mosi.in_delay_slot <= '1'; -- in a delay slot
+        end if;
+
     end if;
 end process pc_register;
 
@@ -921,25 +922,50 @@ p1_cp_unavailable <= '1' when
 
 -- Register incoming IRQ lines and keep track of a pending but not yet 
 -- acknowledged HW interrupt.
+--interrupt_registers:
+--process(CLK_I)
+--begin
+--    if CLK_I'event and CLK_I='1' then
+--        if RESET_I='1' then
+--            p0_irq_reg <= (others => '0');
+--        else
+--            p0_irq_reg <= irq_masked;
+--            
+--            if irq_masked/=X"00" and p0_irq_reg=X"00" then
+--                -- Raise the IRQ pending flag when any IRQ input is raised...
+--                p1_hw_irq_pending <= '1';
+--            elsif p1_delay_hw_irq='0' then
+--                -- ...and clear it when it is acknowledged.
+--                p1_hw_irq_pending <= '0';
+--            end if;
+--        end if;
+--    end if;
+--end process interrupt_registers;
+
 interrupt_registers:
 process(CLK_I)
 begin
     if CLK_I'event and CLK_I='1' then
         if RESET_I='1' then
             p0_irq_reg <= (others => '0');
-        else
-            p0_irq_reg <= irq_masked;
-            
-            if irq_masked/=X"00" and p0_irq_reg=X"00" then
-                -- Raise the IRQ pending flag when any IRQ input is raised...
-                p1_hw_irq_pending <= '1';
-            elsif p1_delay_hw_irq='0' then
-                -- ...and clear it when it is acknowledged.
-                p1_hw_irq_pending <= '0';
+        else 
+            -- Load p1_hw_irq in lockstep with the IR register, as if the IRQ 
+            -- was part of the opcode. 
+            -- FIXME use the "irq delay" signal?
+            if stall_pipeline='0' then 
+                if irq_masked/="00000" and p0_irq_reg ="00000" then
+                    p1_hw_irq <= '1';
+                else
+                    p1_hw_irq <= '0';
+                end if;
             end if;
+            
+            -- Register interrupt lines every cycle.
+            p0_irq_reg <= irq_masked;
         end if;
     end if;
 end process interrupt_registers;
+
 
 -- FIXME this should be done after registering!
 irq_masked <= IRQ_I and cp0_miso.hw_irq_enable_mask;
@@ -950,10 +976,6 @@ irq_masked <= IRQ_I and cp0_miso.hw_irq_enable_mask;
 p1_delay_hw_irq <= 
     '1' when p1_jump_type(1)='1' else   -- In a delay slot.
     '0';
-    
--- Acknowledge (i.e. pass on to COP0) HW interrupt if the delay conditions 
--- are false.
-p1_hw_irq <= '0' when p1_delay_hw_irq='1' else p1_hw_irq_pending;
 
     
 --##############################################################################
