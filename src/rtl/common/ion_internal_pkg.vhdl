@@ -66,7 +66,7 @@ type t_cache_mosi is record
 end record t_cache_mosi;
 
 type t_cache_miso is record
-    ready :             std_logic;  -- FIXME might not be necessary in new cache
+    present :           std_logic;  -- Hardwired to 1 when cache is present.
 end record t_cache_miso;
 
 type t_cop0_mosi is record

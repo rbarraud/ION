@@ -153,7 +153,8 @@ signal code_mosi :          t_cpumem_mosi;
 signal code_miso :          t_cpumem_miso;
 
 signal cache_mosi :         t_cache_mosi;
-signal cache_miso :         t_cache_miso;
+signal icache_miso :        t_cache_miso;
+signal dcache_miso :        t_cache_miso;
 
 signal irq :                std_logic_vector(7 downto 0);
 
@@ -406,7 +407,8 @@ begin
     -- Placeholder signals, to be completed ------------------------------------
     
     irq <= (others => '0');
-    cache_miso.ready <= '1';
+    icache_miso.present <= '0';
+    dcache_miso.present <= '0';
     
     -- Logging process: launch logger function ---------------------------------
     log_execution:

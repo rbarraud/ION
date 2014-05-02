@@ -3,7 +3,7 @@
 --------------------------------------------------------------------------------
 -- project:       ION (http://www.opencores.org/project,ion_cpu)
 -- author:        Jose A. Ruiz (ja_rd@hotmail.com)
--- author:        Paul Debayan ()
+-- author:        Paul Debayan (debayanpaul@yahoo.com)
 --------------------------------------------------------------------------------
 -- FIXME refactor comments!
 --
@@ -29,8 +29,6 @@
 -- KNOWN BUGS:
 --
 --------------------------------------------------------------------------------
--- Copyright (C) 2014 Jose A. Ruiz
---                                                              
 -- This source file may be used and distributed without         
 -- restriction provided that this copyright statement is not    
 -- removed from the file and that any derivative work contains  
@@ -77,9 +75,9 @@ entity ion_cpu is
         CODE_MOSI_O         : out t_cpumem_mosi;
         CODE_MISO_I         : in t_cpumem_miso;
         
-        -- FIXME spec this; one per cache? only for icache?
-        CACHE_CTRL_MOSI_O   : out t_cache_mosi;
-        CACHE_CTRL_MISO_I   : in t_cache_miso;
+        CACHE_CTRL_MOSI_O   : out t_cache_mosi; -- Common control MOSI port.
+        ICACHE_CTRL_MISO_I  : in t_cache_miso;  -- I-Cache MISO.
+        DCACHE_CTRL_MISO_I  : in t_cache_miso;  -- D-Cache MISO.
         
         IRQ_I               : in std_logic_vector(5 downto 0)
     );
@@ -613,7 +611,7 @@ begin
     if CLK_I'event and CLK_I='1' then
         if RESET_I='1' then
             p1_ir_reg <= (others => '0');
-        elsif CACHE_CTRL_MISO_I.ready='1' and reset_done(1)='1' then
+        elsif reset_done(1)='1' then
             -- Load the IR with whatever the cache is giving us, provided:
             -- 1) The cache is ready (i.e. has already completed the first code 
             --    refill after RESET_I.

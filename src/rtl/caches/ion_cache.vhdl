@@ -387,9 +387,9 @@ begin
     MEM_MOSI_O.tga <= "0000"; -- FIXME tag use unspecified yet
     MEM_MOSI_O.sel <= wr_be_reg;
     
-    
-    -- FIXME refactor cache control interface.
-    CACHE_CTRL_MISO_O.ready <= '1';
+   
+    -- The cache control interface MOSI consists of this lone "present" signal.
+    CACHE_CTRL_MISO_O.present <= '1';
     
 
     -- Back-to-back access support logic ---------------------------------------

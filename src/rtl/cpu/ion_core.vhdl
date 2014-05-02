@@ -99,7 +99,8 @@ signal code_mosi :          t_cpumem_mosi;
 signal code_miso :          t_cpumem_miso;
 
 signal cache_ctrl_mosi :    t_cache_mosi;
-signal cache_ctrl_miso :    t_cache_miso;
+signal icache_ctrl_miso :   t_cache_miso;
+signal dcache_ctrl_miso :   t_cache_miso;
 
 --------------------------------------------------------------------------------
 -- Code space signals
@@ -208,7 +209,8 @@ begin
         CODE_MISO_I         => code_miso,
 
         CACHE_CTRL_MOSI_O   => cache_ctrl_mosi,
-        CACHE_CTRL_MISO_I   => cache_ctrl_miso,
+        ICACHE_CTRL_MISO_I  => icache_ctrl_miso,
+        DCACHE_CTRL_MISO_I  => dcache_ctrl_miso,
 
         IRQ_I               => IRQ_I
     );
@@ -292,6 +294,8 @@ begin
         
         CODE_WB_MOSI_O.cyc <= '0';
         CODE_WB_MOSI_O.stb <= '0';
+        
+        icache_ctrl_miso.present <= '0';
         
     end generate code_cache_missing;
 
@@ -403,7 +407,7 @@ begin
 
             -- FIXME there should be a MISO for each cache in the control port
             CACHE_CTRL_MOSI_I   => cache_ctrl_mosi,
-            CACHE_CTRL_MISO_O   => cache_ctrl_miso,
+            CACHE_CTRL_MISO_O   => dcache_ctrl_miso,
             
             CE_I                => data_ce(1),
             CPU_MOSI_I          => data_mosi,
@@ -423,6 +427,8 @@ begin
         
         DATA_WB_MOSI_O.cyc <= '0';
         DATA_WB_MOSI_O.stb <= '0';
+        
+        dcache_ctrl_miso.present <= '0';
         
     end generate data_cache_missing;
 
