@@ -6,6 +6,10 @@ add wave -noupdate -divider Fetch
 add wave -noupdate -color Gold -format Literal -radix hexadecimal /ion_core_tb/core/cpu/p1_ir_reg
 add wave -noupdate -color Blue -format Literal -radix hexadecimal /ion_core_tb/core/cpu/p0_pc_reg
 add wave -noupdate -divider {Interconnect -- Code}
+add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/cpu/p0_pc_target
+add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/cpu/p0_pc_next_exceptions
+add wave -noupdate -format Logic /ion_core_tb/core/cpu/cop0/cause_bd_reg
+add wave -noupdate -format Literal /ion_core_tb/core/cpu/p0_irq_reg
 add wave -noupdate -format Logic /ion_core_tb/core/cpu/cop0/sr_reg.erl
 add wave -noupdate -format Logic /ion_core_tb/core/cpu/cop0/sr_reg.exl
 add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/cpu/cop0/epc_reg
@@ -64,7 +68,7 @@ add wave -noupdate -format Literal /ion_core_tb/uwb_wait_ctr
 add wave -noupdate -divider Debug
 add wave -noupdate -format Literal /ion_core_tb/core/data_cache_present/data_cache/cache_ctrl_mosi_i
 TreeUpdate [SetDefaultTree]
-WaveRestoreCursors {{Cursor 1} {10230000 ps} 0}
+WaveRestoreCursors {{Cursor 1} {22570000 ps} 0}
 configure wave -namecolwidth 206
 configure wave -valuecolwidth 60
 configure wave -justifyvalue left
@@ -78,4 +82,4 @@ configure wave -gridperiod 1
 configure wave -griddelta 40
 configure wave -timeline 0
 update
-WaveRestoreZoom {9135408 ps} {10736787 ps}
+WaveRestoreZoom {22509810 ps} {22840409 ps}

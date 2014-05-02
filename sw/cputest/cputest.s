@@ -222,17 +222,24 @@ break_syscall_0:
 hardware_interrupts:
     INIT_TEST msg_hw_interrupts
     
+    # First test HW IRQ on delay slot instruction.
     la      $9,TB_HW_IRQ        # Prepare to load value in the IRQ test reg...
     li      $2,0x01
     sb      $2,0($9)            # ...and load it, triggering the IRQ countdown.
-    nop                         # FIXME indicate IRQ expected victim.                                    
-    nop                         # FIXME try several kinds of IRQ victim.
-    nop
-    nop                         # FIXME we need this many NOPs for landing space
-    
+    li      $2,0x42
+    beqz    $0,hardware_interrupts_1
+    li      $11,0x79            # THIS is the HW IRQ victim.
+    li      $12,0x85
+hardware_interrupts_1:
     CMP     $4,$27,4            # Check that we got an exception...
     CMP     $4,$26,0x00         # ...and check the cause code.
+    sb      $0,($9)             # Clear HW IRQ source.
 
+    
+    # FIXME test HW IRQ on regular instruction.
+    # FIXME test HW IRQ on jump instruction.
+    # FIXME test HW IRQ on mul/div instruction.
+    
 hardware_interrupts_0:
     PRINT_RESULT
     .endif
