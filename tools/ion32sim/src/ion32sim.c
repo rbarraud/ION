@@ -676,7 +676,7 @@ int debug_reg_read(t_state *s, int size, unsigned int address){
 /** Write to debug register */
 void debug_reg_write(t_state *s, uint32_t address, uint32_t data){
     /* all other registers are used for display (like LEDs) */
-    printf("DEBUG REG[%1d]=%08x\n", (address >> 2)&0x03, data);
+    //printf("DEBUG REG[%1d]=%08x\n", (address >> 2)&0x03, data);
     s->debug_regs[(address >> 2)&0x03] = data;
 }
 

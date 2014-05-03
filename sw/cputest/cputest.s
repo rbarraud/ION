@@ -37,7 +37,7 @@
     #-- Set flags below to >0 to enable/disable test assembly ------------------
 
     .ifndef TARGET_HARDWARE
-    .set TARGET_HARDWARE, 1                 # Don't use simulation-only features
+    .set TARGET_HARDWARE, 0                 # Don't use simulation-only features
     .endif
     .ifndef TEST_DCACHE
     .set TEST_DCACHE, 1                     # Initialize and test I-/D-Cache
@@ -251,7 +251,7 @@ hardware_interrupts_0:
     .endif
     
     .ifle   TARGET_HARDWARE
-    .ifgt   0
+    .ifgt   1
     # Test access to debug registers over uncached data WB bridge.
 debug_regs:
     INIT_TEST msg_debug_regs
