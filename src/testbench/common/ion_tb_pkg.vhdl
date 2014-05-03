@@ -53,6 +53,7 @@ package ION_TB_PKG is
 -- Address of the simulated UART; a single TxB register.
 constant TB_UART_ADDRESS : t_word           := X"FFFF8000";
 constant TB_HW_IRQ_ADDRESS : t_word         := X"FFFF8010";
+constant TB_MSG_REG_ADDRESS : t_word        := X"FFFF8018";
 
 -- Maximum line size of for console output log. Lines longer than this will be
 -- truncated.
@@ -140,7 +141,7 @@ procedure log_pseudoconsole(
 procedure log_cpu_activity(
                 signal clk :    in std_logic;
                 signal reset :  in std_logic;
-                signal done :   in std_logic;   
+                signal done :   inout std_logic;   
                 base_entity :   string;
                 cpu_name :      string;
                 signal info :   inout t_log_info; 
@@ -157,7 +158,8 @@ package body ION_TB_PKG is
 procedure log_cpu_status(
                 signal info :   inout t_log_info;
                 file l_file :   TEXT;
-                file con_file : TEXT) is
+                file con_file : TEXT;
+                signal done :   inout std_logic) is
 variable i : integer;
 variable ri : std_logic_vector(7 downto 0);
 variable full_pc, temp, temp2 : t_word;
@@ -408,6 +410,19 @@ begin
         elsif info.present_data_wr_addr = TB_HW_IRQ_ADDRESS then
             -- Simulated HW interrupt register.
             info.hw_irq <= info.io_wr_data(5 downto 0);
+        elsif info.present_data_wr_addr = TB_MSG_REG_ADDRESS then
+            -- Message to test bench from SW. Data word will be the accumulated
+            -- number of errors.
+            assert conv_integer(info.io_wr_data) /= 0
+            report "Test PASSED"
+            severity failure;
+
+            assert conv_integer(info.io_wr_data) = 0
+            report "Test FAILED ("& str(conv_integer(info.io_wr_data))& 
+                   " errors)." 
+            severity failure;
+
+            done <= '1';
         else
             -- Ignore all other bus writes.
         end if;
@@ -422,14 +437,20 @@ procedure log_pseudoconsole(
                 signal info : inout t_log_info
                 ) is
 variable uart_data : integer;
+variable buf : line;
 begin
     uart_data := conv_integer(unsigned(data));
     
     -- UART TX data goes to output after a bit of line-buffering
     -- and editing
     if uart_data = 10 then
-        -- CR received: print output string and clear it
+        -- CR received: print output string and clear it.
+        -- Print buffer to the log file...
         print(con_file, info.con_line_buf(1 to info.con_line_ix));
+        -- ...to simulator console...
+        write(buf, info.con_line_buf(1 to info.con_line_ix)); 
+        writeline(output,buf);
+        -- ...and clear buffer.
         info.con_line_ix <= 1;
         for i in 1 to info.con_line_buf'high loop
            info.con_line_buf(i) <= ' ';
@@ -448,7 +469,7 @@ end procedure log_pseudoconsole;
 procedure log_cpu_activity(
                 signal clk :    in std_logic;
                 signal reset :  in std_logic;
-                signal done :   in std_logic;   
+                signal done :   inout std_logic;   
                 base_entity :    string;
                 cpu_name :      string;
                 signal info :   inout t_log_info; 
@@ -500,7 +521,7 @@ begin
             
             info.con_line_ix <= 1; -- uart log line buffer is empty
         else
-            log_cpu_status(info, l_file, con_file);
+            log_cpu_status(info, l_file, con_file, done);
         end if;
     end loop;
     

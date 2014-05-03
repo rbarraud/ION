@@ -271,6 +271,7 @@ void slite_sleep(unsigned int value){
 #define TB_UART_TX        (0xffff8000)
 #define TB_UART_RX        (0xffff8000)
 #define TB_HW_IRQ         (0xffff8010)
+#define TB_STOP_SIM       (0xffff8018)
 #define TB_DEBUG          (0xffff8020)
 #define TB_DEBUG_0        (0xffff8020)
 #define TB_DEBUG_1        (0xffff8024)
@@ -747,6 +748,21 @@ void mem_write(t_state *s, int size, unsigned address, unsigned value, int log){
         /* HW interrupt trigger register */
         s->t.irq_trigger_countdown = 3;
         s->t.irq_trigger_inputs = value;
+        return;
+    case TB_STOP_SIM:
+        /* Simulation stop: writing anything here stops the simulation.
+        The value being written is, by convention, the number of errors
+        detected in a test bench program and will be displayed as such.
+        */
+        fprintf(stderr, "Simulation terminated by program command.\n\n");
+        if (value>0) {
+            fprintf(stderr, "Program reports FAILURE -- %d errors.\n", value);
+        }
+        else {
+            fprintf(stderr, "Program reports SUCCESS -- no errors.\n");
+        }
+        fprintf(stderr, "\n");
+        s->wakeup = 1;
         return;
     case IRQ_MASK:
         HWMemory[1] = value;
