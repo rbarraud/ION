@@ -1,3 +1,23 @@
+################################################################################
+# HOW TO USE THIS MAKEFILE:
+# 
+# This program is meant to run in one of two platforms: the "tb_core" simulation 
+# test bench and the "tb_application" simulation test bench.
+# This makefile will assemble the source(s) and the will build two package files 
+# used by the test bench; these packages include the simulation parameters, 
+# like the size of the memories, and the object code.
+#
+# Run "make tb_app" to build for the tb_application test bench.
+# Run "make tb_core" to build for the tb_core test bench.
+#
+# These targets differ only in the arguments passed on to the assembler -- some
+# parts of the test are only meant for one of the platforms.
+#
+# Eventually this program will be upgraded to run on real hardware and a third 
+# target will be added.
+#
+################################################################################
+
 
 # Get common makefile stuff (toolchain & system config)
 include ../common/makefile
@@ -35,7 +55,7 @@ LFLAGS = -Ttext $(CODE_MEM_START) -Tdata $(DATA_MEM_START) -eentry -I elf32-big
 
 program:
 	$(AS) -o opcode_emu.o $(SW_ROOT)/common/crt/opcode_emu.s
-	$(AS) -defsym XRAM_BASE=$(DATA_MEM_START) -mips32r2 -o $(TARGET).o cputest.s
+	$(AS) -defsym XRAM_BASE=$(DATA_MEM_START) -mips32r2 -o $(TARGET).o $(TBARGS) cputest.s
 	$(LD) $(LFLAGS) -Map $(TARGET).map -s -N -o $(TARGET).axf $(TARGET).o opcode_emu.o
 	-@$(DUMP) -I elf32-big --disassemble $(TARGET).axf > $(TARGET).lst
 	$(COPY) -I elf32-big -O binary $(TARGET).axf $(TARGET).bin
@@ -44,9 +64,17 @@ program:
     
 
 #-- Targets that build the synthesizable vhdl; meant for direct invocation -----
+  
+# Build program for "tb_application" test bench. 
+tb_app: set_tb_app_variables program sim
 
-#-- Create VHDL package with data and parameters for simulation and synthesis
+# Build program for "tb_core" test bench. 
+tb_core: set_tb_core_variables program sim
+
+
+#-- Creates VHDL package with data and parameters for simulation and synthesis.
 sim: program synth
+
 	$(VHDL_OBJ_PKG) --project=$(APP_NAME) \
 		--package SIM_PARAMS_PKG \
 		--output $(TB_DIR)/common/sim_params_pkg.vhdl \
@@ -60,6 +88,14 @@ synth: program
 		--bin $(TARGET).bin --name OBJ_CODE --cmem_size $(CODE_MEM_SIZE) \
         --bin $(TARGET).data --name INIT_DATA --dmem_size $(DATA_MEM_SIZE)\
 		--output $(OBJ_DIR)/obj_code_pkg.vhdl
+
+#-- Set assembler arguments for "tb_application" test bench.
+set_tb_app_variables: 
+	$(eval TBARGS := --defsym TEST_ICACHE=0)    
+
+#-- Set assembler arguments for "tb_core" test bench.
+set_tb_core_variables: 
+	$(eval TBARGS := )    
 
         
 #-- And now the usual housekeeping stuff ---------------------------------------

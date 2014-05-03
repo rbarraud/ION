@@ -36,9 +36,15 @@
 
     #-- Set flags below to >0 to enable/disable test assembly ------------------
 
-   
-    .set TARGET_HARDWARE, 0                 # Don't use simulation-only features
-    .set TEST_DCACHE, 1                     # Initialize and test D-Cache
+    .ifndef TARGET_HARDWARE
+    .set TARGET_HARDWARE, 1                 # Don't use simulation-only features
+    .endif
+    .ifndef TEST_DCACHE
+    .set TEST_DCACHE, 1                     # Initialize and test I-/D-Cache
+    .endif
+    .ifndef TEST_ICACHE
+    .set TEST_ICACHE, 1                     # Initialize and test I-Cache
+    .endif
     
     # FIXME these values should be read from COP0 register!
     .set ICACHE_NUM_LINES, 128              # no. of lines in the I-Cache
@@ -369,6 +375,7 @@ dcache_end:
     
     # Test code cache minimally.
     # (We're gonna execute only a few instructions off the cache.)
+    .ifgt   TEST_ICACHE
 icache:
     INIT_TEST msg_icache
 
@@ -396,7 +403,7 @@ icache_init_0:
     
 icache_0:    
     PRINT_RESULT    
-    
+    .endif
     
     # Add/Sub instructions: add, addi, sub, subi.
 arith:
