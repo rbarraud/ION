@@ -519,7 +519,7 @@ muldiv:
     INIT_TEST msg_muldiv
    
     # Test DIV or DIVU with some arguments. 
-    # Will use the same register set in all tests...
+    # Will use the same register set in all tests. Oh well...
     .macro TEST_DIV op, num, den
     li      $4,\num             # Load regs with test arguments...
     li      $5,\den
@@ -535,8 +535,31 @@ muldiv:
     TEST_DIV divu, I5, I4
     TEST_DIV divu, I2, I3
     TEST_DIV div,  I2, I5
-    TEST_DIV div,  10, -5       # This would fail with DIVU
+    TEST_DIV div,  10, -5 
     TEST_DIV div,  -5, 10
+    TEST_DIV div,  -5, -10
+
+    # Test MULT or MULTU with some arguments. 
+    # Will use the same register set in all tests.
+    .macro TEST_MUL op, a, b, hi, lo
+    li      $4,\a               # Load regs with test arguments...
+    li      $5,\b
+    \op     $4,$5               # ...do the mult operation...
+    mflo    $8
+    mfhi    $9
+    CMP     $7,$8, \lo          # ...and check result.
+    CMP     $7,$9, \hi
+    .endm
+
+    TEST_MUL multu, 0x00000010, 0x00000020, 0x00000000, 0x00000200
+    TEST_MUL multu, 0x80000010, 0x00000020, 0x00000010, 0x00000200
+    TEST_MUL multu, 0x00000010, 0x80000020, 0x00000008, 0x00000200
+    TEST_MUL multu, 0x80000010, 0xffffffff, 0x8000000f, 0x7ffffff0
+
+    TEST_MUL mult,  0x00000010, 0x00000020, 0x00000000, 0x00000200
+    TEST_MUL mult,  0x80000010, 0x00000020, 0xfffffff0, 0x00000200
+    TEST_MUL mult,  0x00000020, 0x80000010, 0xfffffff0, 0x00000200
+    TEST_MUL mult,  0x80000010, 0x80000020, 0x3fffffe8, 0x00000200
     
 muldiv_end:
     PRINT_RESULT
