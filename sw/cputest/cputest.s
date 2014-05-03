@@ -140,6 +140,19 @@
     addi    $28,$28,1
     1000:
     .endm
+
+    .macro  CMPU r1, r2, exp
+    li      \r1,(\exp) & 0xffffffff
+    bgez    \r1,1010f           # If exp < 0...
+    nop
+    sub     \r1,$0,\r1          # ...negate it
+    1010:
+    sub     \r1,\r2,\r1
+    beqz    \r1,1000f
+    nop
+    addi    $28,$28,1
+    1000:
+    .endm
     
     # Compare registers, conditionally increment error counter:
     # 1: if r1 != r2 then $28++
@@ -150,6 +163,7 @@
     addi    $28,$28,1
     1001:
     .endm
+   
    
     #---------------------------------------------------------------------------
 
@@ -514,15 +528,15 @@ muldiv:
     mflo    $8
     mfhi    $9
     CMP     $7,$8, \num / \den  # ...and check result.
-    CMP     $6,$9, \num % \den    
+    CMPU    $6,$9, \num % \den  # Note we expect the remainder to be > 0.
     .endm
    
     TEST_DIV divu, I4, I5
     TEST_DIV divu, I5, I4
     TEST_DIV divu, I2, I3
     TEST_DIV div,  I2, I5
-    #TEST_DIV div,  10, -5       # This would fail with DIVU
-    #TEST_DIV div,  -5, 10
+    TEST_DIV div,  10, -5       # This would fail with DIVU
+    TEST_DIV div,  -5, 10
     
 muldiv_end:
     PRINT_RESULT

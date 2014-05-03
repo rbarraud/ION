@@ -413,6 +413,16 @@ begin
         elsif info.present_data_wr_addr = TB_MSG_REG_ADDRESS then
             -- Message to test bench from SW. Data word will be the accumulated
             -- number of errors.
+
+            -- Log the register write now (the simulation will be stopped) so 
+            -- that the log matches the SWSIM  log.
+            ri := X"00" + info.wr_be;
+            print(l_file, "("& hstr(info.pc_m(k-1)) &") ["& 
+                  hstr(info.present_data_wr_addr) &"] |"& 
+                  hstr(ri)& "|="& 
+                  hstr(info.io_wr_data)& " WR" );
+
+            -- Display success/failure message according to number of errors.
             assert conv_integer(info.io_wr_data) /= 0
             report "Test PASSED"
             severity failure;
