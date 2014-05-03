@@ -141,6 +141,10 @@
     1000:
     .endm
 
+    # Compare register to the absolute value of a 32-bit literal,
+    # conditionally increment error counter:
+    # 1: r1 = exp & 0xffffffff
+    # 2: if r1 != r2 then $28++
     .macro  CMPU r1, r2, exp
     li      \r1,(\exp) & 0xffffffff
     bgez    \r1,1010f           # If exp < 0...
@@ -148,6 +152,15 @@
     sub     \r1,$0,\r1          # ...negate it
     1010:
     sub     \r1,\r2,\r1
+    beqz    \r1,1000f
+    nop
+    addi    $28,$28,1
+    1000:
+    .endm
+
+    # Compare register to zero, conditionally increment error counter:
+    # 1: if r1 != 0 then $28++
+    .macro  CMP0 r1, r2
     beqz    \r1,1000f
     nop
     addi    $28,$28,1
@@ -422,30 +435,26 @@ icache_0:
     .endif
     
     # Add/Sub instructions: add, addi, addiu, addu, sub, subu.
+    # Also "set" instructions: slt, slti, sltiu sltu.
 arith:
     INIT_TEST msg_arith
     INIT_REGS I
     
     add     $6,$2,$3
     CMP     $9,$6, I2 + I3
-    
     add     $6,$4,$5
     CMP     $20,$6, I4 + I5
-    
     add     $6,$4,$5
     addi    $6, C1
     CMP     $20,$6, I4 + I5 + C1 + 0xffff0000
-    
     add     $6,$4,$5
     addi    $6, C0
     CMP     $20,$6, I4 + I5 + C0
     
-    # FIXME possible bug caught in ADDIU
-    .ifgt   0
+    # Remember ADDIU is NOT unsigned! it will sign-extend the 16-bit imm word.
     add     $6,$4,$5
     addiu   $6, C1
-    CMP     $20,$6, I4 + I5 + C1
-    .endif
+    CMP     $20,$6, I4 + I5 + C1 + 0xffff0000
     
     add     $6,$4,$5
     addiu   $6, C0
@@ -454,29 +463,43 @@ arith:
     # Since we support no overflow exceptions ADDU is identical to ADD.
     addu    $6,$2,$3
     CMP     $9,$6, I2 + I3
-    
     addu    $6,$4,$5
     CMP     $20,$6, I4 + I5
-    
     addu    $6,$4,$5
     addi    $6, C1
     CMP     $20,$6, I4 + I5 + C1 + 0xffff0000
-    
     addu    $6,$4,$5
     addi    $6, C0
     CMP     $20,$6, I4 + I5 + C0
     
     sub     $6,$2,$3
     CMP     $9,$6, I2 - I3
-    
     sub     $6,$4,$5
     CMP     $20,$6, I4 - I5
-    
     subu    $6,$2,$3
     CMP     $9,$6, I2 - I3
-    
     subu    $6,$4,$5
     CMP     $20,$6, I4 - I5
+    
+    slt     $8,$2,$3            # Comparing unsigned numbers.
+    CMP     $20,$8, 1
+    slt     $8,$3,$2
+    CMP0    $20,$8
+    slt     $8,$4,$5            # Comparing signed numbers.
+    CMP     $20,$8, 0
+    slt     $8,$5,$4
+    CMP     $20,$8,1
+    
+    sltu    $8,$2,$3            # Comparing unsigned numbers.
+    CMP     $20,$8, 1
+    sltu    $8,$3,$2
+    CMP0    $20,$8
+    sltu    $8,$4,$5            # Comparing large ('signed') numbers.
+    CMP     $20,$8,1
+    sltu    $8,$5,$4
+    CMP     $20,$8,0
+    
+    
     
 arith_end:
     PRINT_RESULT
@@ -618,7 +641,7 @@ msg_dcache:             .asciiz     "Data Cache basic test........ "
 msg_icache:             .asciiz     "Code Cache basic test........ "
 msg_debug_regs:         .asciiz     "Access to debug registers.... "
 msg_interlock:          .asciiz     "Load interlocks.............. "
-msg_arith:              .asciiz     "Add*/Sub* opcodes............ "
+msg_arith:              .asciiz     "Arithmetic opcodes........... "
 msg_logic:              .asciiz     "Logic opcodes................ "
 msg_muldiv:             .asciiz     "Mul*/Div* opcodes............ "
 msg_break_syscall:      .asciiz     "Break/Syscall opcodes........ "
