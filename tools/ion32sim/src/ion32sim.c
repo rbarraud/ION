@@ -344,8 +344,8 @@ typedef struct s_state {
    int opcode;
    int pc, pc_next, epc;
    uint32_t op_addr;            /**< address of opcode being simulated */
-   unsigned int hi;
-   unsigned int lo;
+   uint32_t hi;
+   uint32_t lo;
    uint32_t cp0_status;
    int32_t trap_cause;          /**< temporary trap code or <0 if no trap */
    uint32_t cp0_cause;
@@ -457,6 +457,7 @@ int init_cpu(t_state *s, t_args *args);
 void reset_cpu(t_state *s);
 void unimplemented(t_state *s, const char *txt);
 void reverse_endianess(uint8_t *data, uint32_t bytes);
+int32_t signed_rem(int32_t dividend, int32_t divisor);
 
 /* Hardware simulation */
 int mem_read(t_state *s, int size, unsigned int address, int log);
@@ -831,6 +832,23 @@ void mem_write(t_state *s, int size, unsigned address, unsigned value, int log){
         /* This is a bug, display warning */
         printf("\n\n**** BUG: wrong memory write size at 0x%08x\n\n", s->pc);
     }
+}
+
+/**
+    Compute signed remainder like the HW does.
+
+    C99 will give you a remainder that has the same sign as the dividend,
+    whereas the ION core will give you a positive remainder.
+
+    We need this little function to compute the remainder the way the HW does.
+
+    Eventually we'll have to modify the muldiv unit to comply with the almost
+    universal remainder sign convention used in C99 but for the time being
+    we simulate what we have in the HW.
+*/
+int32_t signed_rem(int32_t dividend, int32_t divisor) {
+    int32_t rem = dividend % divisor;
+    return (rem>0? rem : -rem);
 }
 
 /*-- unaligned store and load instructions -----------------------------------*/
@@ -1282,7 +1300,7 @@ void cycle(t_state *s, int show_mode){
         case 0x13:/*MTLO*/ s->lo=r[rs];              break;
         case 0x18:/*MULT*/ mult_big_signed(r[rs],r[rt],&s->hi,&s->lo); break;
         case 0x19:/*MULTU*/ mult_big(r[rs],r[rt],&s->hi,&s->lo); break;
-        case 0x1a:/*DIV*/  s->lo=r[rs]/r[rt]; s->hi=r[rs]%r[rt]; break;
+        case 0x1a:/*DIV*/  s->lo=r[rs]/r[rt]; s->hi=signed_rem(r[rs],r[rt]); break;
         case 0x1b:/*DIVU*/ s->lo=u[rs]/u[rt]; s->hi=u[rs]%u[rt]; break;
         case 0x20:/*ADD*/  r[rd]=r[rs]+r[rt];        break;
         case 0x21:/*ADDU*/ r[rd]=r[rs]+r[rt];        break;
