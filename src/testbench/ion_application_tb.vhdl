@@ -80,19 +80,25 @@ constant SRAM_SIZE : integer := 64 * 1024;
 constant SRAM_ADDR_SIZE : integer := log2(SRAM_SIZE);
 
 signal mpu_sram_addr :      std_logic_vector(SRAM_ADDR_SIZE downto 1);
-signal sram_addr :          std_logic_vector(SRAM_ADDR_SIZE downto 1);
-signal sram_data :          std_logic_vector(15 downto 0);
+signal sram_data_out :      std_logic_vector(15 downto 0);
+signal sram_data_in :       std_logic_vector(15 downto 0);
 signal sram_output :        std_logic_vector(15 downto 0);
 signal sram_wen :           std_logic;
 signal sram_ben :           std_logic_vector(1 downto 0);
 signal sram_oen :           std_logic;
 signal sram_cen :           std_logic;
+signal sram_drive_en :      std_logic;
+
+signal irq :                std_logic_vector(5 downto 0);
 
 -- Static 16-bit wide RAM.
 -- Using shared variables for big memory arrays speeds up simulation a lot;
 -- see Modelsim 6.3 User Manual, section on 'Modelling Memory'.
 -- WARNING: I have only tested this construct with Modelsim SE 6.3.
 shared variable sram : t_hword_table(0 to SRAM_SIZE-1);
+
+signal sram_addr :          std_logic_vector(SRAM_ADDR_SIZE downto 1);
+signal sram_data :          std_logic_vector(15 downto 0);
 
 
 
@@ -131,12 +137,16 @@ begin
         RESET_I             => reset, 
 
         SRAM_ADDR_O         => mpu_sram_addr,
-        SRAM_DATA_IO        => sram_data, 
+        SRAM_DATA_I         => sram_data_in,
+        SRAM_DATA_O         => sram_data_out,
         SRAM_WEn_O          => sram_wen, 
         SRAM_OEn_O          => sram_oen, 
         SRAM_UBn_O          => sram_ben(1), 
         SRAM_LBn_O          => sram_ben(0), 
-        SRAM_CEn_O          => sram_cen
+        SRAM_CEn_O          => sram_cen,
+        SRAM_DRIVE_EN_O     => sram_drive_en,
+        
+        IRQ_I               => irq
     );
 
     
@@ -178,14 +188,17 @@ begin
 
     sram_addr <= mpu_sram_addr(SRAM_ADDR_SIZE downto 1);
 
+    sram_data_in <= sram_output;
+    sram_data <= sram_data_out; --output when sram_drive_en='1' else (others => 'Z');
+    
+    
     -- Simulated SRAM read.
     -- FIXME byte enables missing in read
     sram_output <=
         sram(conv_integer(unsigned(sram_addr))) when sram_cen='0'
         else (others => 'Z');
-    
-    sram_data <= sram_output when sram_oen='0' else (others => 'Z');
         
+    -- Simulated SRAM write.
     simulated_sram_write:
     process(sram_wen, sram_addr, sram_oen, sram_cen, sram_ben)
     begin
@@ -201,6 +214,20 @@ begin
         end if;
     end process simulated_sram_write;    
     
+    -- HW interrupt simulation -------------------------------------------------
+       
+    -- Wire the IRQ inputs to a simulation-only signal in the sim package.
+    interrupt_registers:
+    process(clk)
+    begin
+        if clk'event and clk='1' then
+            if reset='1' then
+                irq <= (others => '0');
+            else
+                irq <= log_info.hw_irq;
+            end if;
+        end if;
+    end process interrupt_registers;
         
     -- Logging process: launch logger function ---------------------------------
     log_execution:

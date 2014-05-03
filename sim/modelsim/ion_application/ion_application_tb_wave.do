@@ -28,10 +28,12 @@ add wave -noupdate -group Data -format Literal -radix hexadecimal /ion_applicati
 add wave -noupdate -group Data -format Literal -radix hexadecimal /ion_application_tb/mpu/core/data_miso.rd_data
 add wave -noupdate -group Data -format Logic /ion_application_tb/mpu/core/data_miso.mwait
 add wave -noupdate -divider {UC WB Bridge}
-add wave -noupdate -format Literal -radix hexadecimal -expand /ion_application_tb/mpu/core/data_wb_bridge/ion_mosi_i
-add wave -noupdate -format Literal -radix hexadecimal -expand /ion_application_tb/mpu/core/data_wb_bridge/ion_miso_o
-add wave -noupdate -format Literal -radix hexadecimal -expand /ion_application_tb/mpu/core/data_wb_bridge/wishbone_mosi_o
-add wave -noupdate -format Literal -radix hexadecimal -expand /ion_application_tb/mpu/core/data_wb_bridge/wishbone_miso_i
+add wave -noupdate -divider I-Cache
+add wave -noupdate -format Literal -expand /ion_application_tb/mpu/core/code_cache_present/code_cache/cache_ctrl_mosi_i
+add wave -noupdate -format Logic /ion_application_tb/mpu/core/code_cache_present/code_cache/update_tag
+add wave -noupdate -format Logic /ion_application_tb/mpu/core/code_cache_present/code_cache/new_valid_flag
+add wave -noupdate -format Logic /ion_application_tb/mpu/core/code_cache_present/code_cache/tag_table_we
+add wave -noupdate -color Pink -format Literal /ion_application_tb/mpu/core/code_cache_present/code_cache/ps
 add wave -noupdate -divider D-Cache
 add wave -noupdate -format Logic /ion_application_tb/mpu/core/data_cache_present/data_cache/ce_i
 add wave -noupdate -format Logic /ion_application_tb/mpu/core/data_cache_present/data_cache/miss
@@ -55,7 +57,7 @@ add wave -noupdate -group SRAM -format Logic /ion_application_tb/sram_wen
 add wave -noupdate -group SRAM -format Literal -radix hexadecimal /ion_application_tb/sram_addr
 add wave -noupdate -group SRAM -format Literal -radix hexadecimal /ion_application_tb/sram_data
 TreeUpdate [SetDefaultTree]
-WaveRestoreCursors {{Cursor 1} {9430000 ps} 0}
+WaveRestoreCursors {{Cursor 1} {82290000 ps} 0}
 configure wave -namecolwidth 150
 configure wave -valuecolwidth 100
 configure wave -justifyvalue left
@@ -69,4 +71,4 @@ configure wave -gridperiod 1000
 configure wave -griddelta 40
 configure wave -timeline 0
 update
-WaveRestoreZoom {9377320 ps} {9589511 ps}
+WaveRestoreZoom {81710540 ps} {81883092 ps}

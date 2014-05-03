@@ -2,8 +2,9 @@
 -- ion_sram16_interface.vhdl -- WB-to-16-bit-SRAM interface.
 --------------------------------------------------------------------------------
 -- 
--- The interface targets a specific SRAM chi, the 256Kx16 61LV25616 from ISSI.
+-- The interface targets a specific SRAM chip, the 256Kx16 61LV25616 from ISSI.
 -- This chip is representative of the class of SRAMs this module is meant for.
+-- (And happens to be used in the DE-1 board we're targetting...)
 --
 -- REFERENCES
 -- [1] http://www.issi.com/WW/pdf/61C256AL.pdf -- Target SRAM datasheet.
