@@ -789,10 +789,13 @@ p1_c0_rs_num <= p1_ir_reg(15 downto 11);
 
 -- Decode ALU control signals
 
-p1_ac.use_slt <= '1' when (p1_ir_op="000001" and p1_ir_reg(20 downto 17)="01000") or
-                        (p1_ir_op="000000" and p1_ir_reg(5 downto 1)="10101") or
-                        p1_ir_op="001010" or p1_ir_op="001011"
-               else '0';
+p1_ac.use_slt <= '1' when 
+    (p1_ir_op="000001" and p1_ir_reg(20 downto 16)="01000") or  -- TGEI (?)
+    (p1_ir_op="000000" and p1_ir_reg(5 downto 1)="10101") or    -- SLT, SLTU
+    p1_ir_op="001010" or    -- SLTI
+    p1_ir_op="001011"       -- SLTIU
+    else '0';
+
 p1_ac.arith_unsigned <= p1_ac.use_slt and (p1_ir_reg(0) or p1_ir_op(26));
 
 p1_ac.use_logic(0) <= '1' when (p1_op_special='1' and p1_ir_fn(5 downto 3)/="000") or
@@ -809,13 +812,13 @@ p1_ac.use_arith <= '1' when p1_ir_op(31 downto 28)="0010" or
 
 -- selection of 2nd internal alu operand: {i2, /i2, i2<<16, 0x0}
 p1_ac.neg_sel(1)<= '1' when p1_ir_op(29 downto 26) = "1111" else '0';
-p1_ac.neg_sel(0)<= '1' when   p1_ir_op="001010" or 
+p1_ac.neg_sel(0)<= '1' when p1_ir_op="001010" or 
                             p1_ir_op="001011" or
                             p1_ir_op(31 downto 28)="0001" or
                             (p1_op_special='1' and
                                 (p1_ir_fn="100010" or
-                                 p1_ir_fn="100011" or
-                                 p1_ir_fn(5 downto 2)="1010"))
+                                p1_ir_fn="100011" or
+                                p1_ir_fn(5 downto 2)="1010"))
                  else '0';
 p1_ac.cy_in <= p1_ac.neg_sel(0);
 
