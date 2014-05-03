@@ -85,6 +85,8 @@
     .set TB_DEBUG,          0xffff8020
     # Register connected to HW interrupt lines.
     .set TB_HW_IRQ,         0xffff8010
+    # Register used to send pass/fail messages to the TB.
+    .set TB_RESULT,         0xffff8018
     
     #-- Utility macros ---------------------------------------------------------
 
@@ -251,7 +253,7 @@ hardware_interrupts_0:
     .endif
     
     .ifle   TARGET_HARDWARE
-    .ifgt   1
+    .ifgt   0
     # Test access to debug registers over uncached data WB bridge.
 debug_regs:
     INIT_TEST msg_debug_regs
@@ -405,7 +407,7 @@ icache_0:
     PRINT_RESULT    
     .endif
     
-    # Add/Sub instructions: add, addi, sub, subi.
+    # Add/Sub instructions: add, addi, addiu, addu, sub, subu.
 arith:
     INIT_TEST msg_arith
     INIT_REGS I
@@ -433,6 +435,21 @@ arith:
     
     add     $6,$4,$5
     addiu   $6, C0
+    CMP     $20,$6, I4 + I5 + C0
+    
+    # Since we support no overflow exceptions ADDU is identical to ADD.
+    addu    $6,$2,$3
+    CMP     $9,$6, I2 + I3
+    
+    addu    $6,$4,$5
+    CMP     $20,$6, I4 + I5
+    
+    addu    $6,$4,$5
+    addi    $6, C1
+    CMP     $20,$6, I4 + I5 + C1 + 0xffff0000
+    
+    addu    $6,$4,$5
+    addi    $6, C0
     CMP     $20,$6, I4 + I5 + C0
     
     sub     $6,$2,$3
@@ -487,25 +504,45 @@ logic_end:
 muldiv:
     INIT_TEST msg_muldiv
    
-    li      $4,I4
-    li      $5,I5
-    divu    $7,$4,$5
+    # Test DIV or DIVU with some arguments. 
+    # Will use the same register set in all tests...
+    .macro TEST_DIV op, num, den
+    li      $4,\num             # Load regs with test arguments...
+    li      $5,\den
+    # (By using $0 as first op we tell as not to expand the div opcode.)
+    \op     $0,$4,$5            # ...do the div operation...
     mflo    $8
     mfhi    $9
-    CMP     $8,$8, I4 / I5
-    CMP     $8,$9, I4 % I5
+    CMP     $7,$8, \num / \den  # ...and check result.
+    CMP     $6,$9, \num % \den    
+    .endm
+   
+    TEST_DIV divu, I4, I5
+    TEST_DIV divu, I5, I4
+    TEST_DIV divu, I2, I3
+    TEST_DIV div,  I2, I5
+    #TEST_DIV div,  10, -5       # This would fail with DIVU
+    #TEST_DIV div,  -5, 10
     
 muldiv_end:
     PRINT_RESULT
     
     
-
+    
+    
+    # End of the test series. Display global pass/fail message.
     
     bnez    $30,cputest_fail
     nop
     PUTS    msg_program_pass
+        
 exit:
-    j       exit
+    .ifle   TARGET_HARDWARE
+    li      $9,TB_RESULT
+    sw      $30,0($9)
+    .endif
+exit_0:
+    j       exit_0
     nop
 
 cputest_fail:
@@ -513,9 +550,7 @@ cputest_fail:
     j       exit
     nop
 
-
- 
-
+    
     #---- Support functions ----------------------------------------------------
 
  
