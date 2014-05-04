@@ -65,7 +65,7 @@ entity ion_application is
         DATA_CACHE_LINES : integer := 128;
         -- Size of code cache in lines. 
         -- Set to a power of 2 or 0 to disable the code cache.
-        CODE_CACHE_LINES : integer := 0;
+        CODE_CACHE_LINES : integer := 128;
         
         -- Type of memory to be used for register bank in xilinx HW
         XILINX_REGBANK  : string    := "distributed" -- {distributed|block}
@@ -184,6 +184,7 @@ begin
     
     -- I/O devices -------------------------------------------------------------
     
+    DEBUG_O <= '0';
     
     -- FIXME IO devices missing, WB bus hardwired to a non-blocking state.
     data_uc_wb_miso.dat <= (others => '0');

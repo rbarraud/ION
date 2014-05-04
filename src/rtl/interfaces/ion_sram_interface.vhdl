@@ -113,7 +113,7 @@ begin
  
     
     control_state_machine_transitions:
-    process(ps, wait_done, WB_MOSI_I.cyc, WB_MOSI_I.we)
+    process(ps, wait_done, WB_MOSI_I)
     begin
         case ps is
         when IDLE =>

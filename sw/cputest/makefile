@@ -30,9 +30,9 @@ APP_NAME = "CPU tester"
 # Link script to be used
 LINK_SCRIPT = $(SW_ROOT)/common/link/internal.lds
 
-# Code memory parameters -- Code TCM.
+# Code memory parameters -- Code TCM. Size in WORDS!
 CODE_MEM_START  = 0xbfc00000
-CODE_MEM_SIZE   = 16384
+CODE_MEM_SIZE   = 4096
 # Data memory parameters -- Data TCM.
 DATA_MEM_START  = 0x00000000
 DATA_MEM_SIZE   = 1024

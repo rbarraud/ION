@@ -317,7 +317,7 @@ end function zero_objcode;
 function objcode_to_wtable(oC : t_obj_code; 
                            size : integer) 
                            return t_word_table is
-variable br : t_word_table(integer range 0 to size-1):=(others => X"00000000");
+variable br : t_word_table(integer range 0 to size/4-1):=(others => X"00000000");
 variable i, address, index : integer;
 begin
     

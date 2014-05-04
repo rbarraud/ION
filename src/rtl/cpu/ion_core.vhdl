@@ -45,13 +45,13 @@ use work.ION_INTERNAL_PKG.all;
 
 entity ion_core is
     generic(
-        -- Size of code TCM block in bytes. 
+        -- Size of code TCM block in 32-bit words. 
         -- Set to a power of 2 or to zero to disable code TCM.
         TCM_CODE_SIZE : integer := 2048;
         -- Contents of code TCM.
         TCM_CODE_INIT : t_obj_code := zero_objcode(2048);
         
-        -- Size of data TCM block in bytes.
+        -- Size of data TCM block in 32-bit words.
         -- Set to a power of 2 or to zero to disable data TCM.
         TCM_DATA_SIZE : integer := 2048;
         -- Contents of data TCM.
@@ -151,10 +151,10 @@ signal void_miso :          t_cpumem_miso;
 
 -- Data TCM mapped to the start of KSEG1 uncached area.
 constant DTCM_BASE : t_word :=          X"A0000000";          
-constant DTCM_ASIZE : integer :=        log2(TCM_DATA_SIZE);
+constant DTCM_ASIZE : integer :=        log2(TCM_DATA_SIZE+2);
 -- Code TCM mapped to reset vector within KSEG1 uncached area.
 constant CTCM_BASE : t_word :=          X"BFC00000";
-constant CTCM_ASIZE : integer :=        log2(TCM_CODE_SIZE);
+constant CTCM_ASIZE : integer :=        log2(TCM_CODE_SIZE+2);
 -- Code TCM accessible on data bus on the same address as on the code bus.
 constant DCTCM_BASE : t_word :=         X"BFC00000";
 
@@ -168,7 +168,7 @@ constant DWB_ASIZE : integer :=         30;
 -- Return '1' if high 's' of address 'a' match those of address 'b'.
 function adecode(a : t_word; b : t_word; s : integer) return std_logic is
 begin
-    if a(31 downto s) = b(31 downto s) then
+    if a(31 downto s+1) = b(31 downto s+1) then
         return '1';
     else
         return '0';

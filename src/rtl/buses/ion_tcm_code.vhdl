@@ -46,7 +46,7 @@ use work.ION_INTERNAL_PKG.all;
 
 entity ION_TCM_CODE is
     generic(
-        -- Size of TCM block in bytes. Set to zero to disable TCM.
+        -- Size of TCM block in words. Set to zero to disable TCM.
         SIZE : integer := 4096;
         -- Initial contents of TCM. Default is zeros.
         INIT_DATA : t_obj_code := zero_objcode(4096)
@@ -66,14 +66,14 @@ architecture rtl of ION_TCM_CODE is
 
 constant TCM_ADDR_SIZE : integer := log2(SIZE);
 
-subtype t_tcm_address is std_logic_vector(TCM_ADDR_SIZE-1 downto 2);
+subtype t_tcm_address is std_logic_vector(TCM_ADDR_SIZE+2-1 downto 2);
 
 signal tcm_addr :           t_tcm_address;
 signal tcm_rd_data :        t_word;
 
 -- TCM memory block, initialized with constant data table.
 signal tcm_ram :            t_word_table(0 to ((SIZE)-1)) := 
-                            objcode_to_wtable(INIT_DATA, SIZE);
+                            objcode_to_wtable(INIT_DATA, SIZE*4);
 
           
 begin

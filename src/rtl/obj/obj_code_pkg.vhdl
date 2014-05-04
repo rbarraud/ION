@@ -44,7 +44,7 @@ package OBJ_CODE_PKG is
 
 -- Simulation or synthesis parameters ------------------------------------------
 
-constant CODE_MEM_SIZE : integer := 16384;
+constant CODE_MEM_SIZE : integer := 4096;
 constant DATA_MEM_SIZE : integer := 1024;
 
 
