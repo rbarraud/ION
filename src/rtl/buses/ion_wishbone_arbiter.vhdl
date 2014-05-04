@@ -1,7 +1,19 @@
 --------------------------------------------------------------------------------
--- ion_wishbone_arbiter.vhdl -- 
+-- ion_wishbone_arbiter.vhdl -- Simple arbiter for ION refill ports.
 --------------------------------------------------------------------------------
--- 
+--
+-- This is not a general purpose WB arbiter; it is meant to share a single 
+-- external memory interface between the two refill ports of the ION core,
+-- data and code.
+--
+-- The data port is given priority: when a cycle is requested on the data port, 
+-- it will be given control as as soon as any ongoing cycle on the code
+-- port is finished (as signalled by deassertion of the WB CYC signal).
+-- The data port will lose control as soon as its cycle is over.
+-- This scheme has no memory: the above is the only rule.
+-- This works because both ports will have gaps between successive refills,
+-- and because the ports are not going to lock each other: if the code bus 
+-- starved, the data cache would eventually stop issuing data cycles.
 --
 -- REFERENCES
 -- [1] ion_design_notes.pdf -- ION project design notes.
@@ -44,12 +56,15 @@ entity ION_WISHBONE_ARBITER is
         CLK_I               : in std_logic;
         RESET_I             : in std_logic;
 
+        -- Connect to core code refill port.
         CODE_MOSI_I         : in t_wishbone_mosi;
         CODE_MISO_O         : out t_wishbone_miso;
 
+        -- Connect to core data refill port.
         DATA_MOSI_I         : in t_wishbone_mosi;
         DATA_MISO_O         : out t_wishbone_miso;
         
+        -- Connect to memory interface.
         MEM_MOSI_0          : out t_wishbone_mosi;
         MEM_MISO_I          : in t_wishbone_miso
     );
