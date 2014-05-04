@@ -717,7 +717,10 @@ p1_eret <= '1' when p1_ir_reg(31 downto 21)="01000010000" and
 -- Raise some signals for some particular group of opcodes
 p1_op_special <= '1' when p1_ir_op="000000" else '0'; -- group '0' opcodes
 p1_do_reg_jump <= '1' when p1_op_special='1' and p1_ir_fn(5 downto 1)="00100" else '0';
-p1_do_zero_ext_imm <= '1' when (p1_ir_op(31 downto 28)="0011") else '0';
+p1_do_zero_ext_imm <= 
+    '1' when (p1_ir_op(31 downto 28)="0011") else       -- ANDI, ORI, XORI, LUI
+    '1' when (p1_ir_op(31 downto 26)="001011") else     -- SLTIU
+    '0'; -- NOTE that ADDIU *does* sign extension.
 
 -- Decode input data mux control (LW, LH, LB, LBU, LHU) and load enable
 p1_do_load <= '1' when 

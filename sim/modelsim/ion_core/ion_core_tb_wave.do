@@ -23,7 +23,7 @@ add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/tcm_code
 add wave -noupdate -format Logic /ion_core_tb/core/tcm_code_present/code_arbiter/data_request
 add wave -noupdate -format Logic /ion_core_tb/core/tcm_code_present/code_arbiter/clash
 add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/tcm_code_present/code_arbiter/master_c_miso_o
-add wave -noupdate -expand -group Code
+add wave -noupdate -group Code
 add wave -noupdate -group Code -format Literal -radix hexadecimal /ion_core_tb/core/code_mosi.addr
 add wave -noupdate -group Code -format Logic -radix hexadecimal /ion_core_tb/core/code_mosi.rd_en
 add wave -noupdate -group Code -format Literal -radix hexadecimal /ion_core_tb/core/code_mosi.wr_be
@@ -65,9 +65,15 @@ add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/data_uc_wb_mo
 add wave -noupdate -format Literal -radix hexadecimal -expand /ion_core_tb/data_uc_wb_miso
 add wave -noupdate -format Literal /ion_core_tb/uwb_wait_ctr
 add wave -noupdate -divider Debug
-add wave -noupdate -format Literal /ion_core_tb/core/data_cache_present/data_cache/cache_ctrl_mosi_i
+add wave -noupdate -format Literal -expand /ion_core_tb/core/cpu/alu_inst/ac_i
+add wave -noupdate -format Logic /ion_core_tb/core/cpu/p1_do_zero_ext_imm
+add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/cpu/alu_inst/alu_eop2
+add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/cpu/alu_inst/alu_eop1
+add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/cpu/alu_inst/op2_i
+add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/cpu/alu_inst/op1_i
+add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/cpu/alu_inst/alu_arith
 TreeUpdate [SetDefaultTree]
-WaveRestoreCursors {{Cursor 1} {28970000 ps} 0}
+WaveRestoreCursors {{Cursor 1} {99950000 ps} 0}
 configure wave -namecolwidth 206
 configure wave -valuecolwidth 60
 configure wave -justifyvalue left
@@ -81,4 +87,4 @@ configure wave -gridperiod 1
 configure wave -griddelta 40
 configure wave -timeline 0
 update
-WaveRestoreZoom {28778835 ps} {29465926 ps}
+WaveRestoreZoom {99904728 ps} {99993735 ps}
