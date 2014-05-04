@@ -132,7 +132,7 @@ typedef enum {
 t_map memory_maps[NUM_MEM_MAPS] = {
     {/* Experimental memory map (default) */
         {/* Code TCM (Holds bootstrap code) */
-        {VECTOR_RESET,  0x00002000, 0xf8000000, MEM_READONLY, NULL, "Code TCM"},
+        {VECTOR_RESET,  0x00004000, 0xf8000000, MEM_READONLY, NULL, "Code TCM"},
         /* Data TCM */
         {0xa0000000,    0x00002000, 0xf8000000, 0, NULL, "Data TCM"},
         /* main external ram block  */
