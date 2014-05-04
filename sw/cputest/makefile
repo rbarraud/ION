@@ -91,7 +91,7 @@ synth: program
 
 #-- Set assembler arguments for "tb_application" test bench.
 set_tb_app_variables: 
-	$(eval TBARGS := --defsym TEST_ICACHE=0 --defsym TARGET_HARDWARE=1)    
+	$(eval TBARGS := --defsym TEST_ICACHE=1 --defsym TARGET_HARDWARE=1)    
 
 #-- Set assembler arguments for "tb_core" test bench.
 set_tb_core_variables: 

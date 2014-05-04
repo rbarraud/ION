@@ -100,6 +100,9 @@ signal code_wb_miso :       t_wishbone_miso;
 signal data_wb_mosi :       t_wishbone_mosi;
 signal data_wb_miso :       t_wishbone_miso;
 
+signal sram_wb_mosi :       t_wishbone_mosi;
+signal sram_wb_miso :       t_wishbone_miso;
+
 signal data_uc_wb_mosi :    t_wishbone_mosi;
 signal data_uc_wb_miso :    t_wishbone_miso;
 
@@ -134,15 +137,27 @@ begin
         IRQ_I               => IRQ_I
     );
     
-    -- FIXME code/data arbiter missing
-    code_wb_miso.stall <= '0';
-    code_wb_miso.ack <= '1';
+    
+    -- SRAM refill memory interface --------------------------------------------
+    
+    -- 
+    sram_arbiter: entity work.ION_WISHBONE_ARBITER
+    port map (
+        CLK_I               => CLK_I,
+        RESET_I             => RESET_I,
         
-    -- Refill memory interfaces ------------------------------------------------
-    
-    -- FIXME code refill port is hanging loose
-    -- FIXME arbiter for code/data refill buses should be here
-    
+        CODE_MOSI_I         => code_wb_mosi,
+        CODE_MISO_O         => code_wb_miso,
+
+        DATA_MOSI_I         => data_wb_mosi,
+        DATA_MISO_O         => data_wb_miso,
+        
+        MEM_MOSI_0          => sram_wb_mosi,
+        MEM_MISO_I          => sram_wb_miso
+    );
+
+
+    -- 
     sram_port: entity work.ION_SRAM16_INTERFACE 
     generic map (
         SRAM_SIZE =>        SRAM_SIZE,
@@ -152,8 +167,8 @@ begin
         CLK_I               => CLK_I,
         RESET_I             => RESET_I,
 
-        WB_MOSI_I           => data_wb_mosi,
-        WB_MISO_O           => data_wb_miso,
+        WB_MOSI_I           => sram_wb_mosi,
+        WB_MISO_O           => sram_wb_miso,
         
         SRAM_ADDR_O         => SRAM_ADDR_O,
         SRAM_DATA_O         => SRAM_DATA_O, 
