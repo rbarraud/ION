@@ -176,6 +176,15 @@
     addi    $28,$28,1
     1001:
     .endm
+    
+    # Write $28 to TB "exit" register, which will terminate the simulation.
+    # To be used at the end pfothe program or as a breakpoint of sorts.
+    .macro EXIT
+    .ifle   TARGET_HARDWARE
+    li      $9,TB_RESULT
+    sw      $30,0($9)
+    .endif
+    .endm
    
    
     #---------------------------------------------------------------------------
@@ -435,7 +444,6 @@ icache_0:
     .endif
     
     # Add/Sub instructions: add, addi, addiu, addu, sub, subu.
-    # Also "set" instructions: slt, slti, sltiu sltu.
 arith:
     INIT_TEST msg_arith
     INIT_REGS I
@@ -481,6 +489,14 @@ arith:
     subu    $6,$4,$5
     CMP     $20,$6, I4 - I5
     
+arith_end:
+    PRINT_RESULT
+    
+    # All "set on less than" instructions: slt, slti, sltiu, sltu.
+slt_ops:
+    INIT_TEST msg_slt
+    INIT_REGS I
+    
     slt     $8,$2,$3            # Comparing unsigned numbers.
     CMP     $20,$8, 1
     slt     $8,$3,$2
@@ -499,9 +515,29 @@ arith:
     sltu    $8,$5,$4
     CMP     $20,$8,0
     
+    li      $2,C0
+    li      $3,-20000
+    slti    $8,$2,0x7fff
+    CMP     $20,$8,1
+    slti    $8,$2,0x7000
+    CMP     $20,$8,0
+    slti    $8,$3,0x8000
+    CMP     $20,$8,0
+    slti    $8,$3,0xd8f0
+    CMP     $20,$8,1
     
+    li      $2,0x00007043       # SLTIU doesn't sign-extend the immediate data.
+    li      $3,0x00008080
+    sltiu   $8,$2,0x7fff
+    CMP     $20,$8,1
+    sltiu   $8,$2,0x7000
+    CMP     $20,$8,0
+    sltiu   $8,$3,0x8000
+    CMP     $20,$8,0
+    sltiu   $8,$3,0xd8f0
+    CMP     $20,$8,1
     
-arith_end:
+slt_ops_end:
     PRINT_RESULT
     
     # Logic instructions: and, andi, or, ori, xor, xori, nor.
@@ -597,10 +633,7 @@ muldiv_end:
     PUTS    msg_program_pass
         
 exit:
-    .ifle   TARGET_HARDWARE
-    li      $9,TB_RESULT
-    sw      $30,0($9)
-    .endif
+    EXIT 
 exit_0:
     j       exit_0
     nop
@@ -641,7 +674,8 @@ msg_dcache:             .asciiz     "Data Cache basic test........ "
 msg_icache:             .asciiz     "Code Cache basic test........ "
 msg_debug_regs:         .asciiz     "Access to debug registers.... "
 msg_interlock:          .asciiz     "Load interlocks.............. "
-msg_arith:              .asciiz     "Arithmetic opcodes........... "
+msg_arith:              .asciiz     "Add*/Sub*.................... "
+msg_slt:                .asciiz     "Slt* opcodes................. "
 msg_logic:              .asciiz     "Logic opcodes................ "
 msg_muldiv:             .asciiz     "Mul*/Div* opcodes............ "
 msg_break_syscall:      .asciiz     "Break/Syscall opcodes........ "
