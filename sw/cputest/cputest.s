@@ -17,6 +17,9 @@
 # bench. As a consequence, this test is not tuitable to run on real HW as it 
 # stands.
 #
+# Also, the test requires a C-TCM of at least 16KB; the attached makefile will 
+# set up the core parameter for this size.
+#
 ################################################################################
 # KNOWN BUGS:
 # (Note: I'm using tags like @hack7 from my personal notes, to be cleaned up.)
@@ -26,11 +29,14 @@
 #   This need to be checked against the specs.
 # 
 ################################################################################
+# THINGS TO BE DONE: 
 #
 #   -# Supply a version of this test suitable for real HW.
-#   -# Test HW interrupts.
-#   -# Test all the missing opcodes.
-#   -# Test COP interface.
+#   -# Test all the missing opcodes (see bottom of file).
+#   -# Use COP0 to get the cache size params and use them in the initialization.
+#   -# Test COP2 interface.
+#   -# The cache tests should use all lines.
+#   -# There's a few other minor FIXMEs here and there in the code.
 #
 ################################################################################
 
@@ -50,6 +56,7 @@
     .set ICACHE_NUM_LINES, 128              # no. of lines in the I-Cache
     .set DCACHE_NUM_LINES, 128              # no. of lines in the D-Cache
     .set DCACHE_LINE_SIZE, 8                # D-Cache line size in words
+    .set ICACHE_LINE_SIZE, 8                # I-Cache line size in words
 
     
      #-- Test data & constants -------------------------------------------------
@@ -230,6 +237,8 @@ init:
     ori     $30,$0,0            # Total test error count.
     ori     $27,$0,0            # Total exception count.
 
+    #---------------------------------------------------------------------------
+    # Test entry in user mode and access to MFC0 from user mode.
     
     # So far, we were in supervisor mode and ERL=1, which means we'll be unable 
     # to return from exceptions properly. 
@@ -247,7 +256,7 @@ init:
     
     PRINT_RESULT 
     
-    
+    #---------------------------------------------------------------------------
     # Test BREAK and SYSCALL opcodes. Remember we're in user mode (ERL=0).
 break_syscall:
     INIT_TEST msg_break_syscall
@@ -268,6 +277,7 @@ break_syscall:
 break_syscall_0:
     PRINT_RESULT
     
+    #---------------------------------------------------------------------------
     # Test HW interrupts using the support logic in the TB.
     .ifle   TARGET_HARDWARE
 hardware_interrupts:
@@ -295,6 +305,7 @@ hardware_interrupts_0:
     PRINT_RESULT
     .endif
     
+    #---------------------------------------------------------------------------
     .ifle   TARGET_HARDWARE
     .ifgt   0
     # Test access to debug registers over uncached data WB bridge.
@@ -317,6 +328,7 @@ debug_regs_0:
     .endif
     .endif
     
+    #---------------------------------------------------------------------------
     # Test load interlock.
 interlock:
     INIT_TEST msg_interlock
@@ -333,6 +345,8 @@ interlock:
 interlock_0:    
     PRINT_RESULT
 
+    #---------------------------------------------------------------------------
+    # Minimal test for data cache. 
     .ifgt   TEST_DCACHE
 dcache:
     INIT_TEST msg_dcache
@@ -340,12 +354,12 @@ dcache:
     # Initialize the cache with CACHE Hit Invalidate instructions.
 cache_init:
     li      $9,CACHED_RAM_BOT   # Any base address will do.
-    li      $8,128              # FIXME number of tags hardcoded!
+    li      $8,DCACHE_NUM_LINES
 cache_init_0:
     cache   IndexInvalidateD,0x0($9)
     addi    $8,$8,-1
     bnez    $8,cache_init_0
-    addi    $9,$9,0x04
+    addi    $9,$9,DCACHE_LINE_SIZE*4
     
     # Test basic D-Cache operation.
     # First, read a few hardcoded values from the test ROM area.
@@ -476,9 +490,10 @@ cache_init_0:
 dcache_end:    
     PRINT_RESULT
     .endif
-    
+
+    #---------------------------------------------------------------------------
     # Test code cache minimally.
-    # (We're gonna execute only a few instructions off the cache.)
+    # (We're just gonna execute only a few instructions off the cache.)
     .ifgt   TEST_ICACHE
 icache:
     INIT_TEST msg_icache
@@ -486,12 +501,12 @@ icache:
     # Initialize the CODE cache with CACHE Hit Invalidate instructions.
 icache_init:
     li      $9,CACHED_RAM_BOT
-    li      $8,128              # FIXME number of tags hardcoded!
+    li      $8,ICACHE_NUM_LINES
 icache_init_0:
     cache   IndexStoreTagI,0x0($9)
     addi    $8,$8,-1
     bnez    $8,icache_init_0
-    addi    $9,$9,0x04
+    addi    $9,$9,ICACHE_LINE_SIZE*4
 
     # First, we write a single "JR RA" (a return) instruction at the start of
     # the cached RAM, and jump to it. 
@@ -510,6 +525,7 @@ icache_0:
     PRINT_RESULT    
     .endif
     
+    #---------------------------------------------------------------------------
     # Add/Sub instructions: add, addi, addiu, addu, sub, subu.
 arith:
     INIT_TEST msg_arith
@@ -559,6 +575,7 @@ arith:
 arith_end:
     PRINT_RESULT
     
+    #---------------------------------------------------------------------------
     # All "set on less than" instructions: slt, slti, sltiu, sltu.
 slt_ops:
     INIT_TEST msg_slt
@@ -607,6 +624,7 @@ slt_ops:
 slt_ops_end:
     PRINT_RESULT
     
+    #---------------------------------------------------------------------------
     # Logic instructions: and, andi, or, ori, xor, xori, nor.
 logic:
     INIT_TEST msg_logic
@@ -639,6 +657,7 @@ logic:
 logic_end:
     PRINT_RESULT
 
+    #---------------------------------------------------------------------------
     # Mul/Div instructions: mul, mulu, div, divu.
     # WARNING: the assembler expands div instructions, see 'as' manual.
 muldiv:
@@ -690,7 +709,7 @@ muldiv:
 muldiv_end:
     PRINT_RESULT
     
-    
+    #---------------------------------------------------------------------------
     # Branch instructions.
 branch:
     INIT_TEST msg_branch
@@ -777,6 +796,7 @@ branch:
 branch_end:
     PRINT_RESULT    
 
+    #---------------------------------------------------------------------------
     # Jump instructions.
 jumps:
     INIT_TEST msg_jump
@@ -797,6 +817,7 @@ jumps:
 jumps_end:
     PRINT_RESULT
     
+    #---------------------------------------------------------------------------
     # Load and store instructions
 load_store:
     INIT_TEST msg_load_store
@@ -821,12 +842,57 @@ load_store:
     HWORD_READBACK u, $17, 0x5678, 0x02
     HWORD_READBACK u, $17, 0xcdef, 0x04
     
-    
+    # TODO evaluate coverage of this test somehow.
     # FIXME eventually we'll test unaligned loads and stores.
     
 load_store_end:
     PRINT_RESULT
     
+    
+    #---------------------------------------------------------------------------
+    # Shift opcodes: SLL, SLLV, SRA, SRAV, SRL, SRLV
+shifts:
+    INIT_TEST msg_shift
+    INIT_REGS I
+    
+    li      $10,13              # We'll use these for the variable shifts.
+    li      $11,17
+       
+    sll     $21,$2,7
+    CMP     $19,$21,I2 << 7
+    sll     $21,$4,23
+    CMP     $19,$21,I4 << 23
+    sllv    $21,$2,$10
+    CMP     $19,$21,I2 << 13
+    sllv    $21,$4,$11
+    CMP     $19,$21,I4 << 17
+    srl     $21,$5,7
+    CMP     $19,$21,I5 >> 7
+    srl     $21,$4,13
+    CMP     $19,$21,I4 >> 13
+    srlv    $21,$5,$10
+    CMP     $19,$21,I5 >> 13
+    srlv    $21,$4,$11
+    CMP     $19,$21,I4 >> 17
+    
+    sra     $21,$5,7
+    CMP     $19,$21,(I5 >> 7) | 0xfe000000
+    sra     $21,$5,24
+    CMP     $19,$21,(I5 >> 24) | 0xffffff00
+    srav    $21,$5,$10
+    CMP     $19,$21,(I5 >> 13) | 0xfff80000
+    srav    $21,$4,$11
+    CMP     $19,$21,(I4 >> 17)    
+    
+shifts_end:
+    PRINT_RESULT    
+    
+    #---------------------------------------------------------------------------
+    # FIXME things remain to be minimally tested:
+    # Move to/from muldiv registers.
+    # Most of COP0
+    # Implemented MIPS32 instructions 
+    # Traps for unimplemented opcodes
     
     ############################################################################
     # End of the test series. Display global pass/fail message.
@@ -884,6 +950,7 @@ msg_jump:               .asciiz     "Jump opcodes................. "
 msg_logic:              .asciiz     "Logic opcodes................ "
 msg_muldiv:             .asciiz     "Mul*/Div* opcodes............ "
 msg_load_store:         .asciiz     "Load/Store opcodes........... "
+msg_shift:              .asciiz     "Shift opcodes................ "
 msg_break_syscall:      .asciiz     "Break/Syscall opcodes........ "
 msg_hw_interrupts:      .asciiz     "HW interrupts (TB only)...... "
 
