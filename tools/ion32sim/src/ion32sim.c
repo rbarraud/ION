@@ -1344,8 +1344,8 @@ void cycle(t_state *s, int show_mode){
     case 0x07:/*BGTZ*/   branch=r[rs]>0;          break;
     case 0x08:/*ADDI*/   r[rt]=r[rs]+(short)imm;  break;
     case 0x09:/*ADDIU*/  u[rt]=u[rs]+(short)imm;  break;
-    case 0x0a:/*SLTI*/   r[rt]=r[rs]<(short)imm;  break;
-    case 0x0b:/*SLTIU*/  u[rt]=u[rs]<(unsigned int)(short)imm; break;
+    case 0x0a:/*SLTI*/   r[rt]=r[rs]<(int)(short)imm; break;
+    case 0x0b:/*SLTIU*/  u[rt]=u[rs]<(imm & 0x0000ffff); break;
     case 0x0c:/*ANDI*/   r[rt]=r[rs]&imm;         break;
     case 0x0d:/*ORI*/    r[rt]=r[rs]|imm;         break;
     case 0x0e:/*XORI*/   r[rt]=r[rs]^imm;         break;
