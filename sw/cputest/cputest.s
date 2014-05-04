@@ -76,6 +76,13 @@
     
     #-- Core addresses ---------------------------------------------------------
     
+    # Start of cached RAM area.
+    .set CACHED_RAM_BOT,    0x80000000
+    # Start of D-TCM block.
+    .set DATA_TCM_BOT,      0xa0000000
+    # Start of C-TCM as mapped on the DATA bus.
+    .set CODE_TCM_BOT,      0x80000000
+    
     # TB registers. These are only available in the SW simulator and in the 
     # RTL simulation test bench, not on real hardware.
 
@@ -313,7 +320,7 @@ debug_regs_0:
     # Test load interlock.
 interlock:
     INIT_TEST msg_interlock
-    la      $9,0xa0000000       # We'll be using the TCM in this test.
+    la      $9,DATA_TCM_BOT     # We'll be using the TCM in this test.
     INIT_REGS I
     sw      $2,0($9)            # Ok, store a known pattern in the TCM...
     nop
@@ -332,7 +339,7 @@ dcache:
 
     # Initialize the cache with CACHE Hit Invalidate instructions.
 cache_init:
-    li      $9,0x90000000       # Any base address will do.
+    li      $9,CACHED_RAM_BOT   # Any base address will do.
     li      $8,128              # FIXME number of tags hardcoded!
 cache_init_0:
     cache   IndexInvalidateD,0x0($9)
@@ -352,60 +359,119 @@ cache_init_0:
     CMP     $20,$4,0x00040004
     nop
     .endif
-    # Now do a write-read test on cached RAM (also simulated in swsin and TB).
-    li      $3,0x80000000       # $3 points to base of cached RAM.
+    # Now do a write-read test on cached RAM (also simulated in swsim and TB).
+    li      $3,CACHED_RAM_BOT # $3 points to base of cached RAM.
     li      $6,0x18026809 
     sw      $6,0x08($3)         # Store test pattern...
-    nop     # FIXME back to back SW/LW fails!
+    # (We do back to back SW/LW)
     lw      $7,0x08($3)         # ...and see if we can read it back.
     CMPR    $6,$7
     NOP
     # Now, store a test byte and read it back. Repeat a few times with 
     # different byte alignments. We'll want a macro to do this comfortably:
-    .macro  BYTE_READBACK r3, bexp, off
+    .macro  BYTE_READBACK u, r3, bexp, off
     ori     $6,$0,\bexp
     ori     $8,$0,\bexp
     ori     $10,$0,\bexp
     ori     $12,$0,\bexp
     sb      $6,\off(\r3)
     # Note we're doing a RD-WR back-to-back here; this is intended.
-    lb      $7,\off(\r3)
+    lb\u    $7,\off(\r3)
     sb      $8,(\off+0x40)(\r3) # RD-WR-RD-WR sequence tested here.
-    lb      $9,(\off+0x40)(\r3)
-    addi    $7,-\bexp
-    beqz    $7,1100f
-    addi    $8,-\bexp
-    beqz    $8,1100f
+    lb\u    $9,(\off+0x40)(\r3)
+    li      $26,\bexp
+    bne     $7,$26,1100f
+    nop
+    bne     $8,$26,1100f
     nop
     sb      $10,(\off+0x70)(\r3)    # Now try sequence WR-WR-RD-RD    
     sb      $12,(\off+0x90)(\r3)
-    lb      $13,(\off+0x90)(\r3)
-    lb      $11,(\off+0x70)(\r3)
-    addi    $11,-\bexp
-    beqz    $11,1100f
-    addi    $13,-\bexp
-    beqz    $13,1100f
+    lb\u    $13,(\off+0x90)(\r3)
+    lb\u    $11,(\off+0x70)(\r3)
+    bne     $11,$26,1100f
     nop
-    addi    $28,$28,1
+    beq     $13,$26,1101f
+    nop
     1100:
+    addi    $28,$28,1
+    1101:
     .endm
+
+    # A simpler macro for 32-bit word accesses will come in handy too.
+    .macro  WORD_READBACK r3, wexp, off
+    li      $6,\wexp
+    li      $8,\wexp
+    li      $10,\wexp
+    li      $12,\wexp
+    li      $14,\wexp
+    sw      $6,\off(\r3)
+    # Note we're doing a RD-WR back-to-back here; this is intended.
+    lw      $7,\off(\r3)
+    sw      $8,\off+0x40(\r3)   # RD-WR-RD-WR sequence tested here.
+    lw      $9,\off+0x40(\r3)
+    bne     $7,$14,1100f
+    nop
+    bne     $9,$14,1100f
+    nop
+    sw      $10,(\off+0x70)(\r3)    # Now try sequence WR-WR-RD-RD    
+    sw      $12,(\off+0x90)(\r3)
+    lw      $13,(\off+0x90)(\r3)
+    lw      $11,(\off+0x70)(\r3)
+    bne     $11,$14,1100f
+    nop
+    beq     $13,$14,1101f
+    nop
+    1100:
+    addi    $28,$28,1
+    1101:
+    .endm
+
+    # Another macro for 16-bit halfword accesses.
+    .macro  HWORD_READBACK u, r3, wexp, off
+    li      $6,\wexp
+    li      $8,\wexp
+    li      $10,\wexp
+    li      $12,\wexp
+    li      $14,\wexp
+    sh      $6,\off(\r3)
+    # Note we're doing a RD-WR back-to-back here; this is intended.
+    lh\u    $7,\off(\r3)
+    sh      $8,\off+0x40(\r3)   # RD-WR-RD-WR sequence tested here.
+    lh\u    $9,\off+0x40(\r3)
+    bne     $7,$14,1100f
+    nop
+    bne     $9,$14,1100f
+    nop
+    sh      $10,(\off+0x70)(\r3)    # Now try sequence WR-WR-RD-RD    
+    sh      $12,(\off+0x90)(\r3)
+    lh\u    $13,(\off+0x90)(\r3)
+    lh\u    $11,(\off+0x70)(\r3)
+    bne     $11,$14,1100f
+    nop
+    beq     $13,$14,1101f
+    nop
+    1100:
+    addi    $28,$28,1
+    1101:
+    .endm
+
     # Ok, we'll try first the same cached area we've been using for word tests.
     # Alignment 0 to 3
-    BYTE_READBACK $3, 0x42, 0x00
-    BYTE_READBACK $3, 0x34, 0x01
-    BYTE_READBACK $3, 0x74, 0x02
-    BYTE_READBACK $3, 0x29, 0x03
+    BYTE_READBACK , $3, 0x42, 0x00
+    BYTE_READBACK , $3, 0x34, 0x01
+    BYTE_READBACK , $3, 0x74, 0x02
+    BYTE_READBACK u, $3, 0x89, 0x03
     # Same deal, different offsets and read first the last address in the cache 
     # line. This'll catch some classes of errors in the tag invalidation logic.
-    BYTE_READBACK $3, 0x24, 0x133
-    BYTE_READBACK $3, 0x43, 0x131
-    BYTE_READBACK $3, 0x47, 0x132
-    BYTE_READBACK $3, 0x77, 0x130
+    BYTE_READBACK , $3, 0x24, 0x133
+    BYTE_READBACK , $3, 0x43, 0x131
+    BYTE_READBACK u, $3, 0x97, 0x132
+    BYTE_READBACK , $3, 0x77, 0x130
     # Same again, only mixing different areas.
-    BYTE_READBACK $3, 0x24, 0x233
-    BYTE_READBACK $3, 0x43, 0x331
-    BYTE_READBACK $3, 0x47, 0x232
-    BYTE_READBACK $3, 0x77, 0x330
+    BYTE_READBACK , $3, 0x24, 0x233
+    BYTE_READBACK u, $3, 0xd3, 0x331
+    BYTE_READBACK , $3, 0x47, 0x232
+    BYTE_READBACK , $3, 0x77, 0x330
     
 dcache_end:    
     PRINT_RESULT
@@ -419,7 +485,7 @@ icache:
 
     # Initialize the CODE cache with CACHE Hit Invalidate instructions.
 icache_init:
-    li      $9,0x80000000
+    li      $9,CACHED_RAM_BOT
     li      $8,128              # FIXME number of tags hardcoded!
 icache_init_0:
     cache   IndexStoreTagI,0x0($9)
@@ -430,6 +496,7 @@ icache_init_0:
     # First, we write a single "JR RA" (a return) instruction at the start of
     # the cached RAM, and jump to it. 
     # Failure in this test will crash the program, of course.
+    li      $9,CACHED_RAM_BOT
     li      $3,0x03e00008       
     sw      $3,0x0($9)
     sw      $0,0x4($9)
@@ -631,15 +698,15 @@ branch:
 
     .macro TEST_BRANCH_Y op
     ori     $25,$0,0            # $25 will be used to count delay slot opcodes.
-    \op     ,4000f
+    \op     4000f
     addi    $25,$25,1           # $25++ so we can see the slot opcode executed.
     addi    $28,$28,1           # Should never execute; inc error counter.
     4001:    
-    \op     ,4002f
+    \op     4002f
     addi    $25,$25,1
     addi    $28,$28,1
     4000:
-    \op     ,4001b              # Ok, now try to jump backwards.
+    \op     4001b               # Ok, now try to jump backwards.
     addi    $25,$25,1
     addi    $28,$28,1
     4002:
@@ -648,7 +715,7 @@ branch:
 
     .macro TEST_BRANCH_N op, r1, r2
     ori     $25,$0,0
-    \op     ,4000f
+    \op     4000f
     addi    $25,$25,1           # $25++ so we can see the slot opcode executed.
     b       4002f
     nop
@@ -661,21 +728,21 @@ branch:
     .macro TEST_BLINK_Y op
     ori     $25,$0,0            # $25 will be used to count delay slot opcodes.
     la      $24,5000f
-    \op     ,4000f
+    \op     4000f
     addi    $25,$25,1           # $25++ so we can see the slot opcode executed.
     5000:
     addi    $28,$28,1           # Should never execute; inc error counter.
     4001:    
     CMPR    $24,$31             # Check link register
     la      $24,5002f
-    \op     ,4002f
+    \op     4002f
     addi    $25,$25,1
     5002:
     addi    $28,$28,1
     4000:
     CMPR    $24,$31             # Check link register
     la      $24,5001f
-    \op     ,4001b              # Ok, now try to jump backwards.
+    \op     4001b               # Ok, now try to jump backwards.
     addi    $25,$25,1
     5001:
     addi    $28,$28,1
@@ -684,47 +751,84 @@ branch:
     CMP     $23,$25,3           # Check delay slot count
     .endm
     
-    TEST_BRANCH_Y "beq $2, $2"  # BEQ
-    TEST_BRANCH_N "beq $2, $3"
-    TEST_BRANCH_Y "bgez $4"     # BGEZ
-    TEST_BRANCH_Y "bgez $0"
-    TEST_BRANCH_N "bgez $5"
-    TEST_BLINK_Y "bgezal $4"    # BGEZAL
-    TEST_BLINK_Y "bgezal $0"
-    TEST_BRANCH_N "bgezal $5"
-    TEST_BRANCH_Y "bgtz $4"     # BGTZ
-    TEST_BRANCH_N "bgtz $0"
-    TEST_BRANCH_N "bgtz $5"
-    TEST_BRANCH_N "blez $4"     # BLEZ
-    TEST_BRANCH_Y "blez $0"
-    TEST_BRANCH_Y "blez $5"
-    TEST_BRANCH_N "bltz $4"     # BLTZ
-    TEST_BRANCH_N "bltz $0"
-    TEST_BRANCH_Y "bltz $5"
-    TEST_BRANCH_N "bltzal $4"   # BLTZAL
-    TEST_BRANCH_N "bltzal $0"
-    TEST_BLINK_Y "bltzal $5"
-    TEST_BRANCH_Y "bne $2, $3"  # BNE
-    TEST_BRANCH_N "bne $2, $2"
-    
-branch_2:    
-    # Check that BAL saves the return address in $31. 
-    # TODO try BAL with jump backwards.
-    la      $24,branch_4        # Store ret address for later comparison.
-    bal     branch_3            # (we're not really going to "ret" from this)
-    addi    $25,$25,1
-branch_4:
-    addi    $28,$28,1
-branch_3:
-    CMPR    $24,$31             # Does $31 match the ret address...?
-    
-    
-    
+    TEST_BRANCH_Y "beq $2, $2," # BEQ
+    TEST_BRANCH_N "beq $2, $3,"
+    TEST_BRANCH_Y "bgez $4,"    # BGEZ
+    TEST_BRANCH_Y "bgez $0,"
+    TEST_BRANCH_N "bgez $5,"
+    TEST_BLINK_Y "bgezal $4,"   # BGEZAL
+    TEST_BLINK_Y "bgezal $0,"
+    TEST_BRANCH_N "bgezal $5,"
+    TEST_BRANCH_Y "bgtz $4,"    # BGTZ
+    TEST_BRANCH_N "bgtz $0,"
+    TEST_BRANCH_N "bgtz $5,"
+    TEST_BRANCH_N "blez $4,"    # BLEZ
+    TEST_BRANCH_Y "blez $0,"
+    TEST_BRANCH_Y "blez $5,"
+    TEST_BRANCH_N "bltz $4,"    # BLTZ
+    TEST_BRANCH_N "bltz $0,"
+    TEST_BRANCH_Y "bltz $5,"
+    TEST_BRANCH_N "bltzal $4,"  # BLTZAL
+    TEST_BRANCH_N "bltzal $0,"
+    TEST_BLINK_Y "bltzal $5,"
+    TEST_BRANCH_Y "bne $2, $3," # BNE
+    TEST_BRANCH_N "bne $2, $2,"
     
 branch_end:
     PRINT_RESULT    
+
+    # Jump instructions.
+jumps:
+    INIT_TEST msg_jump
+    INIT_REGS I
+    
+    .macro TEST_JR target
+    la      $20,target
+    jr      $20
+    .endm
+    
+    # We can use all the "branch" test macros defined above.
+    
+    TEST_BRANCH_Y "j"           # J
+    TEST_BLINK_Y "jal"          # JAL
+    
+    # FIXME jr and jalr tests missing!
+    
+jumps_end:
+    PRINT_RESULT
+    
+    # Load and store instructions
+load_store:
+    INIT_TEST msg_load_store
+    INIT_REGS I
+    
+    # We'll be targetting the data TCM and not the cached areas. 
+    li      $17,DATA_TCM_BOT
+    
+    # SB, LB, LBU
+    BYTE_READBACK  , $17, 0x42, 0x10
+    BYTE_READBACK u, $17, 0xc3, 0x21
+    BYTE_READBACK  , $17, 0x44, 0x32
+    BYTE_READBACK u, $17, 0x85, 0x43
+    
+    # SW, LW
+    WORD_READBACK $17, 0x39404142, 0
+    WORD_READBACK $17, 0x01234567, 4
+
+    # SH, LH, LHU
+    HWORD_READBACK  , $17, 0x1234, 0x00
+    HWORD_READBACK  , $17, 0x5678, 0x02
+    HWORD_READBACK u, $17, 0x5678, 0x02
+    HWORD_READBACK u, $17, 0xcdef, 0x04
     
     
+    # FIXME eventually we'll test unaligned loads and stores.
+    
+load_store_end:
+    PRINT_RESULT
+    
+    
+    ############################################################################
     # End of the test series. Display global pass/fail message.
     
     bnez    $30,cputest_fail
@@ -776,8 +880,10 @@ msg_interlock:          .asciiz     "Load interlocks.............. "
 msg_arith:              .asciiz     "Add*/Sub*.................... "
 msg_slt:                .asciiz     "Slt* opcodes................. "
 msg_branch:             .asciiz     "Branch opcodes............... "
+msg_jump:               .asciiz     "Jump opcodes................. "
 msg_logic:              .asciiz     "Logic opcodes................ "
 msg_muldiv:             .asciiz     "Mul*/Div* opcodes............ "
+msg_load_store:         .asciiz     "Load/Store opcodes........... "
 msg_break_syscall:      .asciiz     "Break/Syscall opcodes........ "
 msg_hw_interrupts:      .asciiz     "HW interrupts (TB only)...... "
 

@@ -44,7 +44,7 @@ package SIM_PARAMS_PKG is
 
 -- Simulation or synthesis parameters ------------------------------------------
 
-constant SIMULATION_LENGTH : integer := 14000;
+constant SIMULATION_LENGTH : integer := 25000;
 constant LOG_TRIGGER_ADDRESS : t_word := X"bfc00000";
 
 

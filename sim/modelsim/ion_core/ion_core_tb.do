@@ -39,4 +39,4 @@ set NumericStdNoWarnings 1
 set StdArithNoWarnings 1
 
 # Ready to run, do so for a resonable time.
-run 150 us
+run 550 us

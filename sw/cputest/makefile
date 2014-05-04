@@ -38,7 +38,7 @@ DATA_MEM_START  = 0x00000000
 DATA_MEM_SIZE   = 1024
 
 # Test bench simulation timeout period in clock cycles.
-SIM_LENGTH = 14000
+SIM_LENGTH = 25000
 # Start logging HW activity after fetching from this address.
 LOG_TRIGGER = 0xbfc00000
 
