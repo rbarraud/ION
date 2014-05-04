@@ -3,14 +3,12 @@
 --------------------------------------------------------------------------------
 -- This is the main project module. It contains the CPU plus the TCMs and caches
 -- if it is configured to have any. 
--- The user does not need to tinker wth any modules at or below this level.
+-- The user does not need to tinker with any modules at or below this level.
 --------------------------------------------------------------------------------
--- FIXME add brief usage instructions.
--- FIXME add reference to datasheet.
+-- FIXME when caches are missing they should be replaced with a WB bridge.
+-- TODO add brief usage instructions.
+-- TODO add reference to datasheet.
 --------------------------------------------------------------------------------
---
--- This is halffinished stuff; it should have at least one wishbone bridge for
--- uncached data, necessary to hang peripherals on.
 --
 --------------------------------------------------------------------------------
 -- This source file may be used and distributed without         
@@ -48,14 +46,14 @@ entity ion_core is
         -- Size of code TCM block in 32-bit words. 
         -- Set to a power of 2 or to zero to disable code TCM.
         TCM_CODE_SIZE : integer := 2048;
-        -- Contents of code TCM.
-        TCM_CODE_INIT : t_obj_code := zero_objcode(2048);
+        -- Contents of code TCM. Defaults to zero.
+        TCM_CODE_INIT : t_obj_code := zero_objcode(16);
         
         -- Size of data TCM block in 32-bit words.
         -- Set to a power of 2 or to zero to disable data TCM.
         TCM_DATA_SIZE : integer := 2048;
         -- Contents of data TCM.
-        TCM_DATA_INIT : t_obj_code := zero_objcode(2048);
+        TCM_DATA_INIT : t_obj_code := zero_objcode(16);
         
         -- Size of data cache in lines. 
         -- Set to a power of 2 or 0 to disable the data cache.
@@ -188,7 +186,6 @@ begin
 end function cached;
 
 
-
 begin
 
 --------------------------------------------------------------------------------
@@ -292,6 +289,7 @@ begin
         icache_miso.mwait <= '0';
         icache_miso.rd_data <= (others => '0');
         
+        -- FIXME a missing code cache should be replaced by a WB bridge.
         CODE_WB_MOSI_O.cyc <= '0';
         CODE_WB_MOSI_O.stb <= '0';
         
@@ -425,6 +423,7 @@ begin
         dcache_miso.mwait <= '0';
         dcache_miso.rd_data <= (others => '0');
         
+        -- FIXME a missing data cache should be replaced by a WB bridge.
         DATA_WB_MOSI_O.cyc <= '0';
         DATA_WB_MOSI_O.stb <= '0';
         

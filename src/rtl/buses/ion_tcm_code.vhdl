@@ -46,10 +46,10 @@ use work.ION_INTERNAL_PKG.all;
 
 entity ION_TCM_CODE is
     generic(
-        -- Size of TCM block in words. Set to zero to disable TCM.
+        -- Size of TCM block in 32-bit words. Set to zero to disable TCM.
         SIZE : integer := 4096;
         -- Initial contents of TCM. Default is zeros.
-        INIT_DATA : t_obj_code := zero_objcode(4096)
+        INIT_DATA : t_obj_code := zero_objcode(16)
     );
     port(
         CLK_I               : in std_logic;

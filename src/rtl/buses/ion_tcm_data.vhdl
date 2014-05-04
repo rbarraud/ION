@@ -42,10 +42,10 @@ use work.ION_INTERNAL_PKG.all;
 
 entity ION_TCM_DATA is
     generic(
-        -- Size of TCM block in bytes. Set to zero to disable TCM.
+        -- Size of TCM block in 32-bit words. Set to zero to disable TCM.
         SIZE : integer := 4096;
         -- Initial contents of TCM. Default is zeros.
-        INIT_DATA : t_obj_code := zero_objcode(4096)
+        INIT_DATA : t_obj_code := zero_objcode(16)
     );
     port(
         CLK_I               : in std_logic;
@@ -96,8 +96,10 @@ tcm_addr <= MEM_MOSI_I.addr(tcm_addr'high downto 2);
 --------------------------------------------------------------------------------
 ---- Memory block inference.
 
+-- We ned to implement the TCM as four independent blocks because it's not 
+-- possible to just infer a BRAM with byte enables. We just don't want to 
+-- instantiate vendor-specific BRAM entities.
 
--- FIXME byte enables missing!
 tcm_memory_block0:
 process(CLK_I)
 begin
