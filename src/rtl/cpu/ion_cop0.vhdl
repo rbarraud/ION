@@ -52,6 +52,7 @@ architecture rtl of ION_COP0 is
 --------------------------------------------------------------------------------
 -- CP0 registers and signals
 
+-- Status register fields.
 type t_sr_reg is record
     bev :                   std_logic;
     um :                    std_logic;
@@ -61,28 +62,35 @@ type t_sr_reg is record
     im :                    std_logic_vector(7 downto 0);
 end record;
 
--- CP0[12]: status register flags.
+-- Cause register fields.
+type t_cause_reg is record
+    iv :                    std_logic;
+    ce :                    std_logic_vector(1 downto 0);
+    exc_code :              std_logic_vector(4 downto 0);
+    fdci :                  std_logic;
+    bd :                    std_logic;
+end record;
+
+-- CP0[12]: status register implemented flags.
 signal sr_reg :             t_sr_reg;
-signal sr_reg_mtc0 :        t_sr_reg;
+-- CP0[13]: cause register implemented flags.
+signal cause_reg :          t_cause_reg;
+
 
 signal cp0_status :         std_logic_vector(15 downto 0);
 
-signal cp0_cache_control_d :  std_logic_vector(17 downto 16);
-
 signal cp0_we_delayed :     std_logic;
+signal cp0_index_delayed :  std_logic_vector(4 downto 0);
+signal cp0_wr_data_delayed: std_logic_vector(31 downto 0);
 
 signal privileged :         std_logic;
 signal exception_stalled_reg :  std_logic;
--- CP0[12]: status register, cache control
-signal cp0_cache_control :  std_logic_vector(17 downto 16);
 -- CP0[14]: EPC register (PC value saved at exceptions)
 signal epc_reg :            t_pc;
 -- CP0[13]: 'Cause' register (cause and attributes of exception)
 signal cp0_cause :          t_word;
-signal cause_bd_reg :       std_logic;
-signal cp0_cause_ce :       std_logic_vector(1 downto 0);
-signal cp0_cause_ip :       std_logic_vector(7 downto 2);
-signal cause_exc_code_reg : std_logic_vector(4 downto 0);
+
+
 signal cause_exc_code :     std_logic_vector(4 downto 0);
 -- Exception vector or return address, registered for improved timing.
 signal vector_reg :         t_pc;
@@ -100,21 +108,24 @@ process(CLK_I)
 begin
     if CLK_I'event and CLK_I='1' then
         if RESET_I='1' then
-            -- SR flags for RESET_I.
+            -- Reset implemented SR flags.
             sr_reg.bev <= '1';
             sr_reg.um <= '0'; -- Kernel mode
             sr_reg.erl <= '1'; -- Error level: Reset
             sr_reg.exl <= '0'; -- Exception level: None
             sr_reg.ie <= '0'; -- Interrupt Enable: No
             sr_reg.im <= (others => '0');
-            -- Other CP0 register resets.
-            cp0_cache_control <= "00";
-            cause_exc_code_reg <= "00000";
-            cause_bd_reg <= '0';
+            -- Reset implemented CAUSE flags.
+            cause_reg.iv <= '0';
+            cause_reg.ce <= "00"; -- FIXME CP* traps merged with unimplemented opcode traps
+            cause_reg.exc_code <= "00000";
+            cause_reg.fdci <= '0'; -- FIXME Fast Debug not implemented.
+            cause_reg.bd <= '0';
+            
             -- As per the specs, not all registers have a RESET_I value.
         else
             if CPU_I.exception='1' then
-                cause_exc_code_reg <= cause_exc_code;
+                cause_reg.exc_code <= cause_exc_code;
             end if;
             -- Everything is stalled if the pipeline is stalled, including 
             -- exception processing.
@@ -129,13 +140,13 @@ begin
                         -- ...raise EXL flag...
                         sr_reg.exl <= '1';
                         -- ...update cause register... 
-                        --cause_exc_code_reg <= cause_exc_code;
+                        --cause_reg.exc_code <= cause_exc_code;
                     else
                         -- If ERL was already asserted, update no flags.
                     end if;
                     
                     -- Update the BD flag for exceptions in delay slots
-                    cause_bd_reg <= CPU_I.in_delay_slot;
+                    cause_reg.bd <= CPU_I.in_delay_slot;
                 
                 elsif CPU_I.eret='1' and privileged='1' then
                     -- ERET: Return from exception.
@@ -147,13 +158,19 @@ begin
                     end if;
                     
                 elsif cp0_we_delayed='1' then
-                    -- MTC0: load CP0[xx] with Rt
-                
-                    -- NOTE: in MTCx, the source register is Rt.
-                    -- FIXME this works because only SR is writeable; when 
-                    -- CP0[13].IP1-0 are implemented, check for CP0 reg index.
-                    sr_reg <= sr_reg_mtc0;
-                    cp0_cache_control <= cp0_cache_control_d;
+                    -- MTC0: load CP0[xx] with Rt.
+                    if cp0_index_delayed = "01100" then 
+                        -- MTC0, Status register.
+                        sr_reg.exl <=   cp0_wr_data_delayed(1);
+                        sr_reg.erl <=   cp0_wr_data_delayed(2);
+                        sr_reg.um <=    cp0_wr_data_delayed(4);
+                        sr_reg.bev <=   cp0_wr_data_delayed(22);
+                        sr_reg.im <=    cp0_wr_data_delayed(15 downto 8);
+                    elsif cp0_index_delayed = "01101" then 
+                        -- MTC0, Cause register.
+                        cause_reg.iv <= cp0_wr_data_delayed(23);
+                    end if;
+                    
                 end if;
             end if;
         end if;
@@ -166,27 +183,17 @@ process(CLK_I)
 begin
     if CLK_I'event and CLK_I='1' then
         if RESET_I='1' then
-            -- SR flags for RESET_I.
-            sr_reg_mtc0.bev <= '1';
-            sr_reg_mtc0.um <= '0'; -- Kernel mode
-            sr_reg_mtc0.erl <= '1'; -- Error level: Reset
-            sr_reg_mtc0.exl <= '0'; -- Exception level: None
-            sr_reg_mtc0.ie <= '0'; -- Interrupt Enable: No
+            cp0_wr_data_delayed <= (others => '0');
             cp0_we_delayed <= '0';
         else
             if CPU_I.pipeline_stalled='0' then
                 if CPU_I.we='1' and privileged='1' then
+                    -- Flag the pending write...
                     cp0_we_delayed <= '1';
-                    -- MTC0: load CP0[xx] with Rt
-                    -- NOTE: in MTCx, the source register is Rt.
-                    -- FIXME this works because only SR is writeable; when 
-                    -- CP0[13].IP1-0 are implemented, check for CP0 reg index.
-                    sr_reg_mtc0.exl <= CPU_I.data(1);
-                    sr_reg_mtc0.erl <= CPU_I.data(2);
-                    sr_reg_mtc0.um <= CPU_I.data(4);
-                    sr_reg_mtc0.bev <= CPU_I.data(22);
-                    cp0_cache_control_d <= CPU_I.data(17 downto 16);
-                    sr_reg_mtc0.im <= CPU_I.data(15 downto 8);
+                    -- ...the write index...
+                    cp0_index_delayed <= CPU_I.index;
+                    -- ...and the write data.
+                    cp0_wr_data_delayed <= CPU_I.data;
                 else 
                     cp0_we_delayed <= '0';
                 end if;
@@ -232,12 +239,13 @@ process(CLK_I)
 begin
     if CLK_I'event and CLK_I='1' then
         if RESET_I='1' then
-            vector_reg <= RESET_VECTOR_M4(31 downto 2);
+            vector_reg <= RESET_VECTOR(31 downto 2);
         else
-            -- Keep the RESET_I vector in the register until cycle 2 after 
-            -- RESET_I deassertion, when it has already been loaded into PC.
+            -- Keep the reset vector in the register until cycle 2 after 
+            -- RESET_I deassertion, when it has already been loaded into PC...
             if reset_delayed(0)='0' then
-                vector_reg <= X"BFC0018" & "00";
+                -- ...and then replace it with the IRQ vector.
+                vector_reg <= GENERAL_EXCEPTION_VECTOR(31 downto 2);
             end if;
             -- FIXME lots of COP0 stuff missing, in case you forget
         end if;
@@ -266,8 +274,6 @@ cause_exc_code <=
 
 --#### CPU interface ###########################################################
 
-CPU_O.idcache_enable <= cp0_cache_control(17);
-CPU_O.icache_invalidate <= cp0_cache_control(16);
 CPU_O.kernel <= privileged;
 CPU_O.pc_load_en <= pc_load_en_reg;
 CPU_O.hw_irq_enable_mask <= sr_reg.im(7 downto 2);
@@ -280,12 +286,14 @@ CPU_O.pc_load_value <= vector_reg when CPU_I.eret='0' else epc_reg; -- FIXME @ha
 cp0_status <= 
     sr_reg.im & "000" &
     sr_reg.um & '0' & sr_reg.erl & sr_reg.exl & sr_reg.ie;
-cp0_cause_ce <= "00"; -- FIXME CP* traps merged with unimplemented opcode traps
-cp0_cause_ip <= CPU_I.hw_irq_reg;
-cp0_cause <= cause_bd_reg & '0' & cp0_cause_ce & 
-             X"000" & 
-             cp0_cause_ip & "00"&
-             '0' & cause_exc_code_reg & "00";
+
+cp0_cause <= cause_reg.bd & '0' & 
+             cause_reg.ce & 
+             X"0" & 
+             cause_reg.iv & '0' &
+             cause_reg.fdci & "00000" &
+             CPU_I.hw_irq_reg & "00" & '0' & -- HW IRQ flags straight from CPU.
+             cause_reg.exc_code & "00";
 
 -- FIXME the mux should mask to zero for any unused reg index
 with CPU_I.index select CPU_O.data <=

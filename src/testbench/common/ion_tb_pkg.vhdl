@@ -70,7 +70,6 @@ type t_log_info is record
     prev_epc :              t_pc;
     sr_bev_reg :            std_logic;
     cp0_status :            std_logic_vector(15 downto 0);
-    cp0_cache_control :     std_logic_vector(1 downto 0);
     prev_status :           t_word;
     p1_set_cp0 :            std_logic;
     p1_eret :               std_logic;
@@ -500,7 +499,6 @@ begin
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/cop0/sr_reg.bev", signal_name&".sr_bev_reg", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/p1_set_cp0", signal_name&".p1_set_cp0", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/p1_eret", signal_name&".p1_eret", 0);
-    init_signal_spy("/"&base_entity&"/"&cpu_name&"/cop0/cp0_cache_control", signal_name&".cp0_cache_control", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/data_mosi_o.rd_en", signal_name&".data_rd_en", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/p1_rbank_we", signal_name&".p1_rbank_we", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/code_mosi_o.rd_en", signal_name&".code_rd_en", 0);

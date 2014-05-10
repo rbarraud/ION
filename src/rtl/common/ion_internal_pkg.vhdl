@@ -93,8 +93,6 @@ type t_cop0_miso is record
     pc_load_value :     t_pc;
     hw_irq_enable_mask: std_logic_vector(5 downto 0);
     kernel :            std_logic;
-    idcache_enable :    std_logic;
-    icache_invalidate : std_logic;
 end record t_cop0_miso;
 
 ---- System configuration constants --------------------------------------------
@@ -103,12 +101,11 @@ end record t_cop0_miso;
 -- (see implementation of function decode_addr below).
 constant USE_MIPS1_ADDR_MAP : boolean := true;
 
--- Reset vector address minus 4 (0xfffffffc for Plasma, 0xbfbffffc for mips1)
---constant RESET_VECTOR_M4 : t_word   := X"bfbffffc";
-constant RESET_VECTOR_M4 : t_word   := X"bfc00000";
+-- Reset vector address.
+constant RESET_VECTOR : t_word                  := X"bfc00000";
 
--- Trap vector address (0x0000003c for Plasma, 0xbfc00180 for mips1)
-constant TRAP_VECTOR : t_word       := X"bfc00180";
+-- General exception vector address.
+constant GENERAL_EXCEPTION_VECTOR : t_word      := X"bfc00180";
 
 -- Object code in bytes, i.e. as read from a binary or HEX file.
 -- This type is used to define BRAM init constants from external scripts.
