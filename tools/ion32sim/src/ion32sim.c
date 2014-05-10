@@ -348,6 +348,7 @@ typedef struct s_state {
    uint32_t lo;
    uint32_t cp0_status;
    int32_t trap_cause;          /**< temporary trap code or <0 if no trap */
+   uint32_t cause_ip;           /**< Temporary IP field of Cause reg. */
    uint32_t cp0_cause;
    uint32_t cp0_errorpc;
    uint32_t cp0_config0;
@@ -1049,13 +1050,15 @@ void process_traps(t_state *s, uint32_t epc, uint32_t rSave, uint32_t rt){
             uint32_t mask;
             // FIXME should delay if victim instruction is in delay slot
             /* trigger interrupt IF it is not masked */
-            mask = (s->cp0_status >> (8+2) & 0x3f);
+            mask = (s->cp0_status >> 10) & 0x3f;
             s->t.irq_current_inputs = (s->t.irq_trigger_inputs & mask);
             s->t.irq_trigger_inputs = 0;
             //printf("MASK = %02x\n", mask);
             //printf("Z    = %02x\n", s->t.irq_current_inputs);
             if (s->t.irq_current_inputs != 0) {
                 cause = 0; /* cause = hardware interrupt */
+                s->cause_ip = s->t.irq_current_inputs & 0x3f;
+                //printf("IP = %02x\n", s->cause_ip);
             }
             s->t.irq_trigger_countdown--;
         }
@@ -1070,7 +1073,9 @@ void process_traps(t_state *s, uint32_t epc, uint32_t rSave, uint32_t rt){
         /* 'undo' current instruction EXCEPT if this is a HW interrupt. */
         if (cause > 0) s->r[rt] = rSave;
         /* set cause field ... */
-        s->cp0_cause = (s->delay_slot & 0x1) << 31 | (s->trap_cause & 0x1f) << 2;
+        s->cp0_cause = (s->delay_slot & 0x1) << 31 |
+                       (s->cause_ip & 0x3f) << 10 |
+                       (s->trap_cause & 0x1f) << 2;
         /* ...and raise EXL status flag */
         s->cp0_status |= SR_EXL; // FIXME handle ERL
 
@@ -1111,6 +1116,7 @@ void cycle(t_state *s, int show_mode){
     }
     /* No traps pending for this instruction (yet) */
     s->trap_cause = -1;
+    s->cause_ip = 0;
 
     /* fetch and decode instruction */
     opcode = mem_read(s, 4, s->pc, 0);
@@ -1380,7 +1386,7 @@ void cycle(t_state *s, int show_mode){
                     case 9: r[rt] = 0; break; // FIXME Count
                     case 11: r[rt] = 0; break; // FIXME Compare
                     case 12: r[rt]=s->cp0_status & 0xf048fe17; break;
-                    case 13: r[rt]=s->cp0_cause & 0xb0c0fefc; break;
+                    case 13: r[rt]=s->cp0_cause & 0xb0a0ff7c; break;
                     case 14: r[rt]=s->epc; break;
                     case 15: r[rt]=CPU_ID; break;
                     case 16:

@@ -81,6 +81,7 @@ signal epc_reg :            t_pc;
 signal cp0_cause :          t_word;
 signal cause_bd_reg :       std_logic;
 signal cp0_cause_ce :       std_logic_vector(1 downto 0);
+signal cp0_cause_ip :       std_logic_vector(7 downto 2);
 signal cause_exc_code_reg : std_logic_vector(4 downto 0);
 signal cause_exc_code :     std_logic_vector(4 downto 0);
 -- Exception vector or return address, registered for improved timing.
@@ -280,13 +281,17 @@ cp0_status <=
     sr_reg.im & "000" &
     sr_reg.um & '0' & sr_reg.erl & sr_reg.exl & sr_reg.ie;
 cp0_cause_ce <= "00"; -- FIXME CP* traps merged with unimplemented opcode traps
+cp0_cause_ip <= CPU_I.hw_irq_reg;
 cp0_cause <= cause_bd_reg & '0' & cp0_cause_ce & 
-             X"00000" & '0' & cause_exc_code_reg & "00";
+             X"000" & 
+             cp0_cause_ip & "00"&
+             '0' & cause_exc_code_reg & "00";
 
 -- FIXME the mux should mask to zero for any unused reg index
 with CPU_I.index select CPU_O.data <=
     X"00" & "0" & sr_reg.bev & "000000" & cp0_status        when "01100",
     cp0_cause                                               when "01101",
+    epc_reg & "00"                                          when "01110",
     epc_reg & "00"                                          when others;
 
 

@@ -4,20 +4,21 @@
 # This assembly file tests all of the opcodes supported by the Ion core, plus
 # some of the basic CPU features (caches, interlocks...).
 #
-# TODO The test is unfinished!
 #-------------------------------------------------------------------------------
-# IMPORTANT:
-# This test needs the following simulated features to operate:
+# SIMULATED SUPPORT HARDWARE:
+#
+# When assembled with symbol TARGET_HARDWARE defined as 0, the program will
+# use some hardware fatures only present in the VHDL test bench and the SW 
+# simulator. The simulated features are as follows.
+#
 #   -# A 1K "Debug ROM" at address 0x90000000 containing constant words meant
-#      to test the data cache (XXXXABCD contains ABCDABCD).
-#   -# A 1K RAM at address 0x80000000 meant to test the RAM.
+#      to test the data cache (9XXXABCD contains ABCDABCD).
 #   -# A simulated UART at address 0xffff0000 what needs no initialization.
+#   -# A 1K RAM block at 0x80000000 meant to test the cache and SRAM interface.
 #
-# These features are implemented by the SW simulator and by the ion_core test 
-# bench. As a consequence, this test is not tuitable to run on real HW as it 
-# stands.
+# OTHER HARDWARE REQUIREMENTS:
 #
-# Also, the test requires a C-TCM of at least 16KB; the attached makefile will 
+# The test requires a C-TCM of at least 16KB; the attached makefile will 
 # set up the core parameter for this size.
 #
 ################################################################################
@@ -31,7 +32,7 @@
 ################################################################################
 # THINGS TO BE DONE: 
 #
-#   -# Supply a version of this test suitable for real HW.
+#   -# Use a real UART when targetting real HW.
 #   -# Test all the missing opcodes (see bottom of file).
 #   -# Use COP0 to get the cache size params and use them in the initialization.
 #   -# Test COP2 interface.
@@ -202,12 +203,15 @@
    
    
     #---------------------------------------------------------------------------
-
+    # Start of executable.
+    
     .text
     .align  2
     .globl  entry
     .ent    entry
     
+    #---------------------------------------------------------------------------
+    # Reset vector.
     
 entry:
     .set    noreorder
@@ -215,13 +219,14 @@ entry:
     b       init
     nop
 
-    # Trap handler address 
+    #---------------------------------------------------------------------------
+    # Trap handler address. 
     .org    0x0180
     
+    # We'll do a few changes in the registers (see below) so that the main 
+    # program can be sure the ISR executed and the cause code was right, etc.
 interrupt_vector:
-    mfc0    $26,$13             # Return with trap cause code into $26
-    srl     $26,$26,2
-    andi    $26,$26,0x01f
+    mfc0    $26,$13             # Return with trap cause register in $26.
     move    $25,$24             # Copy $24 into $25.
     addi    $27,$27,1           # Increment exception count.
     eret
@@ -243,16 +248,16 @@ init:
     # So far, we were in supervisor mode and ERL=1, which means we'll be unable 
     # to return from exceptions properly. 
     # We'll run the rest of the test in user mode. 
-    # (Note we'll enable HW interrupt 0 too.)
+    # Note only HW interrupts 7 and 2 are enabled.
     PUTS    msg_user_mode
-    li      $2,0x00400410       # Enter user mode...
+    li      $2,0x00408410       # Enter user mode...
     mtc0    $2,$12              # ...NOW
     nop                         # @hack7: COP0 hazard, we need a nop here.
 
     mfc0    $3,$12              # This should trigger a COP0 missing exception.
     nop
     CMP     $4,$27,1            # Check that we got an exception...
-    CMP     $4,$26,0x0b         # ...and check the cause code.
+    CMP     $4,$26,0x0b << 2    # ...and check the cause code.
     
     PRINT_RESULT 
     
@@ -267,7 +272,8 @@ break_syscall:
     \op
     addi    $24,$0,1
     CMP     $23,$25,0x42
-    CMP     $23,$26,\code
+    andi    $25,$26,0x007c
+    CMP     $23,$25,\code << 2
     CMP     $23,$27,\count
     .endm
     
@@ -283,21 +289,46 @@ break_syscall_0:
 hardware_interrupts:
     INIT_TEST msg_hw_interrupts
     
+    .macro CHECK_HW_IRQ cnt, index 
+    CMP     $4,$27,\cnt         # Check that we got an exception...
+    andi    $25,$26,0x007c      # ...check the cause code...
+    CMP     $4,$25,0x00
+    andi    $25,$26,0xfc00      # ...and check the IP bits.
+    li      $4,1 << (\index + 10)
+    #CMPR    $4,$25
+    sb      $0,($9)             # Clear HW IRQ source.
+    .endm
+    
+    
     # First test HW IRQ on delay slot instruction.
-    la      $9,TB_HW_IRQ        # Prepare to load value in the IRQ test reg...
-    li      $2,0x01
-    sb      $2,0($9)            # ...and load it, triggering the IRQ countdown.
+    la      $9,TB_HW_IRQ        # Prepare to load value in the IRQ test reg.
+    li      $2,1 << (2-2)       # We'll trigger HW IRQ 2.
+    # (Subtract 2 because HW interrupts go from 2 to 7 but the HW trigger 
+    # register has them arranged from 0 to 5.)
+    sb      $2,0($9)            # Triggering the IRQ countdown.
     li      $2,0x42
     beqz    $0,hardware_interrupts_1
     li      $11,0x79            # THIS is the HW IRQ victim.
     li      $12,0x85
 hardware_interrupts_1:
-    CMP     $4,$27,4            # Check that we got an exception...
-    CMP     $4,$26,0x00         # ...and check the cause code.
-    sb      $0,($9)             # Clear HW IRQ source.
+    CHECK_HW_IRQ 4, 0           # Make sure we got it right.
+    #-- 
+    li      $2,1 << (6-2)       # Try HW IRQ 6, which is blocked...
+    sb      $2,0($9)
+    nop
+    nop
+    li      $11,0x79            # THIS would be the HW IRQ victim.
+    nop
+    CMP     $11,$27,4           # Make sure we got no exceptions.
+    # --
+    li      $2,1 << (7-2)       # Try HW IRQ 7, which is enabled.
+    sb      $2,0($9)
+    nop
+    nop
+    li      $11,0x79            # (THIS will be the HW IRQ victim.)
+    nop
+    CHECK_HW_IRQ 5, 5           # Make sure we got it right. 
 
-    
-    # FIXME test HW IRQ on regular instruction.
     # FIXME test HW IRQ on jump instruction.
     # FIXME test HW IRQ on mul/div instruction.
     

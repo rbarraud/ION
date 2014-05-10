@@ -191,7 +191,6 @@ signal p1_unknown_opcode :  std_logic;
 signal p1_cp_unavailable :  std_logic;
 signal p1_hw_irq :          std_logic; 
 signal p1_hw_irq_pending :  std_logic; 
-signal p1_delay_hw_irq :    std_logic;
 signal p0_irq_reg :         std_logic_vector(5 downto 0);
 signal irq_masked :         std_logic_vector(5 downto 0);
 
@@ -924,28 +923,7 @@ p1_cp_unavailable <= '1' when
 --##############################################################################
 -- HW interrupt interface.
 
--- Register incoming IRQ lines and keep track of a pending but not yet 
--- acknowledged HW interrupt.
---interrupt_registers:
---process(CLK_I)
---begin
---    if CLK_I'event and CLK_I='1' then
---        if RESET_I='1' then
---            p0_irq_reg <= (others => '0');
---        else
---            p0_irq_reg <= irq_masked;
---            
---            if irq_masked/=X"00" and p0_irq_reg=X"00" then
---                -- Raise the IRQ pending flag when any IRQ input is raised...
---                p1_hw_irq_pending <= '1';
---            elsif p1_delay_hw_irq='0' then
---                -- ...and clear it when it is acknowledged.
---                p1_hw_irq_pending <= '0';
---            end if;
---        end if;
---    end if;
---end process interrupt_registers;
-
+-- Register incoming IRQ lines.
 interrupt_registers:
 process(CLK_I)
 begin
@@ -970,16 +948,8 @@ begin
     end if;
 end process interrupt_registers;
 
-
 -- FIXME this should be done after registering!
 irq_masked <= IRQ_I and cp0_miso.hw_irq_enable_mask;
-
--- HW interrupts will not be acknowledged (i.e. will be delayed) in certain 
--- circumstances (see @note5):
--- FIXME this may not be acceptable in the final version of the core.
-p1_delay_hw_irq <= 
-    '1' when p1_jump_type(1)='1' else   -- In a delay slot.
-    '0';
 
     
 --##############################################################################
@@ -1204,6 +1174,7 @@ cp0_mosi.data <= p1_rt;
 cp0_mosi.pipeline_stalled <= pipeline_stalled;
 cp0_mosi.exception <= p1_exception;
 cp0_mosi.hw_irq <= p1_hw_irq;
+cp0_mosi.hw_irq_reg <= p0_irq_reg;
 cp0_mosi.rfe <= p1_rfe;
 cp0_mosi.eret <= p1_eret;
 cp0_mosi.unknown_opcode <= p1_unknown_opcode;

@@ -78,6 +78,7 @@ type t_cop0_mosi is record
     pipeline_stalled :  std_logic;
     exception :         std_logic;
     hw_irq :            std_logic;
+    hw_irq_reg :        std_logic_vector(7 downto 2);
     eret :              std_logic;
     rfe :               std_logic;
     unknown_opcode :    std_logic;
