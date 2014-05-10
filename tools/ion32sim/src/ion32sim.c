@@ -1049,13 +1049,14 @@ void process_traps(t_state *s, uint32_t epc, uint32_t rSave, uint32_t rt){
         if(s->t.irq_trigger_countdown==0){
             uint32_t mask;
             // FIXME should delay if victim instruction is in delay slot
-            /* trigger interrupt IF it is not masked */
+            /* trigger interrupt IF it is not masked... */
             mask = (s->cp0_status >> 10) & 0x3f;
             s->t.irq_current_inputs = (s->t.irq_trigger_inputs & mask);
             s->t.irq_trigger_inputs = 0;
             //printf("MASK = %02x\n", mask);
             //printf("Z    = %02x\n", s->t.irq_current_inputs);
-            if (s->t.irq_current_inputs != 0) {
+            /* ...and if globally enabled. */
+            if ((s->t.irq_current_inputs != 0) && (s->cp0_status & 0x01)) {
                 cause = 0; /* cause = hardware interrupt */
                 s->cause_ip = s->t.irq_current_inputs & 0x3f;
                 //printf("IP = %02x\n", s->cause_ip);
