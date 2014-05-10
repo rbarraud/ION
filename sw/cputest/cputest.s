@@ -338,7 +338,7 @@ hardware_interrupts_0:
     
     #---------------------------------------------------------------------------
     .ifle   TARGET_HARDWARE
-    .ifgt   0
+    .ifgt   1
     # Test access to debug registers over uncached data WB bridge.
 debug_regs:
     INIT_TEST msg_debug_regs
