@@ -79,6 +79,9 @@ entity ion_cpu is
         ICACHE_CTRL_MISO_I  : in t_cache_miso;  -- I-Cache MISO.
         DCACHE_CTRL_MISO_I  : in t_cache_miso;  -- D-Cache MISO.
         
+        --COP2_MOSI_O         : out t_cop0_mosi;  -- COP2 interface.
+        --COP2_MISO_I         : in t_cop0_miso;
+        
         IRQ_I               : in std_logic_vector(5 downto 0)
     );
 end; --entity ion_cpu
@@ -949,7 +952,9 @@ begin
 end process interrupt_registers;
 
 -- FIXME this should be done after registering!
-irq_masked <= IRQ_I and cp0_miso.hw_irq_enable_mask;
+with cp0_miso.global_irq_enable select irq_masked <= 
+    IRQ_I and cp0_miso.hw_irq_enable_mask   when '1',
+    (others => '0')                         when others;
 
     
 --##############################################################################

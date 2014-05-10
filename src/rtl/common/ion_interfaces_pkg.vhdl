@@ -59,6 +59,34 @@ type t_wishbone_miso is record
 	
 end record t_wishbone_miso;
 
+
+type t_cop2_mosi is record
+    -- Asserted on COP2 instructions.
+    cofun_en :          std_logic;
+    -- Asserted on CTC2, LDC2, LWC2, MTC2 instructions.
+    reg_wr_en :         std_logic;
+    -- Asserted on CFC2 instructions.
+    reg_rd_en :         std_logic;
+    -- Function code on COP2 instructions.
+    -- Lower 16 bits used in CFC2, CTC2, MFC2, MTC2, MFHC2, MTHC2.
+    cofun :             std_logic_vector(24 downto 0);
+    -- COP2 register index for CTC2 and CFC2.
+    reg_index :         std_logic_vector(4 downto 0);
+    -- Addressing top word of 64-bit COP2 register (LDC2, SDC2, MFHC2, MTHC2).
+    reg_hi :            std_logic;
+    -- Addressing control register (CTC2, CFC2).
+    reg_control :       std_logic;
+    -- Data to write in COP2 register.
+    data :              t_word;
+end record t_cop2_mosi;
+
+type t_cop2_miso is record
+    -- Stall CPU pipeline.
+    stall :             std_logic;
+    -- Data read from COP2 register.
+    data :              t_word;
+end record t_cop2_miso;
+
 end package;
 
 package body ION_INTERFACES_PKG is

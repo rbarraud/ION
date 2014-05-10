@@ -248,9 +248,9 @@ init:
     # So far, we were in supervisor mode and ERL=1, which means we'll be unable 
     # to return from exceptions properly. 
     # We'll run the rest of the test in user mode. 
-    # Note only HW interrupts 7 and 2 are enabled.
+    # Note only HW interrupts 7 and 2 are enabled, and SR.IE is 1.
     PUTS    msg_user_mode
-    li      $2,0x00408410       # Enter user mode...
+    li      $2,0x00408411       # Enter user mode...
     mtc0    $2,$12              # ...NOW
     nop                         # @hack7: COP0 hazard, we need a nop here.
 
@@ -285,6 +285,7 @@ break_syscall_0:
     
     #---------------------------------------------------------------------------
     # Test HW interrupts using the support logic in the TB.
+    # FIXME Not tested with COP0.Status.IE = 0.
     .ifle   TARGET_HARDWARE
 hardware_interrupts:
     INIT_TEST msg_hw_interrupts
@@ -298,7 +299,6 @@ hardware_interrupts:
     #CMPR    $4,$25
     sb      $0,($9)             # Clear HW IRQ source.
     .endm
-    
     
     # First test HW IRQ on delay slot instruction.
     la      $9,TB_HW_IRQ        # Prepare to load value in the IRQ test reg.

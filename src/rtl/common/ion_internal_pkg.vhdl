@@ -92,6 +92,7 @@ type t_cop0_miso is record
     pc_load_en :        std_logic;
     pc_load_value :     t_pc;
     hw_irq_enable_mask: std_logic_vector(5 downto 0);
+    global_irq_enable : std_logic;
     kernel :            std_logic;
 end record t_cop0_miso;
 

@@ -161,11 +161,13 @@ begin
                     -- MTC0: load CP0[xx] with Rt.
                     if cp0_index_delayed = "01100" then 
                         -- MTC0, Status register.
+                        sr_reg.ie <=    cp0_wr_data_delayed(0);
                         sr_reg.exl <=   cp0_wr_data_delayed(1);
                         sr_reg.erl <=   cp0_wr_data_delayed(2);
                         sr_reg.um <=    cp0_wr_data_delayed(4);
                         sr_reg.bev <=   cp0_wr_data_delayed(22);
                         sr_reg.im <=    cp0_wr_data_delayed(15 downto 8);
+                        
                     elsif cp0_index_delayed = "01101" then 
                         -- MTC0, Cause register.
                         cause_reg.iv <= cp0_wr_data_delayed(23);
@@ -277,6 +279,7 @@ cause_exc_code <=
 CPU_O.kernel <= privileged;
 CPU_O.pc_load_en <= pc_load_en_reg;
 CPU_O.hw_irq_enable_mask <= sr_reg.im(7 downto 2);
+CPU_O.global_irq_enable <= sr_reg.ie;
 CPU_O.pc_load_value <= vector_reg when CPU_I.eret='0' else epc_reg; -- FIXME @hack5
 
 
