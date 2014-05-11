@@ -80,7 +80,11 @@ entity ion_core is
         -- Uncached data WB bridge port.
         DATA_UC_WB_MOSI_O   : out t_wishbone_mosi;
         DATA_UC_WB_MISO_I   : in t_wishbone_miso;
-        
+
+        -- COP2 interface.
+        COP2_MOSI_O         : out t_cop2_mosi;
+        COP2_MISO_I         : in t_cop2_miso;
+
         IRQ_I               : in std_logic_vector(5 downto 0)
     );
 end; --entity ion_cpu
@@ -208,6 +212,9 @@ begin
         CACHE_CTRL_MOSI_O   => cache_ctrl_mosi,
         ICACHE_CTRL_MISO_I  => icache_ctrl_miso,
         DCACHE_CTRL_MISO_I  => dcache_ctrl_miso,
+        
+        COP2_MOSI_O         => COP2_MOSI_O,
+        COP2_MISO_I         => COP2_MISO_I,
 
         IRQ_I               => IRQ_I
     );

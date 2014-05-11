@@ -79,8 +79,8 @@ entity ion_cpu is
         ICACHE_CTRL_MISO_I  : in t_cache_miso;  -- I-Cache MISO.
         DCACHE_CTRL_MISO_I  : in t_cache_miso;  -- D-Cache MISO.
         
-        --COP2_MOSI_O         : out t_cop0_mosi;  -- COP2 interface.
-        --COP2_MISO_I         : in t_cop0_miso;
+        COP2_MOSI_O         : out t_cop2_mosi;  -- COP2 interface.
+        COP2_MISO_I         : in t_cop2_miso;
         
         IRQ_I               : in std_logic_vector(5 downto 0)
     );
@@ -163,6 +163,8 @@ signal p1_set_cp :          std_logic;
 signal p1_get_cp :          std_logic;
 signal p1_set_cp0 :         std_logic;
 signal p1_get_cp0 :         std_logic;
+signal p1_set_cp2 :         std_logic;
+signal p1_get_cp2 :         std_logic;
 signal p1_rfe :             std_logic;
 signal p1_eret :            std_logic;
 signal p1_alu_op2_sel :     std_logic_vector(1 downto 0);
@@ -210,6 +212,8 @@ signal p2_ld_upper_hword :  std_logic;
 signal p2_ld_upper_byte :   std_logic;
 signal p2_ld_unsigned :     std_logic;
 signal p2_wback_mux_sel :   std_logic_vector(1 downto 0);
+signal p2_wback_cop_sel :   std_logic;
+signal p2_cop_data_rd :     t_word;
 signal p2_data_word_rd :    t_word;
 signal p2_data_word_ext :   std_logic;
 signal p2_load_pending :    std_logic;
@@ -320,15 +324,22 @@ p1_rbank_wr_addr <= p1_rd_num   when p2_do_load='0' and p1_link='0' else
                     p2_load_target;
 
 p2_wback_mux_sel <= 
-    "00" when p2_do_load='0' and p1_get_cp0='0' and p1_link='0' else
-    "01" when p2_do_load='1' and p1_get_cp0='0' and p1_link='0' else
+    "00" when p2_do_load='0' and p1_get_cp='0' and p1_link='0' else
+    "01" when p2_do_load='1' and p1_get_cp='0' and p1_link='0' else
     "10" when p2_do_load='0' and p1_get_cp0='1' and p1_link='0' else
+    "10" when p2_do_load='0' and p1_get_cp2='1' and p1_link='0' else
     "11";
 
+p2_wback_cop_sel <= '1' when p1_get_cp2='1' else '0';
+    
 with (p2_wback_mux_sel) select p1_rbank_wr_data <=
     p1_alu_outp                when "00",
     p2_data_word_rd            when "01",
     p0_pc_incremented & "00"   when "11",
+    p2_cop_data_rd             when others;
+
+with p2_wback_cop_sel select p2_cop_data_rd <=
+    COP2_MISO_I.data           when '1',
     cp0_miso.data              when others;
 
 --------------------------------------------------------------------------------
@@ -338,8 +349,10 @@ with (p2_wback_mux_sel) select p1_rbank_wr_data <=
 -- or in P2 stage of load instructions...
 p1_rbank_we <= '1' when (p2_do_load='1' or p1_load_alu='1' or p1_link='1' or 
                         -- ...EXCEPT in some cases:
-                        -- If mfc0 triggers privilege trap, don't load reg.
-                        (p1_get_cp0='1' and p1_cp_unavailable='0')) and 
+                        -- If mfc* triggers privilege trap, don't load reg.
+                        (p1_get_cp0='1' and p1_cp_unavailable='0') or 
+                        (p1_get_cp2='1' and p1_cp_unavailable='0')
+                        ) and 
                         -- If target register is $zero, ignore write.
                         p1_rbank_wr_addr/="00000" and
                         -- If pipeline is stalled for any reason, ignore write.
@@ -705,6 +718,8 @@ p1_get_cp  <= '1' when p1_ir_reg(31 downto 28)="0100" and
 
 p1_set_cp0 <= '1' when p1_ir_reg(27 downto 26)="00" and p1_set_cp='1' else '0';
 p1_get_cp0 <= '1' when p1_ir_reg(27 downto 26)="00" and p1_get_cp='1' else '0';
+p1_set_cp2 <= '1' when p1_ir_reg(27 downto 26)="10" and p1_set_cp='1' else '0';
+p1_get_cp2 <= '1' when p1_ir_reg(27 downto 26)="10" and p1_get_cp='1' else '0';
 
 -- Decode RFE instruction (see @note3)
 p1_rfe <= '1' when p1_ir_reg(31 downto 21)="01000010000" and 
@@ -732,6 +747,7 @@ p1_do_load <= '1' when
     p1_ir_op(28 downto 26)/="111" and -- LWR
     p2_exception='0'  -- abort load if previous instruction triggered trap
     else '0';
+    
 
 p1_load_alu_set0 <= '1' 
     when p1_op_special='1' and 
@@ -883,9 +899,10 @@ p1_unknown_opcode <= '1' when
     p1_ir_op(31 downto 29)="110" or
     p1_ir_op(31 downto 29)="111" or
     (p1_ir_op(31 downto 29)="010" and 
-        (p1_ir_op(28 downto 26)/="000" and      -- COP0 is valid
+        (p1_ir_op(28 downto 26)/="000" and     -- COP0 is valid
          p1_ir_op(28 downto 26)/="100" and     -- BEQL is valid
-         p1_ir_op(28 downto 26)/="101")) or     -- BNEL is valid
+         p1_ir_op(28 downto 26)/="010" and     -- COP2 is valid
+         p1_ir_op(28 downto 26)/="101")) or    -- BNEL is valid
     p1_ir_op="100010" or    -- LWL
     p1_ir_op="100110" or    -- LWR
     p1_ir_op="101010" or    -- SWL
@@ -914,10 +931,12 @@ p1_unknown_opcode <= '1' when
     else '0';
 
 p1_cp_unavailable <= '1' when 
-    (p1_set_cp='1' and p1_set_cp0='0') or   -- mtc1..3
-    (p1_get_cp='1' and p1_get_cp0='0') or   -- mfc1..3
+    (p1_set_cp='1' and (p1_set_cp0='0' and p1_set_cp2='0')) or   -- mtc1/3
+    (p1_get_cp='1' and (p1_get_cp0='0' and p1_get_cp2='0')) or   -- mfc1/3
     -- FIXME @hack1: ERET in user mode does not trigger trap
-    ((p1_get_cp0='1' or p1_set_cp0='1' or p1_rfe='1') -- or p1_eret='1') 
+    ((p1_get_cp0='1' or p1_set_cp0='1' or 
+      p1_rfe='1' or -- p1_eret='1' or
+      p1_get_cp2='1' or p1_set_cp2='1')
                      and cp0_miso.kernel='0') -- COP0 user mode
     -- FIXME CP1..3 logic missing
     else '0';
@@ -1078,8 +1097,12 @@ end process pipeline_stage2_register_others;
 --------------------------------------------------------------------------------
 -- Pipeline control logic (stall control)
 
--- These are the 3 conditions upon which the pipeline is stalled.
-stall_pipeline <= mem_wait or load_interlock or p1_muldiv_stall;
+-- These are the 4 conditions upon which the pipeline is stalled.
+stall_pipeline <= 
+    mem_wait or 
+    load_interlock or 
+    p1_muldiv_stall or 
+    COP2_MISO_I.stall;
 
 -- Either of the two buses will stall the pipeline when waited.
 mem_wait <= DATA_MISO_I.mwait or CODE_MISO_I.mwait; 
@@ -1170,8 +1193,7 @@ with p1_we_control select DATA_MOSI_O.wr_data(31 downto 24) <=
 
 
 --##############################################################################
--- CP0 and exception processing
-
+-- COP0 block.
 
 cp0_mosi.index <= p1_c0_rs_num;
 cp0_mosi.we <= p1_set_cp0;
@@ -1195,6 +1217,29 @@ cop0 : entity work.ION_COP0
         CPU_I           => cp0_mosi,
         CPU_O           => cp0_miso
     );
+
+    
+--##############################################################################
+-- COP2 interface.
+
+COP2_MOSI_O.reg_rd_en       <= p1_get_cp2;
+COP2_MOSI_O.reg_wr_en       <= p1_set_cp2;
+COP2_MOSI_O.data            <= p1_rt;
+COP2_MOSI_O.reg_rd.index    <= CODE_MISO_I.rd_data(15 downto 11);
+COP2_MOSI_O.reg_rd.sel      <= CODE_MISO_I.rd_data(2 downto 0);
+COP2_MOSI_O.reg_rd.hi       <= '0';
+COP2_MOSI_O.reg_rd.control  <= '0';
+COP2_MOSI_O.reg_wr.index    <= p1_ir_reg(15 downto 11);
+COP2_MOSI_O.reg_wr.sel      <= p1_ir_reg(2 downto 0);
+COP2_MOSI_O.reg_wr.hi       <= '0';
+COP2_MOSI_O.reg_wr.control  <= '0';
+
+COP2_MOSI_O.cofun25_en  <= '0';
+COP2_MOSI_O.cofun16_en  <= '0';
+COP2_MOSI_O.cofun       <= (others => '0');
+COP2_MOSI_O.stall       <= stall_pipeline;
+
+
 
 
 end architecture rtl;
@@ -1229,17 +1274,9 @@ end architecture rtl;
 -- mistake a bad opcode for a COP0; we'll live with that for the time being.
 --
 -- @note4:
--- The pipeline may be stalled for one of 4 reasons including code bus waits 
+-- The pipeline may be stalled for one of 5 reasons including code bus waits 
 -- AND data bus waits; we need the code word to be valid when actually fetched,
 -- and that means it needs to be valid from the deassertion of code_miso.mwait
 -- to the edge after code_mosi.addr changes. See {[2], sec. ?}.
 --
--- @note5:
--- The fact that an interrupt will be delayed when it hits a delay slot means 
--- that, at least formally, interrupt response time in non deterministic and 
--- even unbounded. But if your code consists mostly of delay slots I guess you 
--- have worse problems than that anyway...
--- Note that even the worst common case (two-instruction infinite loop) can be 
--- interrupted with this scheme. It is fringe cases like jump-only loops that 
--- will result in uninterruptible code.
 --------------------------------------------------------------------------------

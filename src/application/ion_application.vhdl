@@ -106,6 +106,10 @@ signal sram_wb_miso :       t_wishbone_miso;
 signal data_uc_wb_mosi :    t_wishbone_mosi;
 signal data_uc_wb_miso :    t_wishbone_miso;
 
+signal cop2_mosi :          t_cop2_mosi;
+signal cop2_miso :          t_cop2_miso;
+
+
 begin
 
     -- Core instance -----------------------------------------------------------
@@ -133,6 +137,9 @@ begin
         
         DATA_UC_WB_MOSI_O   => data_uc_wb_mosi,
         DATA_UC_WB_MISO_I   => data_uc_wb_miso,
+        
+        COP2_MOSI_O         => cop2_mosi,
+        COP2_MISO_I         => cop2_miso,
 
         IRQ_I               => IRQ_I
     );
@@ -181,6 +188,18 @@ begin
         SRAM_DRIVE_EN_O     => SRAM_DRIVE_EN_O
     );
 
+    
+    -- Dummy COP2 for interface testing ----------------------------------------
+    
+    cop2: entity work.ION_COP2_STUB
+    port map (
+        CLK_I               => CLK_I,
+        RESET_I             => RESET_I, 
+        
+        CPU_MOSI_I          => cop2_mosi,
+        CPU_MISO_O          => cop2_miso
+    );
+    
     
     -- I/O devices -------------------------------------------------------------
     
