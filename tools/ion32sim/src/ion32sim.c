@@ -329,6 +329,11 @@ typedef struct s_trace {
    int8_t irq_current_inputs;             /**< HW interrupt inputs */
 } t_trace;
 
+typedef struct s_cop2_stub {
+    /* {DL[0..31], CL[0..31], DH[0..31], CH[0..31] } */
+    uint32_t r[32*4];      /**< Reg banks, data & control, low & high. */
+} t_cop2_stub;
+
 typedef struct s_state {
    unsigned failed_assertions;            /**< assertion bitmap */
    unsigned faulty_address;               /**< addr that failed assertion */
@@ -353,6 +358,8 @@ typedef struct s_state {
    uint32_t cp0_errorpc;
    uint32_t cp0_config0;
    uint32_t cp0_compare;
+
+   t_cop2_stub cop2;            /**< COP2 stub. */
 
    int irqStatus;               /**< DEPRECATED, to be removed */
    int skip;
@@ -459,6 +466,9 @@ void reset_cpu(t_state *s);
 void unimplemented(t_state *s, const char *txt);
 void reverse_endianess(uint8_t *data, uint32_t bytes);
 int32_t signed_rem(int32_t dividend, int32_t divisor);
+
+/* COP2 interface simulation */
+void cop2(t_state *s, uint32_t opcode);
 
 /* Hardware simulation */
 int mem_read(t_state *s, int size, unsigned int address, int log);
@@ -851,6 +861,7 @@ int32_t signed_rem(int32_t dividend, int32_t divisor) {
     int32_t rem = dividend % divisor;
     return (rem>0? rem : -rem);
 }
+
 
 /*-- unaligned store and load instructions -----------------------------------*/
 /*
@@ -1439,10 +1450,9 @@ void cycle(t_state *s, int show_mode){
             s->trap_cause = 11; /* unavailable coprocessor */
         }
         break;
-    case 0x11:/*COP1*/  unimplemented(s,"COP1");
-                        break;
-    case 0x12:/*COP2*/ unimplemented(s,"COP2"); break;
-    case 0x13:/*COP3*/ unimplemented(s,"COP3"); break;
+    case 0x11:/*COP1*/ unimplemented(s,"COP1");  break;
+    case 0x12:/*COP2*/ cop2(s,opcode); break;
+    case 0x13:/*COP3*/ unimplemented(s,"COP3");  break;
     case 0x14:/*    */  lbranch=r[rs]==r[rt];    break;
     case 0x15:/*BNEL*/  lbranch=r[rs]!=r[rt];    break;
     case 0x16:/*BLEZL*/ lbranch=r[rs]<=0;        break;
@@ -1903,6 +1913,75 @@ int main(int argc,char *argv[]){
     free_cpu(s);
     return(0);
 }
+
+/*-- Simulated COP2 interface (for CPU testing only) -------------------------*/
+
+static uint32_t cop2_get_reg(t_state *s, uint32_t rcop, uint32_t sel, bool hi, bool ctrl){
+    if (ctrl) rcop += 64;
+    if (hi) rcop += 32;
+    return s->cop2.r[rcop];
+}
+
+static void cop2_set_reg(t_state *s,
+    uint32_t rcop, uint32_t sel, bool hi, bool ctrl, uint32_t data){
+    if (ctrl) rcop += 64;
+    if (hi) rcop += 32;
+    s->cop2.r[rcop] = data;
+}
+
+static void cop2_read( t_state *s,
+    uint32_t rcop, uint32_t sel, bool hi, bool control,
+    int32_t cofun, uint32_t rcpu) {
+    uint32_t cop_data;
+
+    cop_data = cop2_get_reg(s, rcop, sel, hi, control);
+
+    s->r[rcpu] = (sel << 29) | (cop_data & 0x1fffffff);
+
+    //printf("CPU[%d] <- COP2[%d,%d] (%08x)\n", rcpu, rcop, sel, s->r[rcpu]);
+}
+
+static void cop2_write(t_state *s,
+    uint32_t rcop, uint32_t sel, bool hi, bool control,
+    int32_t cofun, uint32_t rcpu) {
+    uint32_t cpu_data;
+
+    cpu_data = (sel << 29) | (s->r[rcpu] & 0x1fffffff);
+
+    cop2_set_reg(s, rcop, sel, hi, control, cpu_data);
+
+    //printf("COP2[%d,%d] <- CPU[%d] (%08x)\n", rcop, sel, rcpu, cpu_data);
+}
+
+static void cop2_execute(t_state *s, uint32_t cofun) {
+
+}
+
+void cop2(t_state *s, uint32_t opcode) {
+    uint32_t function, rcpu, rcop, sel;
+    uint16_t impl;
+
+    function = (opcode >> 21) & 0x1f;
+    impl = (opcode >> 21) & 0x1f;
+    rcpu = (opcode >> 16) & 0x1f;
+    rcop = (opcode >> 11) & 0x1f;
+    sel = (opcode >> 0) & 0x7;
+
+    switch(function) {
+    case 0:     /* MFC2 */
+        cop2_read(s, rcop, sel, 0, 0, -1, rcpu);
+        break;
+    case 4:     /* MTC2 */
+        cop2_write(s, rcop, sel, 0, 0, -1, rcpu);
+        break;
+    default:
+        // Unimplemented COP2 opcode.
+        printf("COP2 (%08x)\n", opcode);
+        (void) unimplemented(s, "COP2");
+        break;
+    }
+}
+
 
 /*----------------------------------------------------------------------------*/
 
