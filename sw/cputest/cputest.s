@@ -223,15 +223,33 @@ entry:
     # Trap handler address. 
     .org    0x0180
     
+    # Upon entry, if the exception cause is SYSCALL...
     # We'll do a few changes in the registers (see below) so that the main 
     # program can be sure the ISR executed and the cause code was right, etc.
 interrupt_vector:
+    mfc0    $26,$13             # 
+    andi    $26,$26,0x007c
+    addi    $26,$26,-(8<<2)
+    beqz    $26,syscall_test
+    nop
+interrupt_test:
     mfc0    $26,$13             # Return with trap cause register in $26.
     move    $25,$24             # Copy $24 into $25.
     addi    $27,$27,1           # Increment exception count.
     eret
     addi    $27,$27,1           # Increment exception count. Should NOT execute.
-    
+syscall_test:    
+    mfc0    $26,$14
+    lw      $26,-4($26)
+    andi    $26,$26,0xffc0
+    xori    $26,$26,0x0040
+    bnez    $26, interrupt_test
+    move    $26,$31
+    jal     test_cop2
+    nop
+    move    $31,$26
+    b       interrupt_test
+    nop
 
 init:
     # Display a welcome message. Remember all output is line buffered!
@@ -296,7 +314,7 @@ hardware_interrupts:
     CMP     $4,$25,0x00
     andi    $25,$26,0xfc00      # ...and check the IP bits.
     li      $4,1 << (\index + 10)
-    #CMPR    $4,$25
+    CMPR    $4,$25
     sb      $0,($9)             # Clear HW IRQ source.
     .endm
     
@@ -338,7 +356,7 @@ hardware_interrupts_0:
     
     #---------------------------------------------------------------------------
     .ifle   TARGET_HARDWARE
-    .ifgt   1
+    .ifgt   0
     # Test access to debug registers over uncached data WB bridge.
 debug_regs:
     INIT_TEST msg_debug_regs
@@ -916,7 +934,29 @@ shifts:
     CMP     $19,$21,(I4 >> 17)    
     
 shifts_end:
-    PRINT_RESULT    
+    PRINT_RESULT 
+    
+    #---------------------------------------------------------------------------
+    # Test COP2 interface.
+    # We'll be using the dummy COP2 implemented in tb_core.
+    # Note we don't test the FUNCTIONALITY of any COP2 in particular; only the
+    # interface.
+
+cop2_interface:
+    INIT_TEST msg_cop2
+    INIT_REGS I
+
+    # We ca't test this while in user mode so we'e devised a scheme: we enter
+    # the COP2 test through a syscall. 
+    
+    syscall 1
+    nop
+
+    # Upon return, the same register conventions of all tests hold.
+    
+cop2_interface_end:
+    PRINT_RESULT
+    
     
     #---------------------------------------------------------------------------
     # FIXME things remain to be minimally tested:
@@ -943,9 +983,41 @@ cputest_fail:
     j       exit
     nop
 
+    #-- Test functions ---------------------------------------------------------
+    
+    # Test COP2 interface -- called from SYSCALL exception ISR.
+    # We'll be using the dummy COP2 implemented in tb_core.
+    # Note we don't test the FUNCTIONALITY of any COP2 in particular; only the
+    # interface.
+test_cop2:    
+
+    # Note that COP2_STUB does not have any feedforward logic so a register 
+    # can't be read back the cycle after being written to; this is why we 
+    # insert a NOP between MTC2 and MFC2. 
+    # Reading back a DIFFERENT register does not require the NOP, of course.
+
+    .macro  TEST_COP2_WR_RD rcpu0, rcpu1, rcop, delay, sel, data
+    li      \rcpu0,\data
+    mtc2    \rcpu0,\rcop,\sel
+    #.ifgt   \delay
+    nop
+    #.endif
+    mfc2    \rcpu1,\rcop,\sel
+    CMP     $1,\rcpu1, (\sel << 29) | (\data & 0x1fffffff)
+    .endm
+
+    TEST_COP2_WR_RD $5, $4, $0, 1, 7, 0x12345678
+    TEST_COP2_WR_RD $5, $4, $3, 1, 0, 0xabcdef01
+    
+    
+    
+    jr      $31
+    nop
+    
+    
+    
     
     #---- Support functions ----------------------------------------------------
-
  
  puts:
     li      $a1,TB_UART_TX
@@ -984,6 +1056,7 @@ msg_load_store:         .asciiz     "Load/Store opcodes........... "
 msg_shift:              .asciiz     "Shift opcodes................ "
 msg_break_syscall:      .asciiz     "Break/Syscall opcodes........ "
 msg_hw_interrupts:      .asciiz     "HW interrupts (TB only)...... "
+msg_cop2:               .asciiz     "COP2 interface (TB only)..... "
 
     .end entry
  
