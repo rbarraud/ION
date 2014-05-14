@@ -67,8 +67,9 @@ begin
     --ION_MISO_O <= WISHBONE_MISO_I;
    
     
-    process (CLK_I, RESET_I, ION_MOSI_I.rd_en, ION_MOSI_I.wr_be, 
-             WISHBONE_MISO_I.ack)
+    --process (CLK_I, RESET_I, ION_MOSI_I.rd_en, ION_MOSI_I.wr_be, 
+      --       WISHBONE_MISO_I.ack)
+    process (CLK_I, RESET_I, ION_MOSI_I, WISHBONE_MISO_I)  
     
         -- variable cyc_var : boolean := false;
         
