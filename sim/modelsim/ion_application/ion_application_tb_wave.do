@@ -28,6 +28,11 @@ add wave -noupdate -group Data -format Literal -radix hexadecimal /ion_applicati
 add wave -noupdate -group Data -format Literal -radix hexadecimal /ion_application_tb/mpu/core/data_miso.rd_data
 add wave -noupdate -group Data -format Logic /ion_application_tb/mpu/core/data_miso.mwait
 add wave -noupdate -divider {UC WB Bridge}
+add wave -noupdate -expand -group {WB Bridge}
+add wave -noupdate -group {WB Bridge} -format Literal -radix hexadecimal /ion_application_tb/mpu/core/data_wb_bridge/ion_mosi_i
+add wave -noupdate -group {WB Bridge} -format Literal -radix hexadecimal /ion_application_tb/mpu/core/data_wb_bridge/ion_miso_o
+add wave -noupdate -group {WB Bridge} -format Literal -radix hexadecimal /ion_application_tb/mpu/core/data_wb_bridge/wishbone_mosi_o
+add wave -noupdate -group {WB Bridge} -format Literal -radix hexadecimal /ion_application_tb/mpu/core/data_wb_bridge/wishbone_miso_i
 add wave -noupdate -divider I-Cache
 add wave -noupdate -format Literal -expand /ion_application_tb/mpu/core/code_cache_present/code_cache/cache_ctrl_mosi_i
 add wave -noupdate -format Logic /ion_application_tb/mpu/core/code_cache_present/code_cache/update_tag
@@ -39,13 +44,9 @@ add wave -noupdate -format Logic /ion_application_tb/log_info.read_pending
 add wave -noupdate -format Logic /ion_application_tb/log_info.lwc2_pending
 add wave -noupdate -format Logic /ion_application_tb/log_info.log_triggered
 add wave -noupdate -format Logic /ion_application_tb/log_info.stall_pipeline
-add wave -noupdate -format Logic /ion_application_tb/log_info.load_cop2
 add wave -noupdate -format Literal -radix hexadecimal -expand /ion_application_tb/mpu/core/cpu/data_mosi_o
 add wave -noupdate -format Literal -radix hexadecimal -expand /ion_application_tb/mpu/core/cpu/data_miso_i
-add wave -noupdate -format Logic /ion_application_tb/mpu/core/cpu/p2_cop2_load
 add wave -noupdate -format Literal -radix hexadecimal /ion_application_tb/mpu/core/cpu/p1_we_control
-add wave -noupdate -color Orange -format Logic /ion_application_tb/mpu/core/cpu/p1_cop2_store
-add wave -noupdate -color {Cadet Blue} -format Logic /ion_application_tb/mpu/core/cpu/p1_cop2_load
 add wave -noupdate -format Logic /ion_application_tb/mpu/core/data_cache_present/data_cache/ce_i
 add wave -noupdate -format Logic /ion_application_tb/mpu/core/data_cache_present/data_cache/miss
 add wave -noupdate -format Logic /ion_application_tb/mpu/core/data_cache_present/data_cache/lookup
@@ -93,4 +94,4 @@ configure wave -gridperiod 1000
 configure wave -griddelta 40
 configure wave -timeline 0
 update
-WaveRestoreZoom {199413260 ps} {199646740 ps}
+WaveRestoreZoom {0 ps} {525094500 ps}

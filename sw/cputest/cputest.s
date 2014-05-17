@@ -87,23 +87,28 @@
     #-- Core addresses ---------------------------------------------------------
     
     # Start of cached RAM area.
-    .set CACHED_RAM_BOT,    0x80000000
+    .set CACHED_AREA_BASE,  0x80000000
     # Start of D-TCM block.
-    .set DATA_TCM_BOT,      0xa0000000
+    .set DATA_TCM_BASE,     0xa0000000
     # Start of C-TCM as mapped on the DATA bus.
-    .set CODE_TCM_BOT,      0xbfc00000
+    .set CODE_TCM_BASE,     0xbfc00000
     
     # TB registers. These are only available in the SW simulator and in the 
     # RTL simulation test bench, not on real hardware.
 
+    # Let the makefile override the location of the TB register block.
+    .ifndef TB_REGS_BASE
+    .set TB_REGS_BASE, 0xffff8000
+    .endif
+    
     # Simulated UART TX buffer register.
-    .set TB_UART_TX,        0xffff8000    
+    .set TB_UART_TX,        TB_REGS_BASE + 0x0000
     # Block of 4 32-bit byte-addressable registers.
-    .set TB_DEBUG,          0xffff8020
+    .set TB_DEBUG,          TB_REGS_BASE + 0x0020
     # Register connected to HW interrupt lines.
-    .set TB_HW_IRQ,         0xffff8010
+    .set TB_HW_IRQ,         TB_REGS_BASE + 0x0010
     # Register used to send pass/fail messages to the TB.
-    .set TB_RESULT,         0xffff8018
+    .set TB_RESULT,         TB_REGS_BASE + 0x0018
     
     #-- Utility macros ---------------------------------------------------------
 
@@ -358,7 +363,7 @@ hardware_interrupts_0:
     
     #---------------------------------------------------------------------------
     .ifle   TARGET_HARDWARE
-    .ifgt   0
+    .ifgt   1
     # Test access to debug registers over uncached data WB bridge.
 debug_regs:
     INIT_TEST msg_debug_regs
@@ -383,7 +388,7 @@ debug_regs_0:
     # Test load interlock.
 interlock:
     INIT_TEST msg_interlock
-    la      $9,DATA_TCM_BOT     # We'll be using the TCM in this test.
+    la      $9,DATA_TCM_BASE    # We'll be using the TCM in this test.
     INIT_REGS I
     sw      $2,0($9)            # Ok, store a known pattern in the TCM...
     nop
@@ -404,7 +409,7 @@ dcache:
 
     # Initialize the cache with CACHE Hit Invalidate instructions.
 cache_init:
-    li      $9,CACHED_RAM_BOT   # Any base address will do.
+    li      $9,CACHED_AREA_BASE # Any base address will do.
     li      $8,DCACHE_NUM_LINES
 cache_init_0:
     cache   IndexInvalidateD,0x0($9)
@@ -425,7 +430,7 @@ cache_init_0:
     nop
     .endif
     # Now do a write-read test on cached RAM (also simulated in swsim and TB).
-    li      $3,CACHED_RAM_BOT # $3 points to base of cached RAM.
+    li      $3,CACHED_AREA_BASE # $3 points to base of cached RAM.
     li      $6,0x18026809 
     sw      $6,0x08($3)         # Store test pattern...
     # (We do back to back SW/LW)
@@ -551,7 +556,7 @@ icache:
 
     # Initialize the CODE cache with CACHE Hit Invalidate instructions.
 icache_init:
-    li      $9,CACHED_RAM_BOT
+    li      $9,CACHED_AREA_BASE
     li      $8,ICACHE_NUM_LINES
 icache_init_0:
     cache   IndexStoreTagI,0x0($9)
@@ -562,7 +567,7 @@ icache_init_0:
     # First, we write a single "JR RA" (a return) instruction at the start of
     # the cached RAM, and jump to it. 
     # Failure in this test will crash the program, of course.
-    li      $9,CACHED_RAM_BOT
+    li      $9,CACHED_AREA_BASE
     li      $3,0x03e00008       
     sw      $3,0x0($9)
     sw      $0,0x4($9)
@@ -875,7 +880,7 @@ load_store:
     INIT_REGS I
     
     # We'll be targetting the data TCM and not the cached areas. 
-    li      $17,DATA_TCM_BOT
+    li      $17,DATA_TCM_BASE
     
     # SB, LB, LBU
     BYTE_READBACK  , $17, 0x42, 0x10
@@ -1017,7 +1022,8 @@ test_cop2:
     CMP     $7,$6, I4
     cfc2    $6,$3
     CMP     $7,$6, I5
-    # Note that COP2_STUB stores the SEL field along with the data for testing.
+    # Note that COP2_STUB stores the SEL field along with the data for testing;
+    # the sel field is written on the top 3 bits of the register word.
     mfc2    $6,$0,0
     CMP     $7,$6,(0 << 29) | (I2 & 0x1fffffff)
     mfc2    $6,$1,1
@@ -1028,6 +1034,7 @@ test_cop2:
     CMP     $7,$6,(3 << 29) | (I5 & 0x1fffffff)   
     
     .ifgt   TEST_COP2_LW_SW
+    # FIXME These opcodes are not yet implemented.
     # SWC2, LWC2.
     
     li      $2,(I2 & 0x1fffffff)    # Load $2 to $5 with I constants...
@@ -1035,8 +1042,8 @@ test_cop2:
     li      $4,(I4 & 0x1fffffff)    # ...because they'll be zeroed in the COP2.
     li      $5,(I5 & 0x1fffffff)
     
-    li      $18,DATA_TCM_BOT        # Set up pointers to memory areas we'll use.
-    li      $17,CACHED_RAM_BOT
+    li      $18,DATA_TCM_BASE       # Set up pointers to memory areas we'll use.
+    li      $17,CACHED_AREA_BASE
     
     mtc2    $2,$0,0             # Initialize a few COP2 regs as "sources".
     mtc2    $3,$1,0
@@ -1047,8 +1054,6 @@ test_cop2:
     lwc2    $4,0($17)
     swc2    $1,0x40($17)        # WR-RD-WR-RD sequence.
     lwc2    $5,0x40($17)
-    nop
-    nop
     nop                         # TWO delay slots after LWC2 before we can read
     nop                         # the SAME COP2 register.
     mfc2    $1,$4,0             # Make sure we got the right values back.
@@ -1068,11 +1073,8 @@ test_cop2:
     
     .endif
     
-    
-    jr      $31
+    jr      $31                 # End of COP2 tests.
     nop
-    
-    
     
     
     #---- Support functions ----------------------------------------------------

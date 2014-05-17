@@ -18,24 +18,14 @@
 #
 ################################################################################
 
-
-# Get common makefile stuff (toolchain & system config)
+# Get common makefile stuff (toolchain & system config).
 include ../common/makefile
 
 #-- Application setup ----------------------------------------------------------
 
+# Name of executable and label to use in VHDL files.
 TARGET = cputest
 APP_NAME = "CPU tester"
-
-# Link script to be used
-LINK_SCRIPT = $(SW_ROOT)/common/link/internal.lds
-
-# Code memory parameters -- Code TCM. Size in WORDS!
-CODE_MEM_START  = 0xbfc00000
-CODE_MEM_SIZE   = 4096
-# Data memory parameters -- Data TCM. Size in WORDS!
-DATA_MEM_START  = 0xa0000000
-DATA_MEM_SIZE   = 1024
 
 # Test bench simulation timeout period in clock cycles.
 SIM_LENGTH = 25000
@@ -43,9 +33,10 @@ SIM_LENGTH = 25000
 LOG_TRIGGER = 0xbfc00000
 
 
-#-- Build flags ----------------------------------------------------------------
+#-- Build flags (override default values if necessary) -------------------------
 
-LFLAGS = -Ttext $(CODE_MEM_START) -Tdata $(DATA_MEM_START) -eentry -I elf32-big
+#CFLAGS =
+#LFLAGS =
 
 
 #-- Targets & rules ------------------------------------------------------------
@@ -55,7 +46,7 @@ LFLAGS = -Ttext $(CODE_MEM_START) -Tdata $(DATA_MEM_START) -eentry -I elf32-big
 
 program:
 	$(AS) -o opcode_emu.o $(SW_ROOT)/common/crt/opcode_emu.s
-	$(AS) -defsym XRAM_BASE=$(DATA_MEM_START) -mips32r2 -o $(TARGET).o $(TBARGS) cputest.s
+	$(AS) $(AFLAGS) -mips32r2 -o $(TARGET).o $(TBARGS) cputest.s
 	$(LD) $(LFLAGS) -Map $(TARGET).map -s -N -o $(TARGET).axf $(TARGET).o opcode_emu.o
 	-@$(DUMP) -I elf32-big --disassemble $(TARGET).axf > $(TARGET).lst
 	$(COPY) -I elf32-big -O binary $(TARGET).axf $(TARGET).bin
@@ -63,31 +54,7 @@ program:
 
     
 
-#-- Targets that build the synthesizable vhdl; meant for direct invocation -----
-  
-# Build program for "tb_application" test bench. 
-tb_app: set_tb_app_variables program sim
-
-# Build program for "tb_core" test bench. 
-tb_core: set_tb_core_variables program sim
-
-
-#-- Creates VHDL package with data and parameters for simulation and synthesis.
-sim: program synth
-
-	$(VHDL_OBJ_PKG) --project=$(APP_NAME) \
-		--package SIM_PARAMS_PKG \
-		--output $(TB_DIR)/common/sim_params_pkg.vhdl \
-		-s $(SIM_LENGTH) --log_trigger=$(LOG_TRIGGER) \
-
-
-#-- Create VHDL package with data and parameters for syntesis
-synth: program
-	$(VHDL_OBJ_PKG) --project=$(APP_NAME) \
-		--package OBJ_CODE_PKG \
-		--bin $(TARGET).bin --name OBJ_CODE --cmem_size $(CODE_MEM_SIZE) \
-        --bin $(TARGET).data --name INIT_DATA --dmem_size $(DATA_MEM_SIZE)\
-		--output $(OBJ_DIR)/obj_code_pkg.vhdl
+#-- Targets invoked by tb_app and tb_core (see common makefile) ----------------
 
 #-- Set assembler arguments for "tb_application" test bench.
 set_tb_app_variables: 
@@ -101,7 +68,4 @@ set_tb_core_variables:
 #-- And now the usual housekeeping stuff ---------------------------------------
 
 .PHONY: clean
-
-clean:
-	-$(RM) *.o *.obj *.map *.lst *.hex *.exe *.axf *.code *.data *.bin
 

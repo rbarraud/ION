@@ -1,15 +1,15 @@
 #-------------------------------------------------------------------------------
-# This makefile does not contain any targets, only definitions used by the 
-# makefiles of all the code samples. 
+# This makefile contains all the variables and targets that are expected to be 
+# common to all other makefiles within the project.
 # It is meant to be included and not used standalone.
 #-------------------------------------------------------------------------------
-# SYSTEM PARAMETERS
+# TARGETS:
 #
-# You can define here the default size and address of the memory blocks of the 
-# system as seen by the linker, though you can't change the number and type of 
-# blocks here (see /vhdl/mips_cache_*.vhdl and /vhdl/mips_pkg.vhdl).
+# Some of the targets defined in this file are meant for DIRECT invocation from 
+# the command line:
 #
-# The samples' makefiles will probably redefine the values, anyway.
+# tb_app
+# tb_core
 #
 #-------------------------------------------------------------------------------
 # NOTE:
@@ -17,64 +17,27 @@
 # See info on flag -G0 in ion_noxram.lds
 #-------------------------------------------------------------------------------
 
+# Hack used to include files in this file's directory.
+SELF_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 
-### Toolchain config ###########################################################
+# Get hardware dependent variables (address ranges, etc.).
+include $(SELF_DIR)toolchain.mak
+# Get hardware dependent variables (address ranges, etc.).
+include $(SELF_DIR)hardware.mak
 
-ifeq ($(LANG),)
-#****  Customize for Windows/Cygwin
+### Expansion of hardware-related symbols ######################################
 
-# Some common file commands (Cygwin/sh version, use your own)
-CP = copy
-RM = del
-DWIN32 = -DWIN32
-LINUX_PWD =
+# Format HW symbol list for 'as' command line.
+AS_HWSYMS=$(foreach item,$(HWSYMS),--defsym $(item)_BASE=$($(item)_BASE) --defsym $(item)_SIZE=$($(item)_SIZE))
+# Format HW symbol list for 'cc' command line.
+CC_HWSYMS=$(foreach item,$(HWSYMS),-D$(item)_BASE=$($(item)_BASE) -D$(item)_SIZE=$($(item)_SIZE))
+# Format HW symbol list for 'ld' command line.
+LD_HWSYMS=$(foreach item,$(HWSYMS),--defsym $(item)_BASE=$($(item)_BASE) --defsym $(item)_SIZE=$($(item)_SIZE))
 
-# MIPS GCC cross-toolchain: CodeSourcery -- replace with your own
-TOOLCHAIN = C:/dev/embedded/SourceryGpp/mips-elf-11-03.52
-#TOOLCHAIN = C:/devel/tools/CS_MIPS
-
-# Toolchain executables
-BIN_MIPS = $(TOOLCHAIN)/bin
-CC = $(BIN_MIPS)/mips-sde-elf-gcc.exe $(CFLAGS)
-AS = $(BIN_MIPS)/mips-sde-elf-as
-LD = $(BIN_MIPS)/mips-sde-elf-ld
-DUMP = $(BIN_MIPS)/mips-sde-elf-objdump
-COPY = $(BIN_MIPS)/mips-sde-elf-objcopy
-
-LIBPATH = $(TOOLCHAIN)/mips-sde-elf/lib/sof
-
-# Python interpreter -- replace with your own
-#PYTHON = c:/devel/tools/Python27/python.exe
-PYTHON = python
-
-else
-#**** Customize for Linux
-
-# MIPS GCC cross-toolchain: BuildRoot toolchain in my home directory -- replace with your own
-# NOTE: we will not use gcc builtin functions or libc
-# FIXME this hasn't been tested for ages!
-
-BIN_MIPS = /home/jaruiz/desarrollo/uClinux/MIPS/buildroot/buildroot-2010.11/output/staging/usr/bin
-CC = $(BIN_MIPS)/mips-unknown-linux-uclibc-gcc $(CFLAGS)
-AS = $(BIN_MIPS)/mips-unknown-linux-uclibc-as
-LD = $(BIN_MIPS)/mips-unknown-linux-uclibc-ld
-DUMP = $(BIN_MIPS)/mips-unknown-linux-uclibc-objdump
-COPY = $(BIN_MIPS)/mips-unknown-linux-uclibc-objcopy
-
-endif
 
 ### VHDL source file manipulation tools ########################################
 ION_TOOLS = ../../tools
 VHDL_OBJ_PKG = $(PYTHON) $(ION_TOOLS)/build_pkg/build_pkg.py -t $(ION_TOOLS)/build_pkg/templates
-
-### Default system parameters -- to be replaced in application makefile ########
-
-# Code memory parameters -- Code TCM.
-CODE_MEM_START  = 0xbfc00000
-CODE_MEM_SIZE   = 2048
-# Data memory parameters -- Data TCM.
-DATA_MEM_START  = 0x00000000
-DATA_MEM_SIZE   = 2048
 
 ### Project directories -- to be replaced in application makefile ##############
 
@@ -84,18 +47,87 @@ SW_ROOT = ..
 TB_DIR = ../../src/testbench
 # Directory for object code package, to be used in synthesis.
 OBJ_DIR = ../../src/rtl/obj
-# Link script to be used: by default, link for internal memory mode.
-LINK_SCRIPT ?= $(SW_ROOT)/common/link/internal.lds
 
 ### Build options -- to be replaced in application makefile ####################
+
+# Link script to be used: by default, link for internal memory mode
+LINK_SCRIPT = $(SW_ROOT)/common/link/internal.lds
+# FIXME library stuff unfinished!
+LIB_PATH=.
 
 # Don't use gcc builtin functions, and try to target MIPS-I architecture.
 # This will prevent usage of unimplemented opcodes but will insert nops after
 # load instructions, which Ion does not need.
 # (See comment above about -G0 flag)
 #CFLAGS = -O2 -Wall -c -s -fno-builtin -mips1 -G0 -nodefaultlibs -nostdlib
-CFLAGS = -O2 -Wall -c -s -mips1 -G0
-# LFLAGS: linker options are in the respective makefiles
+CFLAGS = -O2 -Wall -c -s -mips1 -G0 $(CC_HWSYMS)
+# LFLAGS: Position main sections on memory, etc.
+LFLAGS = -T$(LINK_SCRIPT) $(LD_HWSYMS) -eentry -I elf32-big -L $(LIB_PATH)
+# AFLAGS: 
+AFLAGS = $(AS_HWSYMS)
+# Symbol definitions for assembler and compiler.
+ADDR_SYMS = -defsym TB_REGS_BOT=$(TB_REGS_START),TB_REGS_BOT=$(TB_REGS_START)
 
-SYSLIBS = -lc -lm -lcs3 -lcs3unhosted
+
+### Targets common to all C programs; indirect invocation! #####################
+
+#-- Common code build -- crt0 and bootstrap ------------------------------------
+
+CRTDIR = $(SW_ROOT)/common/crt
+BOOTDIR = $(SW_ROOT)/common/boot
+
+#-- crt0
+SRCCRT := $(wildcard $(CRTDIR)/*.s)
+OBJCRT := $(SRCCRT:$(CRTDIR)/%.s=%.o)
+#-- bootstrap code
+SRCBOOT := $(wildcard $(BOOTDIR)/*.s)  
+OBJBOOT := $(SRCBOOT:$(BOOTDIR)/%.s=%.o)
+
+%.o: $(CRTDIR)/%.s
+	$(AS) $(AFLAGS) -o $@ $^
+
+%.o: $(BOOTDIR)/%.s
+	$(AS) $(AFLAGS) -o $@ $^
+
+#-- Application build config ---------------------------------------------------
+
+SRCDIR = .
+SRCS := $(wildcard $(SRCDIR)/*.c)
+OBJAPP := $(SRCS:$(SRCDIR)/%.c=%.o) 
+
+#-- IMPORTANT: Keep this order or the linked executable will crash.
+OBJS = $(OBJBOOT) $(OBJCRT) $(OBJAPP) 
+
+
+### Targets that build the synthesizable vhdl; meant for direct invocation #####
+  
+# Build program for "tb_application" test bench. 
+tb_app: set_tb_app_variables program sim
+
+# Build program for "tb_core" test bench. 
+tb_core: set_tb_core_variables program sim
+
+
+#-- Creates VHDL package with data and parameters for simulation and synthesis.
+sim: program synth
+
+	$(VHDL_OBJ_PKG) --project=$(APP_NAME) \
+		--package SIM_PARAMS_PKG \
+		--output $(TB_DIR)/common/sim_params_pkg.vhdl \
+		-s $(SIM_LENGTH) --log_trigger=$(LOG_TRIGGER) \
+
+
+#-- Create VHDL package with data and parameters for syntesis.
+synth: program
+	$(VHDL_OBJ_PKG) --project=$(APP_NAME) \
+		--package OBJ_CODE_PKG \
+		--bin $(TARGET).bin --name OBJ_CODE --cmem_size $(CODE_TCM_SIZE) \
+        --bin $(TARGET).data --name INIT_DATA --dmem_size $(DATA_TCM_SIZE)\
+		--output $(OBJ_DIR)/obj_code_pkg.vhdl
+
+
+### Other common targets #######################################################
+        
+clean:
+	-$(RM) *.o *.map *.lst *.map *.axf *.data *.bin
 

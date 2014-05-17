@@ -7,7 +7,6 @@ add wave -noupdate -color Gold -format Literal -radix hexadecimal /ion_core_tb/c
 add wave -noupdate -color Blue -format Literal -radix hexadecimal /ion_core_tb/core/cpu/p0_pc_reg
 add wave -noupdate -divider {Interconnect -- Code}
 add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/cpu/p0_pc_target
-add wave -noupdate -format Logic /ion_core_tb/core/cpu/cop0/cause_bd_reg
 add wave -noupdate -format Literal /ion_core_tb/core/cpu/p0_irq_reg
 add wave -noupdate -format Logic /ion_core_tb/core/cpu/cop0/sr_reg.erl
 add wave -noupdate -format Logic /ion_core_tb/core/cpu/cop0/sr_reg.exl
@@ -61,7 +60,7 @@ add wave -noupdate -format Logic /ion_core_tb/core/data_cache_present/data_cache
 add wave -noupdate -format Logic /ion_core_tb/core/data_cache_present/data_cache/cached_tag_valid
 add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/data_cache_present/data_cache/cached_tag
 add wave -noupdate -divider {Uncached Port}
-add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/data_uc_wb_mosi
+add wave -noupdate -format Literal -radix hexadecimal -expand /ion_core_tb/data_uc_wb_mosi
 add wave -noupdate -format Literal -radix hexadecimal -expand /ion_core_tb/data_uc_wb_miso
 add wave -noupdate -format Literal /ion_core_tb/uwb_wait_ctr
 add wave -noupdate -divider Debug
@@ -73,7 +72,7 @@ add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/cpu/alu_
 add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/cpu/alu_inst/op1_i
 add wave -noupdate -format Literal -radix hexadecimal /ion_core_tb/core/cpu/alu_inst/alu_arith
 TreeUpdate [SetDefaultTree]
-WaveRestoreCursors {{Cursor 1} {99950000 ps} 0}
+WaveRestoreCursors {{Cursor 1} {30350000 ps} 0}
 configure wave -namecolwidth 206
 configure wave -valuecolwidth 60
 configure wave -justifyvalue left
@@ -87,4 +86,4 @@ configure wave -gridperiod 1
 configure wave -griddelta 40
 configure wave -timeline 0
 update
-WaveRestoreZoom {99904728 ps} {99993735 ps}
+WaveRestoreZoom {30255822 ps} {30802007 ps}
