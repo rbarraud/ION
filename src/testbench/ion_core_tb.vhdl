@@ -125,7 +125,7 @@ signal code_address :       t_word;
 -- Uncached data WB bridge.
 
 -- Wait states simulated by uncached WB port (elements used in succession).
-constant UNCACHED_WS : t_natural_table (0 to 3) := (4,1,3,2);
+constant UNCACHED_WS : t_natural_table (0 to 3) := (0,0,0,0); --(4,1,3,2);
 
 signal uwb_wait_ctr :       natural;
 signal uwb_cycle_count :    natural := 0;
