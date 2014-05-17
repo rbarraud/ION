@@ -12,8 +12,8 @@
 -- interface, it's not meant to do any useful work. 
 -- This is what this module does at the moment:
 --
--- -# Register bank with 32 64-bit general purpose registers.
--- -# Register bank with 32 64-bit general purpose registers.
+-- -# Register bank with 16 32-bit general purpose registers.
+-- -# Register bank with 16 32-bit general purpose registers.
 --    (Both implemented in a single BRAM.)
 -- -# "Sel" field is written to top 3 bits of register when writing.
 -- -# "Sel" field is ignored on reads.
@@ -96,19 +96,21 @@ attribute ram_style of rbank : signal is "distributed";
           
 begin
     
-    -- Connect the register bank straight to the 
+    -- Connect the register bank adress inputs straight to the MOSI.
     rbank_we <= CPU_MOSI_I.reg_wr_en;
     rbank_wr_addr <= 
-        CPU_MOSI_I.reg_rd.hi & 
-        CPU_MOSI_I.reg_rd.control & 
-        CPU_MOSI_I.reg_rd.index(2 downto 0);
-    rbank_rd_addr <= 
-        CPU_MOSI_I.reg_wr.hi & 
         CPU_MOSI_I.reg_wr.control & 
-        CPU_MOSI_I.reg_wr.index(2 downto 0);
-    -- Store the SEL field in the top 3 bits so we at least have some way 
-    -- to check the connection. This will have to be improved...
-    rbank_wr_data <= CPU_MOSI_I.reg_wr.sel & CPU_MOSI_I.data(28 downto 0);
+        CPU_MOSI_I.reg_wr.index(3 downto 0);
+    rbank_rd_addr <= 
+        CPU_MOSI_I.reg_rd.control & 
+        CPU_MOSI_I.reg_rd.index(3 downto 0);
+
+    -- When reading regular registers (as opposed to control), put the SEL 
+    -- field in the high 3 bits so we at least have some way to check the 
+    -- connection. This will have to be improved...
+    with CPU_MOSI_I.reg_wr.control select rbank_wr_data <= 
+        CPU_MOSI_I.reg_wr.sel & CPU_MOSI_I.data(28 downto 0)    when '0',
+        CPU_MOSI_I.data                                         when others;
     
 
     -- Register bank as double-port RAM. Should synth to 1 BRAM unless you use

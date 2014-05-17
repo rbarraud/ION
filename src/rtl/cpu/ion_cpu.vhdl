@@ -154,6 +154,7 @@ signal p1_jump_type_set0 :  std_logic_vector(1 downto 0);
 signal p1_jump_type_set1 :  std_logic_vector(1 downto 0);
 signal p1_ir_reg :          std_logic_vector(31 downto 0);
 signal p1_ir_op :           std_logic_vector(31 downto 26);
+signal p1_ir_fmt :          std_logic_vector(25 downto 21);
 signal p1_ir_fn :           std_logic_vector(5 downto 0);
 signal p1_op_special :      std_logic;
 signal p1_exception :       std_logic;
@@ -172,6 +173,7 @@ signal p1_alu_op2_sel_set0: std_logic_vector(1 downto 0);
 signal p1_alu_op2_sel_set1: std_logic_vector(1 downto 0);
 signal p1_do_load :         std_logic;
 signal p1_do_store :        std_logic;
+signal p1_sw_data :         t_word;
 signal p1_store_size :      std_logic_vector(1 downto 0);
 signal p1_we_control :      std_logic_vector(5 downto 0);
 signal p1_load_alu :        std_logic;
@@ -259,7 +261,7 @@ p0_rt_num <= std_logic_vector(CODE_MISO_I.rd_data(20 downto 16));
 --------------------------------------------------------------------------------
 -- Data input register and input shifter & masker (LB,LBU,LH,LHU,LW)
 
--- If data can't be latched form the bus when it´s valid due to a stall, it will
+-- If data can't be latched from the bus when it´s valid due to a stall, it will
 -- be registered here.
 data_input_register:
 process(CLK_I)
@@ -274,7 +276,7 @@ end process data_input_register;
 -- Data input mux:
 data_rd <= 
     -- If pipeline was stalled when data was valid, use registered value...
-    data_rd_reg when p2_do_load='1' and p2_load_pending='0' else 
+    data_rd_reg when (p2_do_load='1') and p2_load_pending='0' else 
     -- ...otherwise get the data straight from the data bus.
     DATA_MISO_I.rd_data;
 
@@ -574,7 +576,7 @@ end process pc_register;
 DATA_MOSI_O.addr <= p1_data_addr(31 downto 0);
 
 -- 'Memory enable' signals for both memory interfaces
-DATA_MOSI_O.rd_en <= p1_do_load and not pipeline_stalled;
+DATA_MOSI_O.rd_en <= (p1_do_load) and not pipeline_stalled;
 CODE_MOSI_O.rd_en <= (not stall_pipeline) and reset_done(0);
 
 CODE_MOSI_O.wr_be <= "0000";
@@ -649,6 +651,7 @@ with p1_do_zero_ext_imm select p1_data_imm(31 downto 16) <=
 
 -- 'Extract' main fields from IR, for convenience
 p1_ir_op <= p1_ir_reg(31 downto 26);
+p1_ir_fmt <= p1_ir_reg(25 downto 21);
 p1_ir_fn <= p1_ir_reg(5 downto 0);
 
 -- Decode jump type, if any, for instructions with op/=0
@@ -711,10 +714,16 @@ p1_exception <= '1' when
     else '0';
 
 -- Decode MTC0/MFC0 instructions (see @note3)
-p1_set_cp  <= '1' when p1_ir_reg(31 downto 28)="0100" and 
-                       p1_ir_reg(25 downto 21)="00100" else '0';
-p1_get_cp  <= '1' when p1_ir_reg(31 downto 28)="0100" and 
-                       p1_ir_reg(25 downto 21)="00000" else '0';
+p1_set_cp  <= 
+    '1' when p1_ir_reg(31 downto 26)="010000" and p1_ir_fmt="00100" else -- MTC0
+    '1' when p1_ir_reg(31 downto 26)="010010" and p1_ir_fmt="00100" else -- MTC2
+    '1' when p1_ir_reg(31 downto 26)="010010" and p1_ir_fmt="00110" else -- CTC2
+    '0';
+p1_get_cp  <= 
+    '1' when p1_ir_reg(31 downto 26)="010000" and p1_ir_fmt="00000" else -- MFC0
+    '1' when p1_ir_reg(31 downto 26)="010010" and p1_ir_fmt="00000" else -- MFC2
+    '1' when p1_ir_reg(31 downto 26)="010010" and p1_ir_fmt="00010" else -- CFC2
+    '0';
 
 p1_set_cp0 <= '1' when p1_ir_reg(27 downto 26)="00" and p1_set_cp='1' else '0';
 p1_get_cp0 <= '1' when p1_ir_reg(27 downto 26)="00" and p1_get_cp='1' else '0';
@@ -746,8 +755,7 @@ p1_do_load <= '1' when
     p1_ir_op(28 downto 26)/="110" and -- LWR
     p1_ir_op(28 downto 26)/="111" and -- LWR
     p2_exception='0'  -- abort load if previous instruction triggered trap
-    else '0';
-    
+    else '0';  
 
 p1_load_alu_set0 <= '1' 
     when p1_op_special='1' and 
@@ -803,8 +811,7 @@ p1_do_store <= '1' when
     p2_exception='0'    -- abort when previous instruction triggered exception
     else '0';
 p1_store_size <= p1_ir_op(27 downto 26);
-
-
+   
 -- Extract source and destination C0 register indices
 p1_c0_rs_num <= p1_ir_reg(15 downto 11);
 
@@ -896,8 +903,10 @@ CACHE_CTRL_MOSI_O.data_cache <= p1_ir_reg(16); -- 0 for I, 1 for D.
 p1_unknown_opcode <= '1' when
     -- decode by 'opcode' field
     p1_ir_op(31 downto 29)="011" or
-    p1_ir_op(31 downto 29)="110" or
-    p1_ir_op(31 downto 29)="111" or
+    --(p1_ir_op(31 downto 29)="110" and 
+    --    p1_ir_op(28 downto 26)/="010") or      -- LWC2 is valid
+    --(p1_ir_op(31 downto 29)="111" and 
+    --    p1_ir_op(28 downto 26)/="010") or      -- SWC2 is valid 
     (p1_ir_op(31 downto 29)="010" and 
         (p1_ir_op(28 downto 26)/="000" and     -- COP0 is valid
          p1_ir_op(28 downto 26)/="100" and     -- BEQL is valid
@@ -938,7 +947,7 @@ p1_cp_unavailable <= '1' when
       p1_rfe='1' or -- p1_eret='1' or
       p1_get_cp2='1' or p1_set_cp2='1')
                      and cp0_miso.kernel='0') -- COP0 user mode
-    -- FIXME CP1..3 logic missing
+    -- FIXME CP1/3 logic missing
     else '0';
 
 
@@ -1065,7 +1074,7 @@ begin
     if CLK_I'event and CLK_I='1' then
         if RESET_I='1' then
             p2_load_pending <= '0';
-        elsif p1_do_load='1' and pipeline_stalled='0' then 
+        elsif (p1_do_load='1') and pipeline_stalled='0' then 
             p2_load_pending <= '1';
         elsif p2_load_pending='1' and DATA_MISO_I.mwait='0' then
             p2_load_pending <= '0';
@@ -1154,7 +1163,8 @@ p1_data_addr <= p1_rs + p1_data_offset;
 -- DATA_MOSI_O.wr_be is a function of the write size and alignment
 -- size = {00=1,01=2,11=4}; we 3 is MSB, 0 is LSB; big endian => 00 is msb
 
-p1_we_control <= (mem_wait) & p1_do_store & p1_store_size & p1_data_addr(1 downto 0);
+p1_we_control <= (mem_wait) & (p1_do_store) & 
+                 p1_store_size & p1_data_addr(1 downto 0);
 
 -- FIXME: make sure this bug is gone, it should be.
 -- Bug: For two SW instructions in a row, the 2nd one will be stalled and lost: 
@@ -1175,23 +1185,25 @@ with p1_we_control select DATA_MOSI_O.wr_be <=
 -- Data to be stored always comes straight from the reg bank, but it needs to 
 -- be shifted so that the LSB is aligned to the write address:
 
-DATA_MOSI_O.wr_data(7 downto 0) <= p1_rt(7 downto 0);
+p1_sw_data(7 downto 0) <= p1_rt(7 downto 0);
 
-with p1_we_control select DATA_MOSI_O.wr_data(15 downto 8) <= 
+with p1_we_control select p1_sw_data(15 downto 8) <= 
     p1_rt( 7 downto  0) when "010010",  -- SB %2
     p1_rt(15 downto  8) when others;
 
-with p1_we_control select DATA_MOSI_O.wr_data(23 downto 16) <= 
+with p1_we_control select p1_sw_data(23 downto 16) <= 
     p1_rt( 7 downto  0) when "010001",  -- SB %1
     p1_rt( 7 downto  0) when "010100",  -- SH %0
     p1_rt(23 downto 16) when others;
     
-with p1_we_control select DATA_MOSI_O.wr_data(31 downto 24) <= 
+with p1_we_control select p1_sw_data(31 downto 24) <= 
     p1_rt( 7 downto  0) when "010000",  -- SB %0
     p1_rt(15 downto  8) when "010100",  -- SH %0
     p1_rt(31 downto 24) when others;
 
-
+DATA_MOSI_O.wr_data <= p1_sw_data;
+    
+    
 --##############################################################################
 -- COP0 block.
 
@@ -1225,14 +1237,12 @@ cop0 : entity work.ION_COP0
 COP2_MOSI_O.reg_rd_en       <= p1_get_cp2;
 COP2_MOSI_O.reg_wr_en       <= p1_set_cp2;
 COP2_MOSI_O.data            <= p1_rt;
-COP2_MOSI_O.reg_rd.index    <= CODE_MISO_I.rd_data(15 downto 11);
+COP2_MOSI_O.reg_rd.index    <= CODE_MISO_I.rd_data(20 downto 16) when CODE_MISO_I.rd_data(31 downto 26)="111010" else CODE_MISO_I.rd_data(15 downto 11);
 COP2_MOSI_O.reg_rd.sel      <= CODE_MISO_I.rd_data(2 downto 0);
-COP2_MOSI_O.reg_rd.hi       <= '0';
-COP2_MOSI_O.reg_rd.control  <= '0';
+COP2_MOSI_O.reg_rd.control  <= CODE_MISO_I.rd_data(22);
 COP2_MOSI_O.reg_wr.index    <= p1_ir_reg(15 downto 11);
 COP2_MOSI_O.reg_wr.sel      <= p1_ir_reg(2 downto 0);
-COP2_MOSI_O.reg_wr.hi       <= '0';
-COP2_MOSI_O.reg_wr.control  <= '0';
+COP2_MOSI_O.reg_wr.control  <= p1_ir_fmt(22);
 
 COP2_MOSI_O.cofun25_en  <= '0';
 COP2_MOSI_O.cofun16_en  <= '0';

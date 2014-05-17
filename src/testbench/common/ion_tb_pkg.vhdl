@@ -85,6 +85,7 @@ type t_log_info is record
     
     data_rd_en :            std_logic;
     p1_rbank_we :           std_logic;
+    --p1_cop2_load :          std_logic;
     code_rd_en :            std_logic;
     wr_be :                 std_logic_vector(3 downto 0);
 
@@ -102,6 +103,7 @@ type t_log_info is record
     pending_load_target :   std_logic_vector(4 downto 0);
     
     word_loaded :           t_word;
+    --word_loaded_cop2 :      t_word;
     
     io_wr_data :            t_word;
     
@@ -114,8 +116,10 @@ type t_log_info is record
     
     data_rd_address :       t_word;
     load :                  std_logic;
+    --load_cop2 :             std_logic;
     
     read_pending :          boolean;
+    lwc2_pending :          boolean;
     write_pending :         boolean;
     debug :                 t_word;
     
@@ -184,6 +188,7 @@ begin
     
     -- Log memory writes ----------------------------------------
     if info.write_pending then
+        -- Regular S* opcodes AND SWC2 opcode.
         if conv_integer(info.pending_data_wr_pc) <= conv_integer(full_pc) then
     
             ri := X"0" & info.pending_data_wr_we;
@@ -209,6 +214,7 @@ begin
             info.debug <= info.pending_data_wr_pc;
             info.write_pending <= false;
         end if;
+        
     end if;
 
     -- Log register bank activity.
@@ -343,15 +349,15 @@ begin
     end if;  
     
     -- When we see an exception, overwrite last element of fetch address queue
-    -- because we know it's not going to b executed and it would ruin the log.
+    -- because we know it's not going to be executed and it would ruin the log.
     if info.exception='1' then
         -- Yet another crude hack, who's counting...
         info.pc_m(0) <= X"BFC00180";
     end if;
     
     -- Log memory reads ------------------------------------------
-    if info.read_pending and info.load='1' and info.p1_rbank_we='1' then
-        if info.log_triggered then
+    if info.read_pending and info.log_triggered then
+        if info.load='1' and info.p1_rbank_we='1' and not info.lwc2_pending then
             -- Log memory read cycle.
             print(l_file, "("& hstr(info.pc_m(1)) &") ["& 
                   hstr(info.pending_data_rd_addr) &"] <"& 
@@ -369,8 +375,17 @@ begin
                 -- by setting the previous value to the new value.
                 info.prev_rbank(conv_integer(ri)) <= info.word_loaded;
             end if;
+            info.read_pending <= false;
         end if;
-        info.read_pending <= false;
+        
+        --if info.load_cop2='1' and info.stall_pipeline='0' and info.lwc2_pending then
+        --    -- Log LWC2 memory read cycle.
+        --    print(l_file, "("& hstr(info.pc_m(1)) &") ["& 
+        --          hstr(info.pending_data_rd_addr) &"] <"& 
+        --          "**"& ">="& hstr(info.word_loaded_cop2)& " RD" );
+        --    info.read_pending <= false;
+        --    info.lwc2_pending <= false;
+        --end if;
     end if;
 
     if info.exception='1' then
@@ -391,6 +406,7 @@ begin
     if info.data_rd_en='1' then
         info.read_pending <= true;
         info.pending_data_rd_addr <= info.present_data_rd_addr;
+        --info.lwc2_pending <= (info.p1_cop2_load='1');
     end if;
     
     if info.mdiv_count_reg="100000" then
@@ -503,14 +519,17 @@ begin
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/p1_rbank_we", signal_name&".p1_rbank_we", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/code_mosi_o.rd_en", signal_name&".code_rd_en", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/p2_do_load", signal_name&".load", 0);
+    --init_signal_spy("/"&base_entity&"/"&cpu_name&"/p1_cop2_load", signal_name&".load_cop2", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/data_mosi_o.addr", signal_name&".present_data_wr_addr", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/data_mosi_o.wr_data", signal_name&".present_data_wr", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/data_mosi_o.wr_be", signal_name&".wr_be", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/p2_data_word_rd", signal_name&".word_loaded", 0);
+    --init_signal_spy("/"&base_entity&"/"&cpu_name&"/data_rd", signal_name&".word_loaded_cop2", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/data_mosi_o.addr", signal_name&".present_data_rd_addr", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/p1_exception", signal_name&".exception", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/data_mosi_o.wr_data", signal_name&".io_wr_data", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/p2_load_target", signal_name&".pending_load_target", 0);
+    --init_signal_spy("/"&base_entity&"/"&cpu_name&"/p1_cop2_load", signal_name&".p1_cop2_load", 0);
     
     
     while done='0' loop

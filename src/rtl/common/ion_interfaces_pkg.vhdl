@@ -63,7 +63,6 @@ end record t_wishbone_miso;
 type t_cop2_regsel is record
     index :     std_logic_vector(4 downto 0);   -- Reg index.
     sel :       std_logic_vector(2 downto 0);   -- Reg sel field.
-    hi :        std_logic;          -- Addressing high half of 64-bit reg.
     control :   std_logic;          -- Addressing control register.
 end record t_cop2_regsel;
 
