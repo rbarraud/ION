@@ -330,8 +330,8 @@ typedef struct s_trace {
 } t_trace;
 
 typedef struct s_cop2_stub {
-    /* {DL[0..31], CL[0..31], DH[0..31], CH[0..31] } */
-    uint32_t r[32*4];      /**< Reg banks, data & control, low & high. */
+    /* {D[0..31], C[0..31] } */
+    uint32_t r[32*2];      /**< Reg banks, data & control. */
 } t_cop2_stub;
 
 typedef struct s_state {
@@ -469,13 +469,15 @@ int32_t signed_rem(int32_t dividend, int32_t divisor);
 
 /* COP2 interface simulation */
 void cop2(t_state *s, uint32_t opcode);
+static uint32_t cop2_get_reg(t_state *s,uint32_t rcop, uint32_t sel, bool ctrl);
+static void cop2_set_reg(t_state *s,uint32_t rcop, uint32_t sel, bool ctrl, uint32_t data);
 
 /* Hardware simulation */
 int mem_read(t_state *s, int size, unsigned int address, int log);
 void mem_write(t_state *s, int size, unsigned address, unsigned value, int log);
 void debug_reg_write(t_state *s, uint32_t address, uint32_t data);
 int debug_reg_read(t_state *s, int size, unsigned int address);
-void start_load(t_state *s, uint32_t addr, int rt, int data);
+uint32_t start_load(t_state *s, uint32_t addr, int rt, int data);
 uint32_t simulate_hw_irqs(t_state *s);
 
 
@@ -1042,10 +1044,11 @@ void mult_big_signed(int a,
 }
 
 /** Load data from memory (used to simulate load delay slots) */
-void start_load(t_state *s, uint32_t addr, int rt, int data){
+uint32_t start_load(t_state *s, uint32_t addr, int rt, int data){
     /* load delay slot not simulated */
     log_read(s, addr, data, 1, 1);
-    s->r[rt] = data;
+    if (rt>=0 && rt<32) s->r[rt] = data;
+    return data;
 }
 
 void process_traps(t_state *s, uint32_t epc, uint32_t rSave, uint32_t rt){
@@ -1528,7 +1531,9 @@ void cycle(t_state *s, int show_mode){
                         start_load(s, ptr, rt, mem_read(s,4,ptr,1));
                         break;
 //      case 0x31:/*LWC1*/ break;
-//      case 0x32:/*LWC2*/ break;
+    case 0x32:/*LWC2*/  aux = start_load(s, ptr, -1, mem_read(s,4,ptr,1));
+                        cop2_set_reg(s, rt, 0, 0, aux);
+                        break;
 //      case 0x33:/*LWC3*/ break;
 //      case 0x35:/*LDC1*/ break;
 //      case 0x36:/*LDC2*/ break;
@@ -1536,7 +1541,9 @@ void cycle(t_state *s, int show_mode){
 //      case 0x38:/*SC*/     *(int*)ptr=r[rt]; r[rt]=1; break;
     case 0x38:/*SC*/    mem_write(s,4,ptr,r[rt],1); r[rt]=1; break;
 //      case 0x39:/*SWC1*/ break;
-//      case 0x3a:/*SWC2*/ break;
+    case 0x3a:/*SWC2*/  aux = cop2_get_reg(s, rt, 0, 0);
+                        mem_write(s,4,ptr,aux,1);
+                        break;
 //      case 0x3b:/*SWC3*/ break;
 //      case 0x3d:/*SDC1*/ break;
 //      case 0x3e:/*SDC2*/ break;
@@ -1916,39 +1923,36 @@ int main(int argc,char *argv[]){
 
 /*-- Simulated COP2 interface (for CPU testing only) -------------------------*/
 
-static uint32_t cop2_get_reg(t_state *s, uint32_t rcop, uint32_t sel, bool hi, bool ctrl){
-    if (ctrl) rcop += 64;
-    if (hi) rcop += 32;
+static uint32_t cop2_get_reg(t_state *s,
+    uint32_t rcop, uint32_t sel, bool ctrl){
+    if (ctrl) rcop += 32;
     return s->cop2.r[rcop];
 }
 
 static void cop2_set_reg(t_state *s,
-    uint32_t rcop, uint32_t sel, bool hi, bool ctrl, uint32_t data){
-    if (ctrl) rcop += 64;
-    if (hi) rcop += 32;
+    uint32_t rcop, uint32_t sel, bool ctrl, uint32_t data){
+    if (ctrl) rcop += 32;
     s->cop2.r[rcop] = data;
 }
 
 static void cop2_read( t_state *s,
-    uint32_t rcop, uint32_t sel, bool hi, bool control,
+    uint32_t rcop, uint32_t sel, bool control,
     int32_t cofun, uint32_t rcpu) {
-    uint32_t cop_data;
 
-    cop_data = cop2_get_reg(s, rcop, sel, hi, control);
-
-    s->r[rcpu] = (sel << 29) | (cop_data & 0x1fffffff);
+    s->r[rcpu] = cop2_get_reg(s, rcop, sel, control);
 
     //printf("CPU[%d] <- COP2[%d,%d] (%08x)\n", rcpu, rcop, sel, s->r[rcpu]);
 }
 
 static void cop2_write(t_state *s,
-    uint32_t rcop, uint32_t sel, bool hi, bool control,
+    uint32_t rcop, uint32_t sel, bool control,
     int32_t cofun, uint32_t rcpu) {
     uint32_t cpu_data;
 
-    cpu_data = (sel << 29) | (s->r[rcpu] & 0x1fffffff);
+    cpu_data = s->r[rcpu];
+    if (!control) cpu_data = (sel << 29) | (cpu_data & 0x1fffffff);
 
-    cop2_set_reg(s, rcop, sel, hi, control, cpu_data);
+    cop2_set_reg(s, rcop, sel, control, cpu_data);
 
     //printf("COP2[%d,%d] <- CPU[%d] (%08x)\n", rcop, sel, rcpu, cpu_data);
 }
@@ -1969,10 +1973,16 @@ void cop2(t_state *s, uint32_t opcode) {
 
     switch(function) {
     case 0:     /* MFC2 */
-        cop2_read(s, rcop, sel, 0, 0, -1, rcpu);
+        cop2_read(s, rcop, sel, 0, -1, rcpu);
+        break;
+    case 2:     /* CFC2 */
+        cop2_read(s, rcop, sel, 1, -1, rcpu);
         break;
     case 4:     /* MTC2 */
-        cop2_write(s, rcop, sel, 0, 0, -1, rcpu);
+        cop2_write(s, rcop, sel, 0, -1, rcpu);
+        break;
+    case 6:     /* CTC2 */
+        cop2_write(s, rcop, sel, 1, -1, rcpu);
         break;
     default:
         // Unimplemented COP2 opcode.
