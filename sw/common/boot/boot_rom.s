@@ -91,9 +91,10 @@ trap_return_delay_slot:
 #-------------------------------------------------------------------------------
 
 start_boot:
-    mfc0    $a0,$12
-    andi    $a0,$a0,0xfffe
-    mtc0    $a0,$12             # disable interrupts, disable cache
+    # FIXME this, and all the file indeed, is a temp hack!
+    li      $3,0x00408410       # Enter user mode...
+    mtc0    $3,$12              # ...NOW
+    nop                         # @hack7: COP0 hazard, we need a nop here.
 
     #jal     setup_cache         # Initialize the caches
     #nop
@@ -110,48 +111,18 @@ start_boot:
 
 #---- Functions ----------------------------------------------------------------
 
-# void setup_cache(void) -- invalidates all I-Cache lines (uses no RAM)
-setup_cache:
-    lui     $a1,0x0001      # Disable cache, enable I-cache line invalidation
-    mfc0    $a0,$12
-    andi    $a0,$a0,0xffff
-    or      $a1,$a0,$a1
-    mtc0    $a1,$12
-    
-    # In order to invalidate a I-Cache line we have to write its tag number to 
-    # any address while bits CP0[12].17:16=01. The write will be executed as a
-    # regular write too, as a side effect, so we need to choose a harmless 
-    # target address.
-    
-    li      $a0,XRAM_BASE
-    li      $a2,0
-    li      $a1,ICACHE_NUM_LINES-1
-    
-inv_i_cache_loop:
-    sw      $a2,0($a0)
-    blt     $a2,$a1,inv_i_cache_loop
-    addi    $a2,1
-    
-    # Now, the D-Cache is different. To invalidate a D-Cache line you just 
-    # read from it (by proper selection of a dummy target address)  while bits 
-    # CP0[12].17:16=01. The data read is undefined and should be discarded.
 
-    li      $a0,0               # Use any base address that is mapped
-    li      $a2,0
-    li      $a1,DCACHE_NUM_LINES-1
-    
-inv_d_cache_loop:
-    lw      $zero,0($a0)
-    addi    $a0,DCACHE_LINE_SIZE*4
-    blt     $a2,$a1,inv_d_cache_loop
-    addi    $a2,1    
-    
-    lui     $a1,0x0002          # Leave with cache enabled
-    mfc0    $a0,$12
-    andi    $a0,$a0,0xffff
-    or      $a1,$a0,$a1
-    jr      $ra
-    mtc0    $a1,$12
+    # icache_init:
+    # Initialize the cache with CACHE Hit Invalidate instructions.
+#icache_init:
+#    li      $9,CACHED_RAM_BOT   # Any base address will do.
+#    li      $8,DCACHE_NUM_LINES
+#icache_init_0:
+#    cache   IndexInvalidateD,0x0($9)
+#    addi    $8,$8,-1
+#    bnez    $8,cache_init_0
+#    addi    $9,$9,DCACHE_LINE_SIZE*4
+
 
     .set    reorder
     .end    reset

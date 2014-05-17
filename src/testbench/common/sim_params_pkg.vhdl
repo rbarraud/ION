@@ -1,7 +1,7 @@
 --------------------------------------------------------------------------------
 -- obj_code_pkg.vhdl -- Application object code in vhdl constant string format.
 --------------------------------------------------------------------------------
--- Built for project 'CPU tester'.
+-- Built for project 'Hello World!'.
 --------------------------------------------------------------------------------
 -- This file contains object code in the form of a VHDL byte table constant.
 -- This constant can be used to initialize FPGA memories for synthesis or
@@ -44,7 +44,7 @@ package SIM_PARAMS_PKG is
 
 -- Simulation or synthesis parameters ------------------------------------------
 
-constant SIMULATION_LENGTH : integer := 25000;
+constant SIMULATION_LENGTH : integer := 90000;
 constant LOG_TRIGGER_ADDRESS : t_word := X"bfc00000";
 
 

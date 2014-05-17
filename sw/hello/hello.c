@@ -10,7 +10,7 @@
     the provided makefiles it should generate no MIPS32 opcodes at all.
 
     IMPORTANT: 
-    We're using gcc's intrinsic printf, whuch 'knows' it'll be using puts to 
+    We're using gcc's intrinsic printf, which 'knows' it'll be using puts to 
     output the string; puts appends a mandatory '\n' at the end of the
     string, so THE LINK WILL FAIL if we try to printf a string that does not 
     end in '\n'.
@@ -20,7 +20,7 @@
 #include <stdio.h>
 
 #ifndef UART_TXD_ADDRESS
-#define UART_TXD_ADDRESS (0x20000000)
+#define UART_TXD_ADDRESS (TB_REGS_BASE + 0)
 #endif
 
 /*---- Public functions ------------------------------------------------------*/
