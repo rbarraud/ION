@@ -162,7 +162,10 @@ signal sram_cen :           std_logic;
 signal sram_drive_en :      std_logic;         
 
 signal irq :                std_logic_vector(5 downto 0);
-signal debug :              std_logic;
+signal port0_out :          std_logic_vector(15 downto 0);
+signal port0_in :           std_logic_vector(15 downto 0);
+
+
 
 -- Converts hex nibble to 7-segment
 -- Segments ordered as "GFEDCBA"; '0' is ON, '1' is OFF
@@ -225,11 +228,15 @@ begin
         
         IRQ_I               => irq,
         
-        DEBUG_O             => debug
+        GPIO_0_OUT_O        => port0_out,
+        GPIO_0_INP_I        => port0_in
     );
 
     -- FIXME HW interrupts not connected.
     irq <= (others => '0');
+    
+    -- FIXME GPIO ports looped back as in the simulation TBs.
+    port0_in <= port0_out;
     
     -- Make sure we don't attempt to infer more RAM than the DE-1 chip has.
     -- We'll define arbitrary bounds for the code and data TCMs; remember that
@@ -254,7 +261,7 @@ begin
 reg_gleds <= p1_in(0) & "0000" & p0_out(2 downto 0);
 
 -- Red leds (light with '1') -- some CPU control signals
-red_leds(0) <= debug;
+red_leds(0) <= '0';
 red_leds(1) <= '0';
 red_leds(2) <= '0';
 red_leds(3) <= '0';
@@ -396,7 +403,7 @@ green_leds <= reg_gleds;
 --##############################################################################
 
 -- Show contents of debug register in hex display
-display_data <= (others => '0');
+display_data <= port0_out;
     
 
 -- 7-segment encoders; the dev board displays are not multiplexed or encoded
