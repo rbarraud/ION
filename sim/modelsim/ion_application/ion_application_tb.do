@@ -19,8 +19,8 @@ vcom -reportprogress 300 -work work ../../../src/rtl/cpu/ion_core.vhdl
 # Compile the package that contains the object code & other config constants.
 vcom -reportprogress 300 -work work ../../../src/rtl/obj/obj_code_pkg.vhdl
 # Compile the application specific stuff.
-vcom -reportprogress 300 -work work ../../../src/rtl/interfaces/ion_sram_interface.vhdl
-vcom -reportprogress 300 -work work ../../../src/rtl/interfaces/ion_gpio_interface.vhdl
+vcom -reportprogress 300 -work work ../../../src/application/interfaces/ion_sram_interface.vhdl
+vcom -reportprogress 300 -work work ../../../src/application/interfaces/ion_gpio_interface.vhdl
 vcom -reportprogress 300 -work work ../../../src/application/ion_cop2_stub.vhdl
 vcom -reportprogress 300 -work work ../../../src/application/ion_application.vhdl
 
