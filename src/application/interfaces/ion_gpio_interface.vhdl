@@ -107,7 +107,7 @@ begin
        if CLK_I'event and CLK_I='1' then
             if RESET_I='1' then
                 GPIO_0_O <= (others => '0');
-            elsif WB_MOSI_I.cyc = '1' and WB_MOSI_I.we = '1' and EN_I='1' then
+            elsif WB_MOSI_I.stb = '1' and WB_MOSI_I.we = '1' and EN_I='1' then
                 GPIO_0_O <= WB_MOSI_I.dat(PORT_WIDTH-1 downto 0);
             end if;
         end if;
