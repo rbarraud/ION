@@ -116,6 +116,28 @@ signal io_mux_ctrl :        std_logic_vector(1 downto 0);
 signal io_mux_ctrl_reg :    std_logic_vector(1 downto 0);
 signal io_ce :              std_logic_vector(1 downto 0);
 
+
+---- Address map constants & functions -----------------------------------------
+
+-- GPIO block -- reserve 16 words.
+constant GPIO_BASE : t_word :=          X"ffff0020";
+constant GPIO_ASIZE : integer :=        26; 
+
+-- NOTE: all the functions defined in this entity are "constant functions" that
+-- can be used in synthesizable rtl as long as their parameters are constants.
+
+-- Return '1' if high 's' of address 'a' match those of address 'b'.
+function adecode(a : t_word; b : t_word; s : integer) return std_logic is
+begin
+    if a(31 downto s+1) = b(31 downto s+1) then
+        return '1';
+    else
+        return '0';
+    end if;
+end function adecode;
+
+
+
 begin
 
     -- Core instance -----------------------------------------------------------
@@ -209,11 +231,9 @@ begin
     
     -- I/O devices -------------------------------------------------------------
     
-    -- Address decoding ----
-    
     -- Decode the index of the IO slave being addressed.
     io_mux_ctrl <=
-        "01" when data_uc_wb_mosi.adr(31 downto 4) = X"ffff002" else
+        "01" when adecode(data_uc_wb_mosi.adr, GPIO_BASE, GPIO_ASIZE)='1' else
         "00";
 
     -- Convert slave index to one-hot enable signal vector.
