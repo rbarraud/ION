@@ -19,9 +19,6 @@
 
 #include <stdio.h>
 
-#ifndef UART_TXD_ADDRESS
-#define UART_TXD_ADDRESS (TB_REGS_BASE + 0)
-#endif
 
 /*---- Public functions ------------------------------------------------------*/
 
@@ -34,24 +31,3 @@ int main()
 }
 
 /*---- Local functions -------------------------------------------------------*/
-
-/**
-    Standard C puts stub. 
-    Writes to TB-supplied UART port with no flow control.
-    @arg str Zero-terminated string to be printed to stdout.
-    @retval > 0 on success.
-    @retval EOF on error.    
-*/
-int puts (const char * str) {
-    int i = 0;
-    volatile char *UART = (volatile char *)UART_TXD_ADDRESS;
-    
-    while(str[i]!='\0'){
-        *(UART) = str[i];
-        i++;
-    }
-    // puts has to append an extra CR. 
-    *(UART) = '\n';
-    // Return success code.
-    return 1;
-}
