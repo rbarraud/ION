@@ -266,6 +266,12 @@ void slite_sleep(unsigned int value){
 
 /*---- Hardware system parameters --------------------------------------------*/
 
+/*  These are actual HW features of the application block which we simulate here
+    for simplicity's sake, so they can be testes in SW test benches.
+    The simulation of non-cpu features should be optional!
+*/
+#define IO_GPIO           (0xffff0020)
+
 
 /* Debug registers present only in this simulator and in the TB. */
 #define TB_UART_TX        (0xffff8000)
@@ -344,6 +350,7 @@ typedef struct s_state {
    uint32_t instruction_ctr;    /**< # of instructions executed since reset */
    uint32_t inst_ctr_prescaler; /**< Prescaler counter for instruction ctr. */
    uint32_t debug_regs[16];     /**< Rd/wr debug registers */
+   uint16_t gpio_regs[1];       /**< Rd/wr GPIO registers */
 
    int r[32];
    int opcode;
@@ -480,6 +487,10 @@ int debug_reg_read(t_state *s, int size, unsigned int address);
 uint32_t start_load(t_state *s, uint32_t addr, int rt, int data);
 uint32_t simulate_hw_irqs(t_state *s);
 
+/* Application core features simulated here for simplicity. */
+void gpio_reg_write(t_state *s, uint32_t address, uint32_t data);
+uint16_t gpio_reg_read(t_state *s, int size, unsigned int address);
+
 
 /*---- Local functions -------------------------------------------------------*/
 
@@ -574,6 +585,13 @@ int mem_read(t_state *s, int size, unsigned int address, int log){
     if((address&0xfffffff0)==(TB_DEBUG&0xfffffff0)){
         return debug_reg_read(s, size, address);
     }
+
+    /* Handle access to GPIO register block */
+    /* FIXME this is actually an APPLICATION feature, should be optional! */
+    if((address&0xfffffff0)==(IO_GPIO&0xfffffff0)){
+        return gpio_reg_read(s, size, address);
+    }
+
 
     s->irqStatus |= IRQ_UART_WRITE_AVAILABLE;
     switch(address){
@@ -682,11 +700,23 @@ int mem_read(t_state *s, int size, unsigned int address, int log){
     return(value);
 }
 
+/** Read from GPIO register (HW register simplified for TB). */
+uint16_t gpio_reg_read(t_state *s, int size, unsigned int address){
+    /* A single 16 bit register available */
+    return (s->gpio_regs[0] + 0x02901) & 0xffff;
+}
+
+/** Write to debug register */
+void gpio_reg_write(t_state *s, uint32_t address, uint32_t data){
+    //printf("GPIO REG[%1d]=%08x\n", (address >> 2)&0x03, data);
+    s->gpio_regs[0] = data & 0xffff;
+}
+
+/** Read from debug register (TB only feature). */
 int debug_reg_read(t_state *s, int size, unsigned int address){
     /* Four 32 bit registers available */
     return s->debug_regs[(address >> 2)&0x03];
 }
-
 
 /** Write to debug register */
 void debug_reg_write(t_state *s, uint32_t address, uint32_t data){
@@ -745,9 +775,16 @@ void mem_write(t_state *s, int size, unsigned address, unsigned value, int log){
                 s->op_addr, address, mask, dvalue);
     }
 
-    /* Print anything that's written to a debug register, otherwise ignore it */
+    /* Handle accesses to debug registers */
     if((address&0xfffffff0)==(TB_DEBUG&0xfffffff0)){
         debug_reg_write(s, address, value);
+        return;
+    }
+
+    /* Handle accesses to GPIO registers */
+    /* FIXME Application feature, not CPU's, should be optional! */
+    if((address&0xfffffff0)==(IO_GPIO&0xfffffff0)){
+        gpio_reg_write(s, address, value);
         return;
     }
 

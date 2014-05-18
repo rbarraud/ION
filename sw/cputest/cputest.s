@@ -93,8 +93,21 @@
     # Start of C-TCM as mapped on the DATA bus.
     .set CODE_TCM_BASE,     0xbfc00000
     
+    # I/O register block on uncached area. The base address of this block is
+    # meant to be overriden from the makefile.
+    .ifndef IO_REGS_BASE
+    .set IO_REGS_BASE,      0xffff0000
+    .endif
+    
+    # GPIO[i] registers. 
+    # Reading (IO_GPIO + i*4) gets you the value of GPIO_[i]_INP.
+    # Writing to (IO_GPIO + i*4) sets the value of GPIO_[i]_OUT.
+    # You can't read an output port.
+    .set IO_GPIO,           IO_REGS_BASE + 0x0020
+    
     # TB registers. These are only available in the SW simulator and in the 
     # RTL simulation test bench, not on real hardware.
+    # FIXME split the parts that are only in tb_core!
 
     # Let the makefile override the location of the TB register block.
     .ifndef TB_REGS_BASE
@@ -103,11 +116,11 @@
     
     # Simulated UART TX buffer register.
     .set TB_UART_TX,        TB_REGS_BASE + 0x0000
-    # Block of 4 32-bit byte-addressable registers.
+    # Block of 4 32-bit byte-addressable registers (tb_core only!).
     .set TB_DEBUG,          TB_REGS_BASE + 0x0020
     # Register connected to HW interrupt lines.
     .set TB_HW_IRQ,         TB_REGS_BASE + 0x0010
-    # Register used to send pass/fail messages to the TB.
+    # Register used to send pass/fail messages to the TB (tb_core only!).
     .set TB_RESULT,         TB_REGS_BASE + 0x0018
     
     #-- Utility macros ---------------------------------------------------------
@@ -200,12 +213,11 @@
     .endm
     
     # Write $28 to TB "exit" register, which will terminate the simulation.
-    # To be used at the end pfothe program or as a breakpoint of sorts.
+    # To be used at the end of the program or as a breakpoint of sorts.
+    # This will only actually work on simulation but it is harmless on real HW.
     .macro EXIT
-    .ifle   TARGET_HARDWARE
     li      $9,TB_RESULT
     sw      $30,0($9)
-    .endif
     .endm
    
    
@@ -363,26 +375,49 @@ hardware_interrupts_0:
     
     #---------------------------------------------------------------------------
     .ifle   TARGET_HARDWARE
-    .ifgt   1
-    # Test access to debug registers over uncached data WB bridge.
+    # Test access to DEBUG registers over uncached data WB bridge.
+    # These regs are only implemented in tb_core and swsim. 
 debug_regs:
     INIT_TEST msg_debug_regs
-    la      $9,TB_DEBUG          # Base of debug register block.
+    INIT_REGS I
+    la      $9,TB_DEBUG         # Base of debug register block.
     
-    # Debug regs reset to zero; let's see if we can read them.
-    #addi    $2,$0,-1            # Put some nonzero value in $2...
-    #lw      $2,0($9)            # ...then read a zero from a debug reg.
-    #beqz    $2,debug_regs_0     # If not zero, increment error count.
-    #CMP     $3,$2,0x0
-    li      $2,0x12345678
-    sw      $2,0x0($9)
-    nop
-    lw      $3,0x0($9)
-    CMP     $4,$3,0x12345678
+    sw      $2,0x0($9)          # Store a bunch of values in the 4 regs...
+    sw      $3,0x4($9)
+    sw      $4,0x8($9)
+    sw      $5,0xc($9)
+    lw      $10,0xc($9)         # ...and read them back with no delay slot.
+    lw      $11,0x8($9)
+    lw      $12,0x4($9)
+    lw      $13,0x0($9)
+    CMPR    $13,$2              # Make sure we got back what we put in.
+    CMPR    $12,$3
+    CMPR    $11,$4
+    CMPR    $10,$5
 debug_regs_0:       
     PRINT_RESULT
     .endif
+
+    #---------------------------------------------------------------------------
+    .ifgt   TARGET_HARDWARE
+    # Test access to GPIO registers over uncached data WB bridge.
+    # This test relies on GPIO_0_OUT being connected to GPIO_0_IN in the TB, 
+    # so that GPIO_0_INP = GPIO_0_OUT + 0x2901.
+gpio_regs:
+    INIT_TEST msg_gpio
+    ori     $2,$0,0x1234
+    ori     $3,$0,0x1234 + 0x2901   
+    la      $9,IO_GPIO          # Base of GPIO register block.
+    
+    sw      $2,0x0($9)          # Ok, let's see if the GPIO is there.
+    lw      $4,0x0($9)
+    CMPR    $3,$4
+    
+gpio_regs_0:       
+    PRINT_RESULT
     .endif
+
+
     
     #---------------------------------------------------------------------------
     # Test load interlock.
@@ -1104,7 +1139,8 @@ msg_program_fail:       .asciiz     "\nTest FAILED\n\n"
 msg_user_mode:          .asciiz     "Entering user mode........... "
 msg_dcache:             .asciiz     "Data Cache basic test........ "
 msg_icache:             .asciiz     "Code Cache basic test........ "
-msg_debug_regs:         .asciiz     "Access to debug registers.... "
+msg_debug_regs:         .asciiz     "DEBUG registers (TB only).... "
+msg_gpio:               .asciiz     "Access to GPIO registers..... "
 msg_interlock:          .asciiz     "Load interlocks.............. "
 msg_arith:              .asciiz     "Add*/Sub*.................... "
 msg_slt:                .asciiz     "Slt* opcodes................. "

@@ -87,8 +87,8 @@ entity ion_application is
 
         IRQ_I               : in std_logic_vector(5 downto 0);
         
-        -- FIXME to be removed.
-        DEBUG_O             : out std_logic
+        GPIO_0_OUT_O        : out std_logic_vector(15 downto 0);
+        GPIO_0_INP_I        : in std_logic_vector(15 downto 0)
     );
 end; --entity ion_application
 
@@ -109,6 +109,12 @@ signal data_uc_wb_miso :    t_wishbone_miso;
 signal cop2_mosi :          t_cop2_mosi;
 signal cop2_miso :          t_cop2_miso;
 
+signal gpio_miso :          t_wishbone_miso;
+signal void_miso :          t_wishbone_miso;
+
+signal io_mux_ctrl :        std_logic_vector(1 downto 0);
+signal io_mux_ctrl_reg :    std_logic_vector(1 downto 0);
+signal io_ce :              std_logic_vector(1 downto 0);
 
 begin
 
@@ -203,12 +209,59 @@ begin
     
     -- I/O devices -------------------------------------------------------------
     
-    DEBUG_O <= '0';
+    -- Address decoding ----
     
-    -- FIXME IO devices missing, WB bus hardwired to a non-blocking state.
-    data_uc_wb_miso.dat <= (others => '0');
-    data_uc_wb_miso.stall <= '0';
-    data_uc_wb_miso.ack <= '1';
+    -- Decode the index of the IO slave being addressed.
+    io_mux_ctrl <=
+        "01" when data_uc_wb_mosi.adr(31 downto 4) = X"ffff002" else
+        "00";
+
+    -- Convert slave index to one-hot enable signal vector.
+    with io_mux_ctrl select io_ce <=
+        "01" when "01",
+        "10" when "10",
+        "00" when others;
+    
+    
+    gpio_ports: entity work.ION_GPIO_INTERFACE 
+    generic map (
+        PORT_WIDTH =>       16
+    )
+    port map (
+        CLK_I               => CLK_I,
+        RESET_I             => RESET_I,
+
+        WB_MOSI_I           => data_uc_wb_mosi,
+        WB_MISO_O           => gpio_miso,
+        
+        EN_I                => io_ce(0),
+        
+        GPIO_0_O            => GPIO_0_OUT_O,
+        GPIO_0_I            => GPIO_0_INP_I
+    );
+    
+    -- IO MISO multiplexor ----
+
+    process(CLK_I)
+    begin
+        if CLK_I'event and CLK_I='1' then
+            if RESET_I='1' then
+                io_mux_ctrl_reg <= (others => '0');
+            elsif data_uc_wb_mosi.cyc='1' then
+                io_mux_ctrl_reg <= io_mux_ctrl;
+            end if;
+        end if;
+    end process;        
+    
+    with io_mux_ctrl_reg select data_uc_wb_miso <=
+        gpio_miso       when "01",
+        void_miso       when others;
+    
+    -- MISO to be fed to the core by the UC_WB MISO multiplexor when 
+    -- no valid area is addressed.
+    void_miso.stall <= '0';
+    void_miso.ack <= '1';
+    void_miso.dat <= (others => '0');        
 
 
 end architecture rtl;

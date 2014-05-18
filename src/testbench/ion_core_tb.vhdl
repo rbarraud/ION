@@ -4,7 +4,11 @@
 -- Simulates the full ION core, which includes TCM and caches.
 -- 
 --------------------------------------------------------------------------------
--- FIXME no support for simulating external IRQs.
+-- KNOWN BUGS AND MISSING THINGS:
+--
+-- WB bridge not simulated with wait states.
+-- WB bridge not simulated with 8 or 16 bit accesses, only 32.
+--
 --------------------------------------------------------------------------------
 -- SIMULATED IO DEVICES:
 --
@@ -12,14 +16,18 @@
 --
 -- Address   Name         Size    Access  Purpose
 ---------------------------------------------------------------------------
--- ffff0000: DbgTxD     : 8     : b     : Debug UART TX buffer (W/o).
--- ffff0200: DbgRW0     : 32    : b/w   : Debug register 0 (R/W). 
--- ffff0204: DbgRW1     : 32    : b/w   : Debug register 1 (R/W).
+-- ffff8000: DbgTxD     : 8     : b     : Debug UART TX buffer (W/o).
+-- ffff8020: DbgRW0     : 32    : w     : Debug register 0 (R/W). 
+-- ffff8024: DbgRW1     : 32    : w     : Debug register 1 (R/W).
+-- ffff8018: ExitReg    : 32    : w     : Exit register (W/o).
 --
 -- (b support byte access, w support word access).
 -- 
 -- The fake UART is implemented in package ion_tb_pkg, not as a proper WB 
 -- register but directly on the CPU buses.
+-- The exit register is another ion_tb_pkg fake-register used to terminate the 
+-- execution of the TB; upon writing on it, the TB will stop and a success/fail 
+-- message will be output (success is 0, failure anything else).
 -- All other debug registers are simulated as WB registers so they can be used
 -- to verify the operation of the WB bridge.
 --
@@ -34,7 +42,7 @@
 --------------------------------------------------------------------------------
 -- Console logging:
 --
--- Console output (at address 0xffff0000) is logged to text file
+-- Console output (at address 0xffff8000) is logged to text file
 -- "hw_sim_console_log.txt".
 --
 -- IMPORTANT: The code that echoes UART TX data to the simulation console does
@@ -125,13 +133,14 @@ signal code_address :       t_word;
 -- Uncached data WB bridge.
 
 -- Wait states simulated by uncached WB port (elements used in succession).
+-- FIXME wait state simulation disabled!
 constant UNCACHED_WS : t_natural_table (0 to 3) := (0,0,0,0); --(4,1,3,2);
 
 signal uwb_wait_ctr :       natural;
 signal uwb_cycle_count :    natural := 0;
 signal uwb_address :        t_word;
 
-shared variable debug_regs: t_ram_table(0 to 15);
+shared variable debug_regs: t_ram_table(0 to 3);
 
 
 --------------------------------------------------------------------------------
@@ -361,8 +370,12 @@ begin
 
     -- Uncached WB port --------------------------------------------------------
     
+    -- We only have the debug register on this WB bus so we will not bother 
+    -- decoding the address and multiplexing the MISOs, etc.
+    
     uncached_wb_port:
     process(clk)
+    variable debug_port : natural;
     begin
         if clk'event and clk='1' then
             if reset = '1' then
@@ -371,6 +384,7 @@ begin
                 data_uc_wb_miso.dat <= (others => '1');
                 uwb_address <= (others => '0');
             elsif data_uc_wb_mosi.stb = '1' then
+                debug_port := conv_integer(data_uc_wb_mosi.adr(3 downto 2));
                 if uwb_wait_ctr > 0 then 
                     -- Access in progress, decrement wait counter...
                     uwb_wait_ctr <= data_wait_ctr - 1;
@@ -385,12 +399,10 @@ begin
                     -- Termination is different for read and write accesses:
                     if data_uc_wb_mosi.we = '1' then 
                         -- Write access: do the simulated write.
-                        -- FIXME simulate write to debug reg
-                        debug_regs(0) := data_uc_wb_mosi.dat;
+                        debug_regs(debug_port) := data_uc_wb_mosi.dat;
                     else
                         -- Read access: simulate read & WB slave multiplexor.
-                        -- FIXME simulate read from debug reg
-                        data_uc_wb_miso.dat <= debug_regs(0);
+                        data_uc_wb_miso.dat <= debug_regs(debug_port);
                     end if;
                 end if;
             else
@@ -430,7 +442,8 @@ begin
     
     -- HW interrupt simulation -------------------------------------------------
        
-    -- FIXME work in progress
+    -- All we do here is "feed back" into the hardware the value of a fake 
+    -- register implemented in ion_tb_pkg.
     interrupt_registers:
     process(clk)
     begin
@@ -443,7 +456,9 @@ begin
         end if;
     end process interrupt_registers;    
         
+        
     -- Logging process: launch logger function ---------------------------------
+    
     log_execution:
     process
     begin

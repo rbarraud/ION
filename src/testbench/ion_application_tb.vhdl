@@ -72,6 +72,14 @@ constant T : time               := (1.0e9/real(CLOCK_RATE)) * 1 ns;
 signal clk :                std_logic := '0';
 signal reset :              std_logic := '1';
 
+
+--------------------------------------------------------------------------------
+-- Simulated GPIO.
+
+signal port0_out :          std_logic_vector(15 downto 0);
+signal port0_in :           std_logic_vector(15 downto 0);
+
+
 --------------------------------------------------------------------------------
 -- Simulated external 16-bit SRAM.
 
@@ -146,7 +154,10 @@ begin
         SRAM_CEn_O          => sram_cen,
         SRAM_DRIVE_EN_O     => sram_drive_en,
         
-        IRQ_I               => irq
+        IRQ_I               => irq,
+        
+        GPIO_0_OUT_O        => port0_out,
+        GPIO_0_INP_I        => port0_in
     );
 
     
@@ -228,7 +239,14 @@ begin
             end if;
         end if;
     end process interrupt_registers;
-        
+    
+
+    -- GPIO simulation ---------------------------------------------------------
+    
+    -- For the time being just loop back the ports.
+    port0_in <= port0_out + X"2901";
+    
+    
     -- Logging process: launch logger function ---------------------------------
     log_execution:
     process
