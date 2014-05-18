@@ -213,7 +213,7 @@ begin
         CODE_CACHE_LINES =>     0
     )
     port map (
-        CLK_I               => clk_50MHz,
+        CLK_I               => clk_27MHz, -- clk_50MHz,
         RESET_I             => reset, 
 
         SRAM_ADDR_O         => mpu_sram_addr,
