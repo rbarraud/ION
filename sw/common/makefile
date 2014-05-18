@@ -59,8 +59,7 @@ LIB_PATH=.
 # This will prevent usage of unimplemented opcodes but will insert nops after
 # load instructions, which Ion does not need.
 # (See comment above about -G0 flag)
-#CFLAGS = -O2 -Wall -c -s -fno-builtin -mips1 -G0 -nodefaultlibs -nostdlib
-CFLAGS = -O2 -Wall -c -s -mips1 -G0 $(CC_HWSYMS)
+CFLAGS = -O2 -Wall -c -s -msoft-float -mips1 -G0 $(CC_HWSYMS) -I$(SW_ROOT)/common/hal
 # LFLAGS: Position main sections on memory, etc.
 LFLAGS = -T$(LINK_SCRIPT) $(LD_HWSYMS) -eentry -I elf32-big -L $(LIB_PATH)
 # AFLAGS: 
@@ -75,6 +74,7 @@ ADDR_SYMS = -defsym TB_REGS_BOT=$(TB_REGS_START),TB_REGS_BOT=$(TB_REGS_START)
 
 CRTDIR = $(SW_ROOT)/common/crt
 BOOTDIR = $(SW_ROOT)/common/boot
+HALDIR = $(SW_ROOT)/common/hal
 
 #-- crt0
 SRCCRT := $(wildcard $(CRTDIR)/*.s)
@@ -82,6 +82,10 @@ OBJCRT := $(SRCCRT:$(CRTDIR)/%.s=%.o)
 #-- bootstrap code
 SRCBOOT := $(wildcard $(BOOTDIR)/*.s)  
 OBJBOOT := $(SRCBOOT:$(BOOTDIR)/%.s=%.o)
+#-- HAL code
+SRCHAL := $(wildcard $(HALDIR)/*.c)  
+OBJHAL := $(SRCHAL:$(HALDIR)/%.c=%.o)
+
 
 %.o: $(CRTDIR)/%.s
 	$(AS) $(AFLAGS) -o $@ $^
@@ -89,6 +93,10 @@ OBJBOOT := $(SRCBOOT:$(BOOTDIR)/%.s=%.o)
 %.o: $(BOOTDIR)/%.s
 	$(AS) $(AFLAGS) -o $@ $^
 
+%.o: $(HALDIR)/%.c
+	$(CC) $(CFLAGS) -o $@ $^
+
+    
 #-- Application build config ---------------------------------------------------
 
 SRCDIR = .
@@ -96,7 +104,7 @@ SRCS := $(wildcard $(SRCDIR)/*.c)
 OBJAPP := $(SRCS:$(SRCDIR)/%.c=%.o) 
 
 #-- IMPORTANT: Keep this order or the linked executable will crash.
-OBJS = $(OBJBOOT) $(OBJCRT) $(OBJAPP) 
+OBJS = $(OBJBOOT) $(OBJCRT) $(OBJHAL) $(OBJAPP) 
 
 
 ### Targets that build the synthesizable vhdl; meant for direct invocation #####
