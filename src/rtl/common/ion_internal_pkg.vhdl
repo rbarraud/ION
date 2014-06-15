@@ -99,7 +99,7 @@ end record t_cop0_miso;
 ---- System configuration constants --------------------------------------------
 
 -- True to use standard-ish MIPS-1 memory map, false to use Plasma's
--- (see implementation of function decode_addr below).
+-- (see implementation of function decode_addr_old below).
 constant USE_MIPS1_ADDR_MAP : boolean := true;
 
 -- Reset vector address.
@@ -164,38 +164,6 @@ function objcode_to_btable(oC : t_obj_code; size : integer;
                            slice : integer := -1) return t_byte_table;
 
 
-
----- Address decoding ----------------------------------------------------------
-
--- Note: it is the cache module that does all internal address decoding --------
-
--- This is the slice of the address that will be used to decode memory areas
-subtype t_addr_decode is std_logic_vector(31 downto 24);
-
--- Part of the memory area attribute: the type of memory determines how the
--- cache module handles each block
-subtype t_memory_type is std_logic_vector(7 downto 5);
--- These are all the types the cache knows about
-constant MT_BRAM : t_memory_type            := "000";
-constant MT_IO_SYNC : t_memory_type         := "001";
-constant MT_SRAM_16B : t_memory_type        := "010";
-constant MT_SRAM_8B : t_memory_type         := "011";
-constant MT_DDR_16B : t_memory_type         := "100";
-constant MT_UNMAPPED : t_memory_type        := "111";
-
--- Wait state counter -- we're supporting static memory from 10 to >100 ns
-subtype t_wait_state_count is std_logic_vector(2 downto 0);
-
--- 'Attributes' of some memory block -- used when decoding memory addresses
-type t_range_attr is record
-    mem_type :          t_memory_type;
-    writeable :         std_logic;
-    cacheable :         std_logic;    
-    wait_states :       t_wait_state_count;
-end record t_range_attr;
-
-
-
 ---- More basic types and constants --------------------------------------------
 
 subtype t_addr is std_logic_vector(31 downto 0);
@@ -248,11 +216,6 @@ constant MULT_SIGNED_DIVIDE : t_mult_function := "1110"; -- 27
 -- CAN BE USED IN SYNTHESIZABLE CODE as long as called with constant arguments
 function log2(A : natural) return natural;
 
--- Decodes a memory address, gives the type of memory
--- CAN BE USED IN SYNTHESIZABLE CODE, argument does not need to be constant
-function decode_addr(addr : t_addr_decode) return t_range_attr;
-
-
 end package;
 
 package body ION_INTERNAL_PKG is
@@ -267,45 +230,6 @@ begin
     return(30);
 end function log2;
 
--- Address decoding for Plasma-like system
-function decode_addr_plasma(addr : t_addr_decode) return t_range_attr is
-begin
-
-    case addr(31 downto 27) is 
-    when "00000"    => return (MT_BRAM     ,'0','0',"000"); -- useg
-    when "10000"    => return (MT_SRAM_16B ,'1','1',"000"); -- kseg0
-    when "00100"    => return (MT_IO_SYNC  ,'1','0',"000"); -- kseg1 i/o
-    when others     => return (MT_UNMAPPED ,'0','0',"000"); -- stray
-    end case;
-
-end function decode_addr_plasma;
-
--- Address decoding for MIPS-I-like system as implemented in target hardware
-function decode_addr_mips1(addr : t_addr_decode) return t_range_attr is
-begin
-
-    case addr(31 downto 27) is 
-    when "00000"    => return (MT_SRAM_16B ,'1','1',"010"); -- useg
-    when "10000"    => return (MT_SRAM_16B ,'1','1',"010"); -- kseg0
-    --when "10100"    => return (MT_IO_SYNC  ,'1','0',"000"); -- kseg1 i/o
-    when "00100"    => return (MT_IO_SYNC  ,'1','0',"000"); -- kseg1 i/o
-    when "10110"    => return (MT_SRAM_8B  ,'0','0',"111"); -- kseg1 flash
-    when "10111"    => return (MT_BRAM     ,'0','0',"000"); -- kseg1 boot rom
-    when others     => return (MT_UNMAPPED ,'0','0',"000"); -- stray
-    end case;
-
-end function decode_addr_mips1;
-
-
-function decode_addr(addr : t_addr_decode) return t_range_attr is
-begin
-    if USE_MIPS1_ADDR_MAP then
-        return decode_addr_mips1(addr);
-    else
-        return decode_addr_plasma(addr);
-    end if;
-
-end function decode_addr;
 
 function zero_objcode(size : integer) return t_obj_code is
 variable oc : t_obj_code(0 to size-1) := (others => X"00");
