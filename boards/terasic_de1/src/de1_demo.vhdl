@@ -7,8 +7,6 @@
 --------------------------------------------------------------------------------
 -- NOTE: See note at bottom of file about optional use of PLL.
 --##############################################################################
--- Copyright (C) 2014 Jose A. Ruiz
---                                                              
 -- This source file may be used and distributed without         
 -- restriction provided that this copyright statement is not    
 -- removed from the file and that any derivative work contains  
