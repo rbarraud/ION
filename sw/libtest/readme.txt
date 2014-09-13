@@ -1,7 +1,5 @@
-This is your typical 'Hello World!'. It will print a welcome message to the 
-serial port (19200/8/N/1).
+This is a typical 'Hello World!' which is being used to test issues in the integration with the barebones clib replacement we're developing for this project.
 
-See makefile for targets, etc.
+This file should not have been committed to the repo; the library isn't there, anyway. Oh, well...
 
-Can be simulated (both Modelsim and SW simulator) and synthesized to a hardware
-demo (see makefiles).
+Please ignore this code.
