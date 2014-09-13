@@ -756,24 +756,28 @@ muldiv:
    
     # Test DIV or DIVU with some arguments. 
     # Will use the same register set in all tests. Oh well...
-    .macro TEST_DIV op, num, den
+    .macro TEST_DIV op, num, den, remainder, quotient
     li      $4,\num             # Load regs with test arguments...
     li      $5,\den
     # (By using $0 as first op we tell as not to expand the div opcode.)
     \op     $0,$4,$5            # ...do the div operation...
     mflo    $8
     mfhi    $9
-    CMP     $7,$8, \num / \den  # ...and check result.
-    CMPU    $6,$9, \num % \den  # Note we expect the remainder to be > 0.
+    CMP     $7,$8, \quotient    # ...and check result.
+    CMP     $6,$9, \remainder
     .endm
+
    
-    TEST_DIV divu, I4, I5
-    TEST_DIV divu, I5, I4
-    TEST_DIV divu, I2, I3
-    TEST_DIV div,  I2, I5
-    TEST_DIV div,  10, -5 
-    TEST_DIV div,  -5, 10
-    TEST_DIV div,  -5, -10
+    # Remember, our divider follows C99 rules:
+    # 1.- The quotient is negative iif dividend and divisor have different sign.
+    # 2.- The remainder has the same sign as the dividend.
+
+    TEST_DIV divu,  0x00000100, 0x00000020, 0x00000000, 0x00000008
+    TEST_DIV divu,  0x00000101, 0x00000020, 0x00000001, 0x00000008
+    TEST_DIV div,   0x00000101, 0x00000020, 0x00000001, 0x00000008
+    TEST_DIV div,   0x00000100, 0xfffffff9, 0x00000004, 0xffffffdc
+    TEST_DIV div,   0xffffff00, 0x00000007, 0xfffffffc, 0xffffffdc
+    TEST_DIV div,   0xffffff01, 0x00000007, 0xfffffffd, 0xffffffdc
 
     # Test MULT or MULTU with some arguments. 
     # Will use the same register set in all tests.
@@ -797,8 +801,43 @@ muldiv:
     TEST_MUL mult,  0x00000020, 0x80000010, 0xfffffff0, 0x00000200
     TEST_MUL mult,  0x80000010, 0x80000020, 0x3fffffe8, 0x00000200
     
+    # FIXME MUL (3-op version) untested!
+    
 muldiv_end:
     PRINT_RESULT
+    
+
+    .ifgt   0  # MADD/U unimplemented yet
+    #---------------------------------------------------------------------------
+    # Mac instructions: madd, maddu.
+macs:
+    INIT_TEST msg_macs
+
+    # Test MADD or MADDU with some arguments. 
+    # Will use the same register set in all tests.
+    # Note the test does a madd/maddu/msub/msubu upon *existing* HI:LO value.
+    .macro TEST_MADD op, a, b, hi, lo
+    li      $4,\a               # Load regs with test arguments...
+    li      $5,\b
+    \op     $4,$5               # ...do the mult operation...
+    mflo    $8
+    mfhi    $9
+    CMP     $7,$8, \lo          # ...and check result.
+    CMP     $7,$9, \hi
+    .endm
+
+    # Initialize accumulator...
+    mtlo    $0
+    mthi    $0
+    # ...and perform a few MACs on it.
+    TEST_MADD maddu, 0x00000010, 0x00000020, 0x00000000, 0x00000200
+    #TEST_MADD maddu, 0x00000010, 0x00000020, 0x00000000, 0x00000400
+    #TEST_MADD maddu, 0x00000010, 0x80000020, 0x00000008, 0x00000600
+    
+macs_end:
+    PRINT_RESULT    
+    .endif
+    
     
     #---------------------------------------------------------------------------
     # Branch instructions.
@@ -1148,6 +1187,7 @@ msg_branch:             .asciiz     "Branch opcodes............... "
 msg_jump:               .asciiz     "Jump opcodes................. "
 msg_logic:              .asciiz     "Logic opcodes................ "
 msg_muldiv:             .asciiz     "Mul*/Div* opcodes............ "
+msg_macs:               .asciiz     "Madd*/Msub* opcodes.......... "
 msg_load_store:         .asciiz     "Load/Store opcodes........... "
 msg_shift:              .asciiz     "Shift opcodes................ "
 msg_break_syscall:      .asciiz     "Break/Syscall opcodes........ "
