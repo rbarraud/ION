@@ -79,7 +79,6 @@ type t_log_info is record
     
     reg_hi, reg_lo :        t_word;
     prev_hi, prev_lo :      t_word;
-    negate_reg_lo :         std_logic;
     mdiv_count_reg :        std_logic_vector(5 downto 0);
     prev_count_reg :        std_logic_vector(5 downto 0);
     
@@ -248,22 +247,9 @@ begin
                 temp2 := info.pc_m(k-2);
             end if;
         
-            -- we're observing the value of reg_lo, but the mult core
-            -- will output the negated value in some cases. We
-            -- have to mimic that behavior.
-            if info.negate_reg_lo='1' then
-                -- negate reg_lo before displaying
-                temp := not info.reg_lo;
-                temp := temp + 1;
-                if info.log_triggered then
-                    -- FIXME removed temporarily until fixed (@note1)
-                    --print(l_file, "("& hstr(temp2)& ") [LO]="& hstr(temp));
-                end if;
-            else
-                if info.log_triggered then
-                    -- FIXME removed temporarily until fixed (@note1)
-                    --print(l_file, "("& hstr(temp2)& ") [LO]="& hstr(info.reg_lo));
-                end if;
+            if info.log_triggered then
+                -- FIXME removed temporarily until fixed (@note1)
+                --print(l_file, "("& hstr(temp2)& ") [LO]="& hstr(info.reg_lo));
             end if;
         end if;
         
@@ -409,6 +395,7 @@ begin
         --info.lwc2_pending <= (info.p1_cop2_load='1');
     end if;
     
+    -- FIXME should use state register.
     if info.mdiv_count_reg="100000" then
         info.mdiv_address <= info.pc_m(1);
         info.mdiv_pending <= true;
@@ -506,10 +493,9 @@ begin
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/p1_rbank", signal_name&".rbank", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/code_mosi_o.addr", signal_name&".present_code_rd_addr", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/stall_pipeline", signal_name&".stall_pipeline", 0);
-    init_signal_spy("/"&base_entity&"/"&cpu_name&"/mult_div/upper_reg", signal_name&".reg_hi", 0);
-    init_signal_spy("/"&base_entity&"/"&cpu_name&"/mult_div/lower_reg", signal_name&".reg_lo", 0);
-    init_signal_spy("/"&base_entity&"/"&cpu_name&"/mult_div/negate_reg", signal_name&".negate_reg_lo", 0);
-    init_signal_spy("/"&base_entity&"/"&cpu_name&"/mult_div/count_reg", signal_name&".mdiv_count_reg", 0);
+    --init_signal_spy("/"&base_entity&"/"&cpu_name&"/mult_div/hireg", signal_name&".reg_hi", 0);
+    --init_signal_spy("/"&base_entity&"/"&cpu_name&"/mult_div/loreg", signal_name&".reg_lo", 0);
+    --init_signal_spy("/"&base_entity&"/"&cpu_name&"/mult_div/count_reg", signal_name&".mdiv_count_reg", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/cop0/epc_reg", signal_name&".epc_reg", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/cop0/cp0_status", signal_name&".cp0_status", 0);
     init_signal_spy("/"&base_entity&"/"&cpu_name&"/cop0/sr_reg.bev", signal_name&".sr_bev_reg", 0);
