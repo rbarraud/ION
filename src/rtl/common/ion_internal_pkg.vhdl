@@ -203,6 +203,8 @@ end record t_debug_info;
 -- 32-cycle mul/div module control. Bits 4-3 & 1-0 of IR.
 subtype t_mult_function is std_logic_vector(3 downto 0);
 constant MULT_NOTHING       : t_mult_function := "0000";
+constant MULT_MADDU         : t_mult_function := "0101"; -- 5
+constant MULT_MADD          : t_mult_function := "0100"; -- 4
 constant MULT_READ_LO       : t_mult_function := "1010"; -- 18
 constant MULT_READ_HI       : t_mult_function := "1000"; -- 16
 constant MULT_WRITE_LO      : t_mult_function := "1011"; -- 19

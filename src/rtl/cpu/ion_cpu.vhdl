@@ -157,6 +157,7 @@ signal p1_ir_op :           std_logic_vector(31 downto 26);
 signal p1_ir_fmt :          std_logic_vector(25 downto 21);
 signal p1_ir_fn :           std_logic_vector(5 downto 0);
 signal p1_op_special :      std_logic;
+signal p1_op_special2 :     std_logic;
 signal p1_exception :       std_logic;
 signal p1_do_reg_jump :     std_logic;
 signal p1_do_zero_ext_imm : std_logic;
@@ -189,7 +190,9 @@ signal p1_data_addr :       t_addr;
 signal p1_data_offset :     t_addr;
 
 signal p1_muldiv_result :   t_word;
-signal p1_muldiv_func :     t_mult_function; 
+signal p1_muldiv_func :     t_mult_function;
+signal p1_special_ir_fn :   std_logic_vector(7 downto 0);
+signal p1_muldiv_dontdisturb : std_logic;
 signal p1_muldiv_running :  std_logic;
 signal p1_muldiv_started :  std_logic;
 signal p1_muldiv_stall :    std_logic;
@@ -437,23 +440,34 @@ alu_inst : entity work.ION_ALU
 
 -- Compute the mdiv block function word. If p1_muldiv_func has any value other
 -- than MULT_NOTHING a new mdiv operation will start, truncating whatever other
--- operation that may have been in course.
+-- operation that may have been in course; which we don't want.
 -- So we encode here the function to be performed and make sure the value stays
 -- there for only one cycle (the first ALU cycle of the mul/div instruction).
+-- (this is what p1_muldiv_dontdisturb is meant to accomplish.)
+-- This will eventually be refactored along with the muldiv module.
 
--- This will be '1' for all mul/div operations other than NOP...
-p1_muldiv_func(3) <= '1' when p1_op_special='1' and 
-                              p1_ir_fn(5 downto 4)="01" and
-                              -- ...but only if the mdiv is not already running
-                              p2_muldiv_started = '0' and
-                              p1_muldiv_running ='0'
-                      else '0';
+p1_muldiv_dontdisturb <= (p2_muldiv_started or p1_muldiv_running);
 
--- When bit(3) is zero, the rest are zeroed too. Otherwise, they come from IR
-p1_muldiv_func(2 downto 0) <= 
-    p1_ir_fn(3) & p1_ir_fn(1 downto 0) when p1_muldiv_func(3)='1'
-    else "000";
+p1_special_ir_fn(7 downto 6) <= 
+    "10"    when p1_op_special='1' and p1_muldiv_dontdisturb='0' else
+    "11"    when p1_op_special2='1' and p1_muldiv_dontdisturb='0' else
+    "00";
+p1_special_ir_fn(5 downto 0) <= p1_ir_fn;
+    
+with p1_special_ir_fn select p1_muldiv_func <= 
+    MULT_READ_LO                when "10010010",
+    MULT_READ_HI                when "10010000",
+    MULT_WRITE_LO               when "10010011",
+    MULT_WRITE_HI               when "10010001",
+    MULT_MULT                   when "10011001",
+    MULT_SIGNED_MULT            when "10011000",
+    MULT_DIVIDE                 when "10011011",
+    MULT_SIGNED_DIVIDE          when "10011010",
+    --MULT_MADDU                  when "11000000",
+    --MULT_MADD                   when "11000001",
+    MULT_NOTHING                when others;
 
+    
 mult_div: entity work.ION_MULDIV
     port map (
         A_I         => p1_rs,
@@ -742,6 +756,7 @@ p1_eret <= '1' when p1_ir_reg(31 downto 21)="01000010000" and
 
 -- Raise some signals for some particular group of opcodes
 p1_op_special <= '1' when p1_ir_op="000000" else '0'; -- group '0' opcodes
+p1_op_special2 <= '1' when p1_ir_op="011100" else '0'; -- 'special 2' opcodes
 p1_do_reg_jump <= '1' when p1_op_special='1' and p1_ir_fn(5 downto 1)="00100" else '0';
 p1_do_zero_ext_imm <= 
     '1' when (p1_ir_op(31 downto 28)="0011") else       -- ANDI, ORI, XORI, LUI
@@ -902,7 +917,6 @@ CACHE_CTRL_MOSI_O.data_cache <= p1_ir_reg(16); -- 0 for I, 1 for D.
 
 p1_unknown_opcode <= '1' when
     -- decode by 'opcode' field
-    p1_ir_op(31 downto 29)="011" or
     --(p1_ir_op(31 downto 29)="110" and 
     --    p1_ir_op(28 downto 26)/="010") or      -- LWC2 is valid
     --(p1_ir_op(31 downto 29)="111" and 
@@ -919,6 +933,10 @@ p1_unknown_opcode <= '1' when
     p1_ir_op="100111" or
     p1_ir_op="101100" or
     p1_ir_op="101101" or
+    -- decode instructions in the 'special2' opcode group
+    (p1_ir_op="011100" and 
+                (p1_ir_fn="000000" or           -- MADD
+                 p1_ir_fn="000001")) or         -- MADDU
     -- decode instructions in the 'special' opcode group
     (p1_ir_op="000000" and 
                 (p1_ir_fn(5 downto 4)="11" or
