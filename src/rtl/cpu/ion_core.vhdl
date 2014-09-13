@@ -46,6 +46,7 @@ entity ion_core is
         -- Size of code TCM block in 32-bit words. 
         -- Set to a power of 2 or to zero to disable code TCM.
         TCM_CODE_SIZE : integer := 2048;
+        
         -- Contents of code TCM. Defaults to zero.
         TCM_CODE_INIT : t_obj_code := zero_objcode(16);
         

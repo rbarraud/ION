@@ -885,20 +885,20 @@ void mem_write(t_state *s, int size, unsigned address, unsigned value, int log){
 }
 
 /**
-    Compute signed remainder like the HW does.
+    Compute signed remainder in C99 like the HW does.
 
-    C99 will give you a remainder that has the same sign as the dividend,
-    whereas the ION core will give you a positive remainder.
-
-    We need this little function to compute the remainder the way the HW does.
-
-    Eventually we'll have to modify the muldiv unit to comply with the almost
-    universal remainder sign convention used in C99 but for the time being
-    we simulate what we have in the HW.
+    The remainder must have the same sign as the dividend. This is how the HW
+    works and what C99 mandates, but this program might be compiled with C90.
+    So, to be on te safe side, we do the remainder explicitly here.
 */
 int32_t signed_rem(int32_t dividend, int32_t divisor) {
     int32_t rem = dividend % divisor;
-    return (rem>0? rem : -rem);
+    if ((rem<0 && dividend>0) || (rem>0 && dividend<0) ) {
+        return -rem;
+    }
+    else {
+        return rem;
+    }
 }
 
 
@@ -1036,7 +1036,8 @@ uint32_t ins_bitfield(uint32_t target, uint32_t src, uint32_t opcode){
 void mult_big(unsigned int a,
               unsigned int b,
               unsigned int *hi,
-              unsigned int *lo){
+              unsigned int *lo,
+              int addsub){
     unsigned int ahi, alo, bhi, blo;
     unsigned int c0, c1, c2;
     unsigned int c1_a, c1_b;
@@ -1055,6 +1056,24 @@ void mult_big(unsigned int a,
     c1 = (c1_a & 0xffff) + (c1_b & 0xffff) + (c0 >> 16);
     c2 += (c1 >> 16);
     c0 = (c1 << 16) + (c0 & 0xffff);
+
+    /* Add to current HI:LO value if accumulating. */
+    if(addsub > 0) {
+        uint64_t acc, res;
+
+        acc = *hi;
+        acc = acc << 32;
+        acc |= *lo;
+
+        res = c2;
+        res = res << 32;
+        res |= c0;
+
+        res += acc;
+        c2 = res >> 32;
+        c0 = res & 0xffffffff;
+    }
+
     *hi = c2;
     *lo = c0;
 }
@@ -1063,13 +1082,24 @@ void mult_big(unsigned int a,
 void mult_big_signed(int a,
                      int b,
                      unsigned int *hi,
-                     unsigned int *lo){
+                     unsigned int *lo,
+                     int addsub){
     int64_t xa, xb, xr, temp;
     int32_t rh, rl;
 
     xa = a;
     xb = b;
     xr = xa * xb;
+
+    /* Add to current HI:LO value if accumulating. */
+    if(addsub > 0) {
+        int64_t acc;
+
+        acc = *hi;
+        acc = acc << 32;
+        acc |= *lo;
+        xr += acc;
+    }
 
     temp = (xr >> 32) & 0xffffffff;
     rh = temp;
@@ -1356,8 +1386,8 @@ void cycle(t_state *s, int show_mode){
         case 0x11:/*FTHI*/ s->hi=r[rs];              break;
         case 0x12:/*MFLO*/ r[rd]=s->lo;              break;
         case 0x13:/*MTLO*/ s->lo=r[rs];              break;
-        case 0x18:/*MULT*/ mult_big_signed(r[rs],r[rt],&s->hi,&s->lo); break;
-        case 0x19:/*MULTU*/ mult_big(r[rs],r[rt],&s->hi,&s->lo); break;
+        case 0x18:/*MULT*/ mult_big_signed(r[rs],r[rt],&s->hi,&s->lo,0); break;
+        case 0x19:/*MULTU*/ mult_big(r[rs],r[rt],&s->hi,&s->lo,0); break;
         case 0x1a:/*DIV*/  s->lo=r[rs]/r[rt]; s->hi=signed_rem(r[rs],r[rt]); break;
         case 0x1b:/*DIVU*/ s->lo=u[rs]/u[rt]; s->hi=u[rs]%u[rt]; break;
         case 0x20:/*ADD*/  r[rd]=r[rs]+r[rt];        break;
@@ -1498,19 +1528,16 @@ void cycle(t_state *s, int show_mode){
     case 0x16:/*BLEZL*/ lbranch=r[rs]<=0;        break;
     case 0x17:/*BGTZL*/ lbranch=r[rs]>0;         break;
     case 0x1c:/*SPECIAL2*/
-        /* MIPS32 opcodes, some of which may be emulated */
-        if(cmd_line_args.emulate_some_mips32){
-            switch(func){
-                case 0x20: /* CLZ */ r[rt] = count_leading(0, r[rs]); break;
-                case 0x21: /* CLO */ r[rt] = count_leading(1, r[rs]); break;
-                case 0x02: /* MUL */ r[rd] = mult_gpr(r[rs], r[rt]); break;
-                default:
-                    reserved_opcode(epc, opcode, s);
-                    unimplemented(s, "SPECIAL2");
-            }
-        }
-        else{
-            unimplemented(s, "SPECIAL2");
+        /* MIPS32r1 opcodes implemented, r2 unimplemented. */
+        switch(func){
+            case 0x00: /* MADD */ mult_big_signed(r[rs],r[rt],&s->hi,&s->lo,1); break;
+            case 0x01: /* MADDU */ mult_big(r[rs],r[rt],&s->hi,&s->lo,1); break;
+            case 0x20: /* CLZ */ r[rt] = count_leading(0, r[rs]); break;
+            case 0x21: /* CLO */ r[rt] = count_leading(1, r[rs]); break;
+            case 0x02: /* MUL */ r[rd] = mult_gpr(r[rs], r[rt]); break;
+            default:
+                reserved_opcode(epc, opcode, s);
+                unimplemented(s, "SPECIAL2");
         }
         break;
     case 0x1f: /* SPECIAL3 */
@@ -1994,9 +2021,9 @@ static void cop2_write(t_state *s,
     //printf("COP2[%d,%d] <- CPU[%d] (%08x)\n", rcop, sel, rcpu, cpu_data);
 }
 
-static void cop2_execute(t_state *s, uint32_t cofun) {
-
-}
+//static void cop2_execute(t_state *s, uint32_t cofun) {
+//
+//}
 
 void cop2(t_state *s, uint32_t opcode) {
     uint32_t function, rcpu, rcop, sel;
