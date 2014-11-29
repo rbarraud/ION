@@ -15,6 +15,9 @@
 				<Compiler>
 					<Add option="-g" />
 				</Compiler>
+				<Linker>
+					<Add option="-static-libgcc" />
+				</Linker>
 			</Target>
 		</Build>
 		<Compiler>
