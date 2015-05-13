@@ -1,3 +1,8 @@
+WARNING
+=======
+
+This project is in the middle of a refactor-within-a-refactor as I try to re-start it. In the unlikely case there's someone watching this, be aware that until further notice the project will probably be broken -- the RTL and/or the SW samples.
+
 ION
 ===
 
@@ -10,7 +15,7 @@ The original project is a MIPS-I implementation whereas this one is meant to be 
 This project is eventually to be backported to OpenCores.
 
 
-## Feature whish list
+## Feature wish list
 
 * Compatible to MIPS32r1 architecture.
 * Generic COP2 interface.
