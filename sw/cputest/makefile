@@ -18,44 +18,40 @@
 #
 ################################################################################
 
-# Get common makefile stuff (toolchain & system config).
-include ../common/makefile
-
 #-- Application setup ----------------------------------------------------------
 
-# Name of executable and label to use in VHDL files.
-TARGET = cputest
-APP_NAME = "CPU tester"
+PLATFORM = onchip
+EXECUTABLE = cputest
+DESCRIPTION = "CPU Tester"
 
 # Test bench simulation timeout period in clock cycles.
 SIM_LENGTH = 25000
 # Start logging HW activity after fetching from this address.
 LOG_TRIGGER = 0xbfc00000
 
-
-#-- Build flags (override default values if necessary) -------------------------
+#-- Build flag overrides -------------------------------------------------------
 
 #CFLAGS =
 #LFLAGS =
 
-
-#-- Targets & rules ------------------------------------------------------------
-
-# This makefile is a bit special; we link no other files than the opcode test 
-# source, so we can cram all in a single rule.
-
-program:
-	$(AS) -o opcode_emu.o $(SW_ROOT)/common/crt/opcode_emu.s
-	$(AS) $(AFLAGS) -mips32r2 -o $(TARGET).o $(TBARGS) cputest.s
-	$(LD) $(LFLAGS) -Map $(TARGET).map -s -N -o $(TARGET).axf $(TARGET).o opcode_emu.o
-	-@$(DUMP) -I elf32-big --disassemble $(TARGET).axf > $(TARGET).lst
-	$(COPY) -I elf32-big -O binary $(TARGET).axf $(TARGET).bin
-	$(COPY) -I elf32-big -j.data -j.bss -O binary $(TARGET).axf $(TARGET).data
-
-    
-
 #-- Targets invoked by tb_app and tb_core (see common makefile) ----------------
 
+# This makefile is a bit special; we link no other runtime files (no crt0, no 
+# c library) and we need to use a variant of the main makefile. So we define 
+# variable STANDALONE to let the main makefile know we want no support code.
+STANDALONE = 1
+
+# The main makefile will now expect us to define a "standalone" rule to build 
+# our executable. We can cram everything in this single rule.
+standalone:
+	$(AS) -o opcode_emu.o $(SW_ROOT)/common/crt/opcode_emu.s
+	$(AS) $(AFLAGS) -mips32r2 -o $(EXECUTABLE).o $(TBARGS) cputest.s
+	$(LD) $(LFLAGS) -Map $(EXECUTABLE).map -s -N -o $(EXECUTABLE).axf $(EXECUTABLE).o opcode_emu.o
+	-@$(DUMP) -I elf32-big --disassemble $(EXECUTABLE).axf > $(EXECUTABLE).lst
+	$(COPY) -I elf32-big -O binary $(EXECUTABLE).axf $(EXECUTABLE).bin
+	$(COPY) -I elf32-big -j.data -j.bss -O binary $(EXECUTABLE).axf $(EXECUTABLE).data
+
+    
 #-- Set assembler arguments for "tb_application" test bench.
 set_tb_app_variables: 
 	$(eval TBARGS := --defsym TEST_ICACHE=1 --defsym TARGET_HARDWARE=1)    
@@ -64,8 +60,7 @@ set_tb_app_variables:
 set_tb_core_variables: 
 	$(eval TBARGS := --defsym TEST_ICACHE=1)
 
-        
-#-- And now the usual housekeeping stuff ---------------------------------------
+#-- Application build configuration done, get main makefile --------------------
 
-.PHONY: clean
+include ../common/makefile
 

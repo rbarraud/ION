@@ -17,18 +17,29 @@
 
 #include <stdio.h>
 
-#ifndef UART_TXD_ADDRESS
-#define UART_TXD_ADDRESS (0x20000000)
-#endif
-
 /*---- Public functions ------------------------------------------------------*/
 
 int main()
 {   
+    int i;
+    int integer, fraction;
+    float f = 1.0;
+    
     printf("\n\nLibC Test\n\n");
     printf("compile time: " __DATE__ " -- " __TIME__ "\n");
     printf("gcc version:  " __VERSION__ "\n");
-    printf("\n\nThis is a printf test: %d\n\n", 42);
+    printf("Trying printf with int parameters:\n");
+    for(i=0;i<4;i++) {
+        printf("    [%d] : %d == 0x%02x\n", i, i+42, i+42);
+    }
+    printf("Trying basic float operations:\n");
+    for(i=0;i<4;i++) {
+        integer = (int)f;
+        fraction = (int)(f*100.0) - integer*100;
+        printf("    1.0 + (0.7 * %d) == %d.%d\n", i, integer, fraction);
+        f = f + 0.7;
+    }
+    
     return 0;
 }
 
