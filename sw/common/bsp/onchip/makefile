@@ -23,12 +23,17 @@ OBJCRT   := $(SRCCRT:$(DIRCRT)/%.s=lib/%.o)
 #-- List of object files to be included in the library
 LIBOBJS  = $(OBJHAL)
 
+
 #-- Targets & rules ------------------------------------------------------------
 
 all: lib/libhal.a crtfiles
 
-lib/libhal.a: $(LIBOBJS)
+lib/libhal.a: objdirs $(LIBOBJS)
 	$(AR) rvs lib/libhal.a $(LIBOBJS)
+
+objdirs:
+	mkdir -p obj
+	mkdir -p lib
 
 crtfiles: $(OBJCRT)
     

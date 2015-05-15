@@ -102,6 +102,7 @@ $(OBJBOOT): runtime
 $(OBJCRT): runtime
 runtime:
 	make -C $(SW_ROOT)/common/bsp/$(PLATFORM)
+	make -C $(SW_ROOT)/common/elib
     
 #-- Application build ----------------------------------------------------------
 
@@ -111,6 +112,7 @@ OBJAPP := $(SRCS:$(SRCDIR)/%.c=%.o)
 
 #-- IMPORTANT: Keep this order or the linked executable will crash.
 OBJS = $(OBJBOOT) $(OBJCRT) $(OBJHAL) $(OBJAPP)
+
 
 .PHONY: program
 program: $(EXECUTABLE).bin $(EXECUTABLE).data runtime
@@ -124,9 +126,12 @@ else
 executable: program
 endif
 
-$(EXECUTABLE).axf: $(OBJS)
+$(EXECUTABLE).axf: objdirs $(OBJS)
 	$(LD) -Map $(EXECUTABLE).map -N -o $(EXECUTABLE).axf $(OBJS) $(LFLAGS)
 	-@$(DUMP) -m mips -S --disassemble $(EXECUTABLE).axf > $(EXECUTABLE).lst
+
+objdirs:
+	mkdir -p obj
 
     
 $(EXECUTABLE).bin: $(EXECUTABLE).axf

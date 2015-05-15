@@ -26,18 +26,17 @@ OBJSTRING := $(SRCSTRING:$(DIRSTRING)/%.c=obj/%.o)
 #-- List of object files to be included in the library
 OBJS    = $(OBJFP) $(OBJSTDIO) $(OBJSTRING)
 
+
 #-- Targets & rules ------------------------------------------------------------
 
 all: lib/libe.a
 
-lib/libe.a: $(OBJS)
+lib/libe.a: objdirs $(OBJS)
 	$(AR) rvs lib/libe.a $(OBJS)
 
-
-#soc.o:              $(SRC)/soc.h
-#printf-stdarg.o:
-#syscalls.o:         $(SRC)/soc.h
-#hw_ion_mpu.o:       $(SRC)/soc.h $(SRC)/hw.h
+objdirs:
+	mkdir -p obj
+	mkdir -p lib
 
 # The FP math library is compiled separately for float support...
 obj/fp-bit-float.o: $(DIRFP)/fp-bit.c
