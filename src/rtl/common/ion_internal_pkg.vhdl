@@ -257,7 +257,7 @@ begin
         end case;
         
         address := i / 4;
-        if address >= size then
+        if address >= size or address >= br'high then
             exit;
         end if;
         br(address)(index+7 downto index) := oC(i);
