@@ -126,12 +126,9 @@ else
 executable: program
 endif
 
-$(EXECUTABLE).axf: objdirs $(OBJS)
+$(EXECUTABLE).axf: $(OBJS)
 	$(LD) -Map $(EXECUTABLE).map -N -o $(EXECUTABLE).axf $(OBJS) $(LFLAGS)
 	-@$(DUMP) -m mips -S --disassemble $(EXECUTABLE).axf > $(EXECUTABLE).lst
-
-objdirs:
-	mkdir -p obj
 
     
 $(EXECUTABLE).bin: $(EXECUTABLE).axf

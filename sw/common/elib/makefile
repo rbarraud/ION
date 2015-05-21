@@ -31,12 +31,9 @@ OBJS    = $(OBJFP) $(OBJSTDIO) $(OBJSTRING)
 
 all: lib/libe.a
 
-lib/libe.a: objdirs $(OBJS)
+lib/libe.a: $(OBJS)
 	$(AR) rvs lib/libe.a $(OBJS)
 
-objdirs:
-	mkdir -p obj
-	mkdir -p lib
 
 # The FP math library is compiled separately for float support...
 obj/fp-bit-float.o: $(DIRFP)/fp-bit.c

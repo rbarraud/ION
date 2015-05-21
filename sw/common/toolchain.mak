@@ -20,12 +20,12 @@ RM = rm -f
 #TOOLBASE = mips-sde-elf
 
 # Codescape for baremetal, win32.
-#TOOLCHAIN = D:\dev\embedded\Codescape\Toolchains\mips-mti-elf\2014.07-1
-#TOOLBASE = mips-mti-elf
+TOOLCHAIN = D:\dev\embedded\Codescape\Toolchains\mips-mti-elf\2014.07-1
+TOOLBASE = mips-mti-elf
 
 # Codebench for baremetal, linux.
-TOOLCHAIN = /home/jaruiz/dev/util/mips/codebench
-TOOLBASE = mips-sde-elf
+#TOOLCHAIN = /home/jaruiz/dev/util/mips/codebench
+#TOOLBASE = mips-sde-elf
 
 
 

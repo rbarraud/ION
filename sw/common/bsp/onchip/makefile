@@ -28,12 +28,8 @@ LIBOBJS  = $(OBJHAL)
 
 all: lib/libhal.a crtfiles
 
-lib/libhal.a: objdirs $(LIBOBJS)
+lib/libhal.a: $(LIBOBJS)
 	$(AR) rvs lib/libhal.a $(LIBOBJS)
-
-objdirs:
-	mkdir -p obj
-	mkdir -p lib
 
 crtfiles: $(OBJCRT)
     
