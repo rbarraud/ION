@@ -67,6 +67,9 @@ t_args cmd_line_args;
 /** Function map table. Starting location, names, etc. */
 t_map_info map_info;
 
+/** File to be used for simulated CPU console output. */
+FILE *cpuconout = NULL;
+
 
 /*---- Local function prototypes ---------------------------------------------*/
 
@@ -88,6 +91,7 @@ static void reverse_endianess(uint8_t *data, uint32_t bytes);
 /*----------------------------------------------------------------------------*/
 
 int main(int argc,char *argv[]){
+    int exitcode = 0;
     t_state state, *s=&state;
 
     /* Parse command line and pass any relevant arguments to CPU record */
@@ -104,6 +108,19 @@ int main(int argc,char *argv[]){
         exit(66);
     }
     fprintf(stderr,"\n\n");
+    
+    /* Open the CPU console output file if not stdout. */
+    if (cmd_line_args.conout_filename!=NULL) {
+        cpuconout = fopen(cmd_line_args.conout_filename, "w");
+        if (cpuconout==NULL){
+            fprintf(stderr,"Trouble opening console log file '%s', quitting.\n", cmd_line_args.conout_filename);
+            exitcode = 2;
+            goto main_quit;
+        }
+    }
+    else {
+        cpuconout = stdout;
+    }
 
     init_trace_buffer(s, &cmd_line_args);
 
@@ -123,9 +140,11 @@ int main(int argc,char *argv[]){
     /* Enter debug command interface; will only exit clean with user command */
     do_debug(s, cmd_line_args.no_prompt);
 
+main_quit:
     /* Close and deallocate everything and quit */
     close_trace_buffer(s);
     free_cpu(s);
+    if (cmd_line_args.conout_filename!=NULL && cpuconout!=NULL) fclose(cpuconout);
     exit(0);
 }
 
@@ -589,6 +608,7 @@ static void parse_cmd_line(uint32_t argc, char **argv, t_args *args){
     args->log_file_name = "sw_sim_log.txt";
     args->log_trigger_address = VECTOR_RESET;
     args->map_filename = NULL;
+    args->conout_filename = NULL;
     for(i=0;i<NUM_MEM_BLOCKS;i++){
         args->bin_filename[i] = NULL;
         args->offset[i] = 0;
@@ -633,6 +653,9 @@ static void parse_cmd_line(uint32_t argc, char **argv, t_args *args){
         }
         else if(strncmp(argv[i],"--trace_log=", strlen("--trace_log="))==0){
             map_info.log_filename = &(argv[i][strlen("--trace_log=")]);
+        }
+        else if(strncmp(argv[i],"--conout=", strlen("--flash="))==0){
+            args->conout_filename = &(argv[i][strlen("--conout=")]);
         }
         else if(strncmp(argv[i],"--start=", strlen("--start="))==0){
             sscanf(&(argv[i][strlen("--start=")]), "%x", &(args->start_addr));

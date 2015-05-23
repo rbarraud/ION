@@ -202,12 +202,15 @@ typedef struct s_args {
     char *bin_filename[NUM_MEM_BLOCKS];
     /** map file to be used for function call tracing, if any */
     char *map_filename;
+    /** name of file to write CPU console output to, or NULL to use stdout. */
+    char *conout_filename;
     /** offset into area (in bytes) where bin will be loaded */
     /* only used when loading a linux kernel image */
     uint32_t offset[NUM_MEM_BLOCKS];
 } t_args;
 
-
+/** File to be used for simulated CPU console output. */
+extern FILE *cpuconout;
 
 /** Assorted debug & trace info */
 typedef struct s_trace {

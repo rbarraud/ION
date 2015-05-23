@@ -210,8 +210,8 @@ void mem_write(t_state *s, int size, unsigned address, unsigned value, int log){
     // FIXME should be enabled with command line argument
     switch(address){
     case TB_UART_TX:
-        putchar(value);
-        fflush(stdout);
+        fprintf(cpuconout,"%c",value&0x0ff);
+        fflush(cpuconout);
         return;
     case TB_HW_IRQ:
         /* HW interrupt trigger register */
