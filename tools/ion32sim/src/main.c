@@ -23,6 +23,12 @@
 * readme files for details.
 *
 *-------------------------------------------------------------------------------
+* Exit Codes:
+* 0:        No problem.
+* 64:       Error in command line arguments.
+* 66:       Could not read one or more of the object input files.
+* 71:       Trouble allocating memory.
+*-------------------------------------------------------------------------------
 * This program simulates the CPU connected to a certain memory map (chosen from
 * a set of predefined options) and to a UART.
 * The UART is hardcoded at a fixed address and is not configurable in runtime.
@@ -70,8 +76,8 @@ static void init_trace_buffer(t_state *s, t_args *args);
 static void close_trace_buffer(t_state *s);
 static void dump_trace_buffer(t_state *s);
 /* Command line */
-static int32_t parse_cmd_line(uint32_t argc, char **argv, t_args *args);
-static void usage(void);
+static void parse_cmd_line(uint32_t argc, char **argv, t_args *args);
+static void usage(FILE *f);
 /* Function map */
 static int32_t read_map_file(char *filename, t_map_info* map);
 static int32_t function_index(uint32_t address);
@@ -85,21 +91,19 @@ int main(int argc,char *argv[]){
     t_state state, *s=&state;
 
     /* Parse command line and pass any relevant arguments to CPU record */
-    if(parse_cmd_line(argc,argv, &cmd_line_args)==0){
-        return 0;
-    }
+    parse_cmd_line(argc,argv, &cmd_line_args);
 
-    printf("R3000 MIPS-I ION core emulator (" __DATE__ ")\n\n");
+    fprintf(stderr,"ION (MIPS32 clone) core emulator (" __DATE__ ")\n\n");
     if(!init_cpu(s, &cmd_line_args)){
-        printf("Trouble allocating memory, quitting!\n");
-        return 1;
+        fprintf(stderr,"Trouble allocating memory, quitting!\n");
+        exit(71);
     };
 
     /* Read binary object files into memory*/
     if(!read_binary_files(s, &cmd_line_args)){
-        return 2;
+        exit(66);
     }
-    printf("\n\n");
+    fprintf(stderr,"\n\n");
 
     init_trace_buffer(s, &cmd_line_args);
 
@@ -122,7 +126,7 @@ int main(int argc,char *argv[]){
     /* Close and deallocate everything and quit */
     close_trace_buffer(s);
     free_cpu(s);
-    return(0);
+    exit(0);
 }
 
 
@@ -199,7 +203,7 @@ void init_trace_buffer(t_state *s, t_args *args){
     if(args->log_file_name!=NULL){
         s->t.log = fopen(args->log_file_name, "w");
         if(s->t.log==NULL){
-            printf("Error opening log file '%s', file logging disabled\n",
+            fprintf(stderr,"Error opening log file '%s', file logging disabled\n",
                     args->log_file_name);
         }
     }
@@ -215,7 +219,7 @@ void init_trace_buffer(t_state *s, t_args *args){
     if(map_info.log_filename!=NULL){
         map_info.log = fopen(map_info.log_filename, "w");
         if(map_info.log==NULL){
-            printf("Error opening log file '%s', file logging disabled\n",
+            fprintf(stderr,"Error opening log file '%s', file logging disabled\n",
                     map_info.log_filename);
         }
     }
@@ -531,7 +535,7 @@ static int read_binary_files(t_state *s, t_args *args){
 
             files_read++;
         }
-        printf("%-16s [size= %6dKB, start= 0x%08x] loaded %d bytes.\n",
+        fprintf(stderr,"%-16s [size= %6dKB, start= 0x%08x] loaded %d bytes.\n",
                 s->blocks[i].area_name,
                 s->blocks[i].size/1024,
                 s->blocks[i].start,
@@ -540,7 +544,7 @@ static int read_binary_files(t_state *s, t_args *args){
 
     if(!files_read){
         free_cpu(s);
-        printf("No binary object files read, quitting\n");
+        fprintf(stderr,"No binary object files read, quitting\n");
         return 0;
     }
 
@@ -563,7 +567,8 @@ static void reverse_endianess(uint8_t *data, uint32_t bytes){
 
 /*-- Command line arguments --*/
 
-static int32_t parse_cmd_line(uint32_t argc, char **argv, t_args *args){
+/* Parse command line. Will quit with error code is necessary. */
+static void parse_cmd_line(uint32_t argc, char **argv, t_args *args){
     uint32_t i;
 
     /* Initialize logging parameters */
@@ -647,45 +652,43 @@ static int32_t parse_cmd_line(uint32_t argc, char **argv, t_args *args){
             sscanf(&(argv[i][strlen("--breakpoint=")]), "%x", &(args->breakpoint));
         }
         else if((strcmp(argv[i],"--help")==0)||(strcmp(argv[i],"-h")==0)){
-            usage();
-            return 0;
+            usage(stdout);
+            exit(0);
         }
         else{
-            printf("unknown argument '%s'\n\n",argv[i]);
-            usage();
-            return 0;
+            fprintf(stderr,"unknown argument '%s'\n\n",argv[i]);
+            usage(stderr);
+            exit(64);
         }
     }
-
-    return 1;
 }
 
-static void usage(void){
-    printf("Usage:");
-    printf("    ion32sim file.exe [arguments]\n");
-    printf("Arguments:\n");
-    printf("--bram=<file name>      : BRAM initialization file\n");
-    printf("--xram=<file name>      : XRAM initialization file\n");
-    printf("--kernel=<file name>    : XRAM initialization file for uClinux kernel\n");
-    printf("                          (loads at block offset 0x2000)\n");
-    printf("--flash=<file name>     : FLASH initialization file\n");
-    printf("--map=<file name>       : Map file to be used for tracing, if any\n");
-    printf("--trace_log=<file name> : Log file used for tracing, if any\n");
-    printf("--trigger=<hex number>  : Log trigger address\n");
-    printf("--break=<hex number>    : Breakpoint address\n");
-    printf("--start=<hex number>    : Start here instead of at reset vector\n");
-    printf("--notrap                : Reserved opcodes are NOPs and don't trap\n");
-    printf("--nomips32              : Do not emulate any mips32 opcodes\n");
-    printf("--memory=<dec number>   : Select emulated memory map\n");
-    printf("    N=0 -- Development memory map (DEFAULT):\n");
-    printf("        Code TCM at     0xbfc00000 (64KB)\n");
-    printf("        Cached RAM at   0x80000000 (512KB)\n");
-    printf("        Cached ROM at   0x90000000 (512KB) (dummy hardwired data)\n");
-    printf("        Cached FLASH at 0xa0000000 (256KB)\n");
-    printf("    N=1 -- Experimental uClinux map (under construction, do not use)\n");
-    printf("--unaligned             : Implement unaligned load/store instructions\n");
-    printf("--noprompt              : Run in batch mode\n");
-    printf("--stop_at_zero          : Stop simulation when fetching from address 0x0\n");
-    printf("--stop_on_unimplemented : Stop simulation when executing unimplemented opcode\n");
-    printf("--help, -h              : Show this usage text\n");
+static void usage(FILE *out){
+    fprintf(out,"Usage:");
+    fprintf(out,"    ion32sim file.exe [arguments]\n");
+    fprintf(out,"Arguments:\n");
+    fprintf(out,"--bram=<file name>      : BRAM initialization file\n");
+    fprintf(out,"--xram=<file name>      : XRAM initialization file\n");
+    fprintf(out,"--kernel=<file name>    : XRAM initialization file for uClinux kernel\n");
+    fprintf(out,"                          (loads at block offset 0x2000)\n");
+    fprintf(out,"--flash=<file name>     : FLASH initialization file\n");
+    fprintf(out,"--map=<file name>       : Map file to be used for tracing, if any\n");
+    fprintf(out,"--trace_log=<file name> : Log file used for tracing, if any\n");
+    fprintf(out,"--trigger=<hex number>  : Log trigger address\n");
+    fprintf(out,"--break=<hex number>    : Breakpoint address\n");
+    fprintf(out,"--start=<hex number>    : Start here instead of at reset vector\n");
+    fprintf(out,"--notrap                : Reserved opcodes are NOPs and don't trap\n");
+    fprintf(out,"--nomips32              : Do not emulate any mips32 opcodes\n");
+    fprintf(out,"--memory=<dec number>   : Select emulated memory map\n");
+    fprintf(out,"    N=0 -- Development memory map (DEFAULT):\n");
+    fprintf(out,"        Code TCM at     0xbfc00000 (64KB)\n");
+    fprintf(out,"        Cached RAM at   0x80000000 (512KB)\n");
+    fprintf(out,"        Cached ROM at   0x90000000 (512KB) (dummy hardwired data)\n");
+    fprintf(out,"        Cached FLASH at 0xa0000000 (256KB)\n");
+    fprintf(out,"    N=1 -- Experimental uClinux map (under construction, do not use)\n");
+    fprintf(out,"--unaligned             : Implement unaligned load/store instructions\n");
+    fprintf(out,"--noprompt              : Run in batch mode\n");
+    fprintf(out,"--stop_at_zero          : Stop simulation when fetching from address 0x0\n");
+    fprintf(out,"--stop_on_unimplemented : Stop simulation when executing unimplemented opcode\n");
+    fprintf(out,"--help, -h              : Show this usage text\n");
 }
