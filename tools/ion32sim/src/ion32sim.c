@@ -1,36 +1,10 @@
 /*------------------------------------------------------------------------------
-* ion32sim.c -- MIPS32 simulator based on Steve Rhoad's "mlite"
+* ion32sim.c -- ION (MIPS32 clone) simulator based on Steve Rhoad's "mlite".
 *
 * This is a heavily modified version of Steve Rhoad's "mlite" simulator, which
 * is part of his PLASMA project (original date: 1/31/01).
 * As part of the project ION, it is being progressively modified to emulate a
-* MIPS32r2 compatible ION core and it is no longer compatible to Plasma.
-*
-*-------------------------------------------------------------------------------
-* Usage:
-*     ion32sim [options]
-*
-* See function 'usage' for a very brief explaination of the available options.
-*
-* Generally, upon startup the program will allocate some RAM for the simulated
-* system and initialize it with the contents of one or more plain binary,
-* big-endian object files. Then it will simulate a cpu reset and start the
-* simulation, in interactive or batch mode.
-*
-* A simulation log file will be dumped to file "sw_sim_log.txt". This log can be
-* used to compare with an equivalent log dumped by the hardware simulation, as
-* a simple way to validate the hardware for a given program. See the project
-* readme files for details.
-*
-*-------------------------------------------------------------------------------
-* This program simulates the CPU connected to a certain memory map (chosen from
-* a set of predefined options) and to a UART.
-* The UART is hardcoded at a fixed address and is not configurable in runtime.
-* The simulated UART includes the real UART status bits, hardcoded to 'always
-* ready' so that software and hardware simulations can be made identical with
-* more ease (no need to simulate the actual cycle count of TX/RX, etc.).
-*-------------------------------------------------------------------------------
-* KNOWN BUGS:
+* MIPS32 ION core and it is no longer compatible to Plasma.
 *
 *-------------------------------------------------------------------------------
 * COPYRIGHT:    Software placed into the public domain by the author.
@@ -46,88 +20,11 @@
 #include <string.h>
 #include <ctype.h>
 #include <assert.h>
-
 #include <stdbool.h>
 
-/** CPU identification code (contents of register CP0[15], PRId */
-#define CPU_ID (0x00000200)
-/** Reset value of CP0.Config register */
-#define CP0_CONFIG0 (0x80002400)
-/** Reset value of CP0.Config1 register */
-#define CP0_CONFIG1 (0x80984c00)
-/* Will be true when in kernel mode. */
-#define KERNEL_MODE ((s->cp0_status & 0x016) != 0x010)
-#define SR_BEV (1 << 22)
-#define SR_ERL (1 << 2)
-#define SR_EXL (1 << 1)
+#include "ion32sim.h"
 
-/** Number of hardware interrupt inputs (irq0 is NMI) */
-#define NUM_HW_IRQS (8)
-
-/** Set to !=0 to disable file logging (much faster simulation) */
-/* alternately you can just set an unreachable log trigger address */
-#define FILE_LOGGING_DISABLED (0)
-/** Define to enable cache simulation (unimplemented) */
-//#define ENABLE_CACHE
-/** Set to !=0 to display a fancier listing of register values */
-#define FANCY_REGISTER_DISPLAY (1)
-
-
-/*---- Definition of simulated system parameters -----------------------------*/
-
-#define VECTOR_RESET (0xbfc00000)
-#define VECTOR_TRAP  (0xbfc00180)
-
-/** Definition of a memory block */
-typedef struct s_block {
-    uint32_t start;
-    uint32_t size;
-    uint32_t mask;
-    uint32_t flags;
-    uint8_t  *mem;
-    char     *area_name;
-} t_block;
-
-#define NUM_MEM_BLOCKS      (5)
-
-/** Definition of a memory map */
-/* FIXME i/o addresses missing, hardcoded */
-typedef struct s_map {
-    t_block blocks[NUM_MEM_BLOCKS];
-} t_map;
-
-
-/* FIXME memory areas should be refactored to account for TCMs. */
-/*  Here's where we define the memory areas (blocks) of the system.
-
-    The blocks should be defined in this order: BRAM, XRAM, FLASH
-
-    BRAM is FPGA block ram initialized with bootstrap code
-    XRAM is external SRAM
-    FLASH is external flash
-
-    Give any area a size of 0x0 to leave it unused.
-
-    When a binary file is specified in the cmd line for one of these areas, it
-    will be used to initialize it, checking bounds.
-
-    Memory decoding is done in the order the blocks are defined; the address
-    is anded with field .mask and then compared to field .start. If they match
-    the address modulo the field .size is used to index the memory block, giving
-    a 'mirror' effect. All of this simulates how the actual hardware works.
-    Make sure the blocks don't overlap or the scheme will fail.
-*/
-
-typedef enum {
-    MAP_DEFAULT =       0,
-    MAP_UCLINUX =       1,
-    NUM_MEM_MAPS =      2
-} t_mem_area;
-
-
-#define MEM_READONLY        (1<<0)
-#define MEM_TEST            (1<<1)
-
+/*---- Static data -----------------------------------------------------------*/
 
 t_map memory_maps[NUM_MEM_MAPS] = {
     {/* Experimental memory map (default) */
@@ -158,62 +55,15 @@ t_map memory_maps[NUM_MEM_MAPS] = {
     },
 };
 
-
-/*---- end of system parameters ----------------------------------------------*/
-
-
-/** Values for the command line arguments */
-typedef struct s_args {
-    /** !=0 to trap on unimplemented opcodes, 0 to print warning and NOP */
-    uint32_t trap_on_reserved;
-    /** !=0 to stop simulation on unimplemented opcodes */
-    uint32_t stop_on_unimplemented;
-    /** !=0 to emulate some common mips32 opcodes */
-    uint32_t emulate_some_mips32;
-    /** Prescale value used for the timer/counter */
-    uint32_t timer_prescaler;
-    /** address to start execution from (by default, reset vector) */
-    uint32_t start_addr;
-    /** memory map to be used */
-    uint32_t memory_map;
-    /** implement unaligned load/stores (don't just trap them) */
-    uint32_t do_unaligned;
-    /** start simulation without showing monitor prompt and quit on
-        end condition -- useful for batch runs */
-    uint32_t no_prompt;
-    /** breakpoint address (0xffffffff if unused) */
-    uint32_t breakpoint;
-    /** a code fetch from this address starts logging */
-    uint32_t log_trigger_address;
-    /** full name of log file */
-    char *log_file_name;
-    /** bin file to load to each area or null */
-    char *bin_filename[NUM_MEM_BLOCKS];
-    /** map file to be used for function call tracing, if any */
-    char *map_filename;
-    /** offset into area (in bytes) where bin will be loaded */
-    /* only used when loading a linux kernel image */
-    uint32_t offset[NUM_MEM_BLOCKS];
-} t_args;
-/** Parse cmd line args globally accessible */
-t_args cmd_line_args;
-
-
-/*---- Endianess conversion macros -------------------------------------------*/
-
-#define ntohs(A) ( ((A)>>8) | (((A)&0xff)<<8) )
-#define htons(A) ntohs(A)
-#define ntohl(A) ( ((A)>>24) | (((A)&0xff0000)>>8) | (((A)&0xff00)<<8) | ((A)<<24) )
-#define htonl(A) ntohl(A)
+extern t_args cmd_line_args;
 
 /*---- OS-dependent support functions and definitions ------------------------*/
 #ifndef WIN32
 //Support for Linux
-#define putch putchar
 #include <termios.h>
 #include <unistd.h>
 
-void slite_sleep(unsigned int value){
+void sim_sleep(unsigned int value){
     usleep(value * 1000);
 }
 
@@ -257,127 +107,19 @@ int getch(void){
 #include <conio.h>
 extern void __stdcall Sleep(unsigned long value);
 
-void slite_sleep(unsigned int value){
+void sim_sleep(unsigned int value){
     Sleep(value);
 }
 
 #endif
 /*---- End of OS-dependent support functions and definitions -----------------*/
 
-/*---- Hardware system parameters --------------------------------------------*/
-
-/*  These are actual HW features of the application block which we simulate here
-    for simplicity's sake, so they can be testes in SW test benches.
-    The simulation of non-cpu features should be optional!
-*/
-#define IO_GPIO           (0xffff0020)
-
-
-/* Debug registers present only in this simulator and in the TB. */
-#define TB_UART_TX        (0xffff8000)
-#define TB_UART_RX        (0xffff8000)
-#define TB_HW_IRQ         (0xffff8010)
-#define TB_STOP_SIM       (0xffff8018)
-#define TB_DEBUG          (0xffff8020)
-#define TB_DEBUG_0        (0xffff8020)
-#define TB_DEBUG_1        (0xffff8024)
-#define TB_DEBUG_2        (0xffff8028)
-#define TB_DEBUG_3        (0xffff802c)
-
-
-/* Much of this is a remnant from Plasma's mlite and is  no longer used. */
-/* FIXME Refactor HW system params */
-
-#define UART_STATUS       (0xffff0004)
-#define TIMER_READ        (0xffff0100)
-
-#define DEFAULT_TIMER_PRESCALER (50)
-
-/* FIXME The following addresses are remnants of Plasma to be removed */
-#define IRQ_MASK          0x20000010
-#define IRQ_STATUS        0x20000020
-
-#define IRQ_UART_READ_AVAILABLE  0x002
-#define IRQ_UART_WRITE_AVAILABLE 0x001
-#define IRQ_COUNTER18_NOT        0x004
-#define IRQ_COUNTER18            0x008
-#define IRQ_MMU                  0x200
-
-/*----------------------------------------------------------------------------*/
-
-/* These are flags that will be used to notify the main cycle function of any
-   failed assertions in its subfunctions. */
-#define ASRT_UNALIGNED_READ         (1<<0)
-#define ASRT_UNALIGNED_WRITE        (1<<1)
 
 char *assertion_messages[2] = {
    "Unaligned read",
    "Unaligned write"
 };
 
-
-/** Length of debugging jump target queue */
-#define TRACE_BUFFER_SIZE (32)
-
-/** Assorted debug & trace info */
-typedef struct s_trace {
-   unsigned int buf[TRACE_BUFFER_SIZE];   /**< queue of last jump targets */
-   unsigned int next;                     /**< internal queue head pointer */
-   FILE *log;                             /**< text log file or NULL */
-   int log_triggered;                     /**< !=0 if log has been triggered */
-   uint32_t log_trigger_address;          /**< */
-   int pr[32];                            /**< last value of register bank */
-   int hi, lo, epc, status;               /**< last value of internal regs */
-   int disasm_ptr;                        /**< disassembly pointer */
-   /** Instruction cycles remaining to trigger, or -1 if irq inactive */
-   int32_t irq_trigger_countdown;         /**< (in instructions) */
-   int8_t irq_trigger_inputs;             /**< HW interrupt to be triggered */
-   int8_t irq_current_inputs;             /**< HW interrupt inputs */
-} t_trace;
-
-typedef struct s_cop2_stub {
-    /* {D[0..31], C[0..31] } */
-    uint32_t r[32*2];      /**< Reg banks, data & control. */
-} t_cop2_stub;
-
-typedef struct s_state {
-   unsigned failed_assertions;            /**< assertion bitmap */
-   unsigned faulty_address;               /**< addr that failed assertion */
-   uint32_t do_unaligned;                 /**< !=0 to enable unaligned L/S */
-   uint32_t breakpoint;                   /**< BP address of 0xffffffff */
-
-   int delay_slot;              /**< !=0 if prev. instruction was a branch */
-   uint32_t instruction_ctr;    /**< # of instructions executed since reset */
-   uint32_t inst_ctr_prescaler; /**< Prescaler counter for instruction ctr. */
-   uint32_t debug_regs[16];     /**< Rd/wr debug registers */
-   uint16_t gpio_regs[1];       /**< Rd/wr GPIO registers */
-
-   int r[32];
-   int opcode;
-   int pc, pc_next, epc;
-   uint32_t op_addr;            /**< address of opcode being simulated */
-   uint32_t hi;
-   uint32_t lo;
-   uint32_t cp0_status;
-   int32_t trap_cause;          /**< temporary trap code or <0 if no trap */
-   uint32_t cause_ip;           /**< Temporary IP field of Cause reg. */
-   uint32_t cp0_cause;
-   uint32_t cp0_errorpc;
-   uint32_t cp0_config0;
-   uint32_t cp0_compare;
-
-   t_cop2_stub cop2;            /**< COP2 stub. */
-
-   int irqStatus;               /**< DEPRECATED, to be removed */
-   int skip;
-   int eret_delay_slot;
-   t_trace t;
-   t_block blocks[NUM_MEM_BLOCKS];
-   int wakeup;
-   int big_endian;
-   bool sr_load_pending;
-   uint32_t sr_load_pending_value;
-} t_state;
 
 static char *reg_names[]={
     "zero","at","v0","v1","a0","a1","a2","a3",
@@ -414,43 +156,10 @@ static char *regimm_string[]={
    "9BLTZAL","9BEQZAL","9BLTZALL","9BGEZALL","0?","0?","0?","0?",
    "0?","0?","0?","0?","0?","0?","0?","0?"
 };
-/*
-static char *special2_string[]={
-    "0MADD","0MADDU","0MUL","0?",  "0?","0?","0?","0?",
-    "0?","0?","0?","0?",  "0?","0?","0?","0?",
-    "0?","0?","0?","0?",  "0?","0?","0?","0?",
-    "0?","0?","0?","0?",  "0?","0?","0?","0?",
-
-    "0CLZ","0CLO","0?","0?",  "0?","0?","0?","0?",
-    "0?","0?","0?","0?",  "0?","0?","0?","0?",
-    "0?","0?","0?","0?",  "0?","0?","0?","0?",
-    "0?","0?","0?","0?",  "0?","0?","0?","0?",
-};
-*/
-
-/** local memory used by the console simulation code */
-static unsigned int HWMemory[8];
-
-#define MAP_MAX_FUNCTIONS  (400)
-#define MAP_MAX_NAME_LEN   (80)
-
-/** Information extracted from the map file, if any */
-typedef struct {
-    uint32_t num_functions;         /**< number of functions in the table */
-    FILE *log;                      /**< text log file or stdout */
-    char *log_filename;             /**< name of log file or NULL */
-    uint32_t fn_address[MAP_MAX_FUNCTIONS];
-    char fn_name[MAP_MAX_FUNCTIONS][MAP_MAX_NAME_LEN];
-} t_map_info;
-
-t_map_info map_info;
 
 /*---- Local function prototypes ---------------------------------------------*/
 
 /* Debug and logging */
-void init_trace_buffer(t_state *s, t_args *args);
-void close_trace_buffer(t_state *s);
-void dump_trace_buffer(t_state *s);
 uint32_t log_cycle(t_state *s);
 void log_read(t_state *s, int full_address, int word_value, int size, int log);
 void log_failed_assertions(t_state *s);
@@ -458,18 +167,9 @@ uint32_t log_enabled(t_state *s);
 void trigger_log(t_state *s);
 void print_opcode_fields(uint32_t opcode);
 void reserved_opcode(uint32_t pc, uint32_t opcode, t_state* s);
-int32_t read_map_file(char *filename, t_map_info* map);
 void log_call(uint32_t to, uint32_t from);
 void log_ret(uint32_t to, uint32_t from);
-int32_t function_index(uint32_t address);
 
-int32_t parse_cmd_line(uint32_t argc, char **argv, t_args *args);
-void usage(void);
-
-/* CPU model */
-void free_cpu(t_state *s);
-int init_cpu(t_state *s, t_args *args);
-void reset_cpu(t_state *s);
 void unimplemented(t_state *s, const char *txt);
 void reverse_endianess(uint8_t *data, uint32_t bytes);
 int32_t signed_rem(int32_t dividend, int32_t divisor);
@@ -480,77 +180,14 @@ static uint32_t cop2_get_reg(t_state *s,uint32_t rcop, uint32_t sel, bool ctrl);
 static void cop2_set_reg(t_state *s,uint32_t rcop, uint32_t sel, bool ctrl, uint32_t data);
 
 /* Hardware simulation */
-int mem_read(t_state *s, int size, unsigned int address, int log);
-void mem_write(t_state *s, int size, unsigned address, unsigned value, int log);
-void debug_reg_write(t_state *s, uint32_t address, uint32_t data);
-int debug_reg_read(t_state *s, int size, unsigned int address);
+
 uint32_t start_load(t_state *s, uint32_t addr, int rt, int data);
 uint32_t simulate_hw_irqs(t_state *s);
 
-/* Application core features simulated here for simplicity. */
-void gpio_reg_write(t_state *s, uint32_t address, uint32_t data);
-uint16_t gpio_reg_read(t_state *s, int size, unsigned int address);
 
 
 /*---- Local functions -------------------------------------------------------*/
 
-/*---- Call & ret tracing (EARLY DRAFT) --------------------------------------*/
-
-static uint32_t call_depth = 0;
-
-void log_ret(uint32_t to, uint32_t from){
-    int32_t i,j;
-
-    /* If no map file has been loaded, skip trace */
-    if((!map_info.num_functions) || (!map_info.log)) return;
-
-    if(call_depth>0){
-        fprintf(map_info.log, "[%08x]  ", from);
-        for(j=0;j<call_depth;j++){
-            fprintf(map_info.log, ". ");
-        }
-        fprintf(map_info.log, "}\n");
-        call_depth--;
-    }
-    else{
-        i = function_index(to);
-        if(i>=0){
-            fprintf(map_info.log, "[%08x]  %s\n", from, map_info.fn_name[i]);
-        }
-        else{
-            fprintf(map_info.log, "[%08x]  %08x\n", from, to);
-        }
-    }
-}
-
-/** */
-void log_call(uint32_t to, uint32_t from){
-    int32_t i,j;
-
-    /* If no map file has been loaded, skip trace */
-    if((!map_info.num_functions) || (!map_info.log)) return;
-
-    i = function_index(to);
-    if(i>=0){
-        call_depth++;
-        fprintf(map_info.log, "[%08x]  ", from);
-        for(j=0;j<call_depth;j++){
-            fprintf(map_info.log, ". ");
-        }
-        fprintf(map_info.log, "%s{\n", map_info.fn_name[i]);
-    }
-}
-
-int32_t function_index(uint32_t address){
-    uint32_t i;
-
-    for(i=0;i<map_info.num_functions;i++){
-        if(address==map_info.fn_address[i]){
-            return i;
-        }
-    }
-    return -1;
-}
 
 /*---- Execution log ---------------------------------------------------------*/
 
@@ -576,320 +213,12 @@ int test_pattern(unsigned int base, unsigned int address){
 }
 
 
-/** Read memory, optionally logging */
-int mem_read(t_state *s, int size, unsigned int address, int log){
-    unsigned int value=0, word_value=0, i, ptr;
-    unsigned int full_address = address;
-
-    /* Handle access to debug register block */
-    if((address&0xfffffff0)==(TB_DEBUG&0xfffffff0)){
-        return debug_reg_read(s, size, address);
-    }
-
-    /* Handle access to GPIO register block */
-    /* FIXME this is actually an APPLICATION feature, should be optional! */
-    if((address&0xfffffff0)==(IO_GPIO&0xfffffff0)){
-        return gpio_reg_read(s, size, address);
-    }
-
-
-    s->irqStatus |= IRQ_UART_WRITE_AVAILABLE;
-    switch(address){
-    case TB_UART_RX:
-        /* FIXME Take input from text file */
-        /* Wait for incoming character */
-        while(!kbhit());
-        HWMemory[0] = getch();
-        //s->irqStatus &= ~IRQ_UART_READ_AVAILABLE; //clear bit
-        printf("%c", HWMemory[0]);
-        return HWMemory[0];
-    case UART_STATUS:
-        /* Hardcoded status bits: tx and rx available */
-        return IRQ_UART_WRITE_AVAILABLE | IRQ_UART_READ_AVAILABLE;
-    case TIMER_READ:
-        printf("TIMER = %10d\n", s->instruction_ctr);
-        return s->instruction_ctr;
-        break;
-    case IRQ_MASK:
-       return HWMemory[1];
-    case IRQ_MASK + 4:
-       slite_sleep(10);
-       return 0;
-    case IRQ_STATUS:
-       /*if(kbhit())
-          s->irqStatus |= IRQ_UART_READ_AVAILABLE;
-       return s->irqStatus;
-       */
-       /* FIXME Optionally simulate UART TX delay */
-       word_value = 0x00000003; /* Ready to TX and RX */
-       //log_read(s, full_address, word_value, size, log);
-       return word_value;
-    }
-
-    /* point ptr to the byte in the block, or NULL is the address is unmapped */
-    ptr = 0;
-    for(i=0;i<NUM_MEM_BLOCKS;i++){
-        if((address & s->blocks[i].mask) ==
-           (s->blocks[i].start & s->blocks[i].mask)){
-            ptr = (unsigned)(s->blocks[i].mem) +
-                  ((address - s->blocks[i].start) % s->blocks[i].size);
-            break;
-        }
-    }
-    if(!ptr){
-        /* address out of mapped blocks: log and return zero */
-        /* if bit CP0.16==1, this is a D-Cache line invalidation access and
-           the HW will not read any actual data, so skip the log (@note1) */
-        // FIXME refactor
-        printf("MEM RD ERROR @ 0x%08x [0x%08x]\n", s->pc, full_address);
-        if(log_enabled(s) && log!=0 && !(s->cp0_status & (1<<16))){
-            fprintf(s->t.log, "(%08X) [%08X] <**>=%08X RD UNMAPPED\n",
-                s->pc, full_address, 0);
-        }
-        return 0;
-    }
-
-    if((s->blocks[i].flags & MEM_TEST)){
-        return test_pattern(s->blocks[i].start, address);
-    }
-
-    /* get the whole word */
-    word_value = *(int*)(ptr&0xfffffffc);
-    if(s->big_endian){
-        word_value = ntohl(word_value);
-    }
-
-    switch(size){
-    case 4:
-        if(address & 3){
-            printf("Unaligned access PC=0x%x address=0x%x\n",
-                (int)s->pc, (int)address);
-        }
-        if((address & 3) != 0){
-            /* unaligned word, log fault */
-            s->failed_assertions |= ASRT_UNALIGNED_READ;
-            s->faulty_address = address;
-            address = address & 0xfffffffc;
-        }
-        value = *(int*)ptr;
-        if(s->big_endian){
-            value = ntohl(value);
-        }
-        break;
-    case 2:
-        if((address & 1) != 0){
-            /* unaligned halfword, log fault */
-            s->failed_assertions |= ASRT_UNALIGNED_READ;
-            s->faulty_address = address;
-            address = address & 0xfffffffe;
-        }
-        value = *(unsigned short*)ptr;
-        if(s->big_endian){
-            value = ntohs((unsigned short)value);
-        }
-        break;
-    case 1:
-        value = *(unsigned char*)ptr;
-        break;
-    default:
-        /* This is a bug, display warning */
-        printf("\n\n**** BUG: wrong memory read size at 0x%08x\n\n", s->pc);
-    }
-
-    //log_read(s, full_address, value, size, log);
-    return(value);
-}
-
-/** Read from GPIO register (HW register simplified for TB). */
-uint16_t gpio_reg_read(t_state *s, int size, unsigned int address){
-    /* A single 16 bit register available */
-    return (s->gpio_regs[0] + 0x02901) & 0xffff;
-}
-
-/** Write to debug register */
-void gpio_reg_write(t_state *s, uint32_t address, uint32_t data){
-    //printf("GPIO REG[%1d]=%08x\n", (address >> 2)&0x03, data);
-    s->gpio_regs[0] = data & 0xffff;
-}
-
-/** Read from debug register (TB only feature). */
-int debug_reg_read(t_state *s, int size, unsigned int address){
-    /* Four 32 bit registers available */
-    return s->debug_regs[(address >> 2)&0x03];
-}
-
-/** Write to debug register */
-void debug_reg_write(t_state *s, uint32_t address, uint32_t data){
-    /* all other registers are used for display (like LEDs) */
-    //printf("DEBUG REG[%1d]=%08x\n", (address >> 2)&0x03, data);
-    s->debug_regs[(address >> 2)&0x03] = data;
-}
-
-/** Write to memory, including simulated i/o */
-void mem_write(t_state *s, int size, unsigned address, unsigned value, int log){
-    unsigned int i, ptr, mask, dvalue, b0, b1, b2, b3;
-
-    if(log_enabled(s)){
-        b0 = value & 0x000000ff;
-        b1 = value & 0x0000ff00;
-        b2 = value & 0x00ff0000;
-        b3 = value & 0xff000000;
-
-        switch(size){
-        case 4:  mask = 0x0f;
-            dvalue = value;
-            break;
-        case 2:
-            if((address&0x2)==0){
-                mask = 0xc;
-                dvalue = b1<<16 | b0<<16;
-            }
-            else{
-               mask = 0x3;
-               dvalue = b1 | b0;
-            }
-            break;
-        case 1:
-            switch(address%4){
-            case 0 : mask = 0x8;
-                dvalue = b0<<24;
-                break;
-            case 1 : mask = 0x4;
-                dvalue = b0<<16;
-                break;
-            case 2 : mask = 0x2;
-                dvalue = b0<<8;
-                break;
-            case 3 : mask = 0x1;
-                dvalue = b0;
-                break;
-            }
-            break;
-        default:
-            printf("BUG: mem write size invalid (%08x)\n", s->pc);
-            exit(2);
-        }
-
-        fprintf(s->t.log, "(%08X) [%08X] |%02X|=%08X WR\n",
-                //s->op_addr, address&0xfffffffc, mask, dvalue);
-                s->op_addr, address, mask, dvalue);
-    }
-
-    /* Handle accesses to debug registers */
-    if((address&0xfffffff0)==(TB_DEBUG&0xfffffff0)){
-        debug_reg_write(s, address, value);
-        return;
-    }
-
-    /* Handle accesses to GPIO registers */
-    /* FIXME Application feature, not CPU's, should be optional! */
-    if((address&0xfffffff0)==(IO_GPIO&0xfffffff0)){
-        gpio_reg_write(s, address, value);
-        return;
-    }
-
-    // Capture accesses to simulated registers.
-    // FIXME should be enabled with command line argument
-    switch(address){
-    case TB_UART_TX:
-        putch(value);
-        fflush(stdout);
-        return;
-    case TB_HW_IRQ:
-        /* HW interrupt trigger register */
-        s->t.irq_trigger_countdown = 3;
-        s->t.irq_trigger_inputs = value;
-        return;
-    case TB_STOP_SIM:
-        /* Simulation stop: writing anything here stops the simulation.
-        The value being written is, by convention, the number of errors
-        detected in a test bench program and will be displayed as such.
-        */
-        fprintf(stderr, "Simulation terminated by program command.\n\n");
-        if (value>0) {
-            fprintf(stderr, "Program reports FAILURE -- %d errors.\n", value);
-        }
-        else {
-            fprintf(stderr, "Program reports SUCCESS -- no errors.\n");
-        }
-        fprintf(stderr, "\n");
-        s->wakeup = 1;
-        return;
-    case IRQ_MASK:
-        HWMemory[1] = value;
-        return;
-    case IRQ_STATUS:
-        s->irqStatus = value;
-        return;
-    }
-
-    ptr = 0;
-    for(i=0;i<NUM_MEM_BLOCKS;i++){
-        if((address & s->blocks[i].mask) ==
-                  (s->blocks[i].start & s->blocks[i].mask)){
-            ptr = (unsigned)(s->blocks[i].mem) +
-                            ((address - s->blocks[i].start) % s->blocks[i].size);
-
-            if(s->blocks[i].flags & MEM_READONLY){
-                if(log_enabled(s) && log!=0){
-                    fprintf(s->t.log, "(%08X) [%08X] |%02X|=%08X WR READ ONLY\n",
-                    s->op_addr, address, mask, dvalue);
-                    return;
-                }
-            }
-            break;
-        }
-    }
-    if(!ptr){
-        /* address out of mapped blocks: log and return zero */
-        printf("MEM WR ERROR @ 0x%08x [0x%08x]\n", s->pc, address);
-        if(log_enabled(s) && log!=0){
-            fprintf(s->t.log, "(%08X) [%08X] |%02X|=%08X WR UNMAPPED\n",
-                s->op_addr, address, mask, dvalue);
-        }
-        return;
-    }
-
-    switch(size){
-    case 4:
-        if((address & 3) != 0){
-            /* unaligned word, log fault */
-            s->failed_assertions |= ASRT_UNALIGNED_WRITE;
-            s->faulty_address = address;
-            address = address & (~0x03);
-        }
-        if(s->big_endian){
-            value = htonl(value);
-        }
-        *(int*)ptr = value;
-        break;
-    case 2:
-        if((address & 1) != 0){
-            /* unaligned halfword, log fault */
-            s->failed_assertions |= ASRT_UNALIGNED_WRITE;
-            s->faulty_address = address;
-            address = address & (~0x01);
-        }
-        if(s->big_endian){
-            value = htons((unsigned short)value);
-        }
-        *(short*)ptr = (unsigned short)value;
-        break;
-    case 1:
-        *(char*)ptr = (unsigned char)value;
-        break;
-    default:
-        /* This is a bug, display warning */
-        printf("\n\n**** BUG: wrong memory write size at 0x%08x\n\n", s->pc);
-    }
-}
-
 /**
     Compute signed remainder in C99 like the HW does.
 
     The remainder must have the same sign as the dividend. This is how the HW
     works and what C99 mandates, but this program might be compiled with C90.
-    So, to be on te safe side, we do the remainder explicitly here.
+    So, to be on the safe side, we do the remainder explicitly here.
 */
 int32_t signed_rem(int32_t dividend, int32_t divisor) {
     int32_t rem = dividend % divisor;
@@ -1024,10 +353,6 @@ uint32_t ins_bitfield(uint32_t target, uint32_t src, uint32_t opcode){
 
 /*---- Optional MMU and cache implementation ---------------------------------*/
 
-/*
-   The actual core does not have a cache so all of the original Plasma mlite.c
-   code for cache simulation has been removed.
-*/
 
 /*---- End optional cache implementation -------------------------------------*/
 
@@ -1734,257 +1059,6 @@ void show_state(t_state *s){
     s->pc = j; /* restore pc value */
 }
 
-/** Show debug monitor prompt and execute user command */
-void do_debug(t_state *s, uint32_t no_prompt){
-    int ch;
-    int i, j=0, watch=0, addr;
-    j = s->breakpoint;
-    s->pc_next = s->pc + 4;
-    s->skip = 0;
-    s->wakeup = 0;
-
-    printf("Starting simulation.\n");
-
-    if(no_prompt){
-        ch = '5'; /* 'go' command */
-        //printf("\n\n");
-    }
-    else{
-        show_state(s);
-        ch = ' ';
-    }
-
-    for(;;){
-        if(ch != 'n' && !no_prompt){
-            if(watch){
-                printf("0x%8.8x=0x%8.8x\n", watch, mem_read(s, 4, watch,0));
-            }
-            printf("1=Debug   2=Trace   3=Step    4=BreakPt 5=Go      ");
-            printf("6=Memory  7=Watch   8=Jump\n");
-            printf("9=Quit    A=Dump    L=LogTrg  C=Disasm  ");
-            printf("> ");
-        }
-        if(ch==' ') ch = getch();
-        if(ch != 'n'){
-            printf("\n");
-        }
-        switch(ch){
-        case 'a': case 'A':
-            dump_trace_buffer(s); break;
-        case '1': case 'd': case ' ':
-            cycle(s, 0); show_state(s); break;
-        case 'n':
-            cycle(s, 1); break;
-        case '2': case 't':
-            cycle(s, 0); printf("*"); cycle(s, 10); break;
-        case '3': case 's':
-            printf("Count> ");
-            scanf("%d", &j);
-            for(i = 0; i < j; ++i){
-                cycle(s, 1);
-            }
-            show_state(s);
-            break;
-        case '4': case 'b':
-            printf("Line> ");
-            scanf("%x", &j);
-            printf("break point=0x%x\n", j);
-            break;
-        case '5': case 'g':
-            s->wakeup = 0;
-            cycle(s, 0);
-            while(s->wakeup == 0){
-                if(s->pc == j){
-                    printf("\n\nStop: pc = 0x%08x\n\n", j);
-                    break;
-                }
-                cycle(s, 0);
-            }
-            if(no_prompt) return;
-            show_state(s);
-            break;
-        case 'G':
-            s->wakeup = 0;
-            cycle(s, 1);
-            while(s->wakeup == 0){
-                if(s->pc == j){
-                    break;
-                }
-                cycle(s, 1);
-            }
-            show_state(s);
-            break;
-        case '6': case 'm':
-            printf("Memory> ");
-            scanf("%x", &j);
-            for(i = 0; i < 8; ++i){
-                printf("%8.8x ", mem_read(s, 4, j+i*4, 0));
-            }
-            printf("\n");
-            break;
-        case '7': case 'w':
-            printf("Watch> ");
-            scanf("%x", &watch);
-            break;
-        case '8': case 'j':
-            printf("Jump> ");
-            scanf("%x", &addr);
-            s->pc = addr;
-            s->pc_next = addr + 4;
-            show_state(s);
-            break;
-        case '9': case 'q':
-            return;
-        case 'l':
-            printf("Address> ");
-            scanf("%x", &(s->t.log_trigger_address));
-            printf("Log trigger address=0x%x\n", s->t.log_trigger_address);
-            break;
-        case 'c': case 'C':
-            j = s->pc;
-            for(i = 1; i <= 16; ++i){
-                printf("%c", i==0 ? '*' : ' ');
-                s->pc = s->t.disasm_ptr + i * 4;
-                cycle(s, 10);
-            }
-            s->t.disasm_ptr = s->pc;
-            s->pc = j;
-        }
-        ch = ' ';
-    }
-}
-
-/** Read binary code and data files */
-int read_binary_files(t_state *s, t_args *args){
-    FILE *in;
-    uint8_t *target;
-    uint32_t bytes=0, i, files_read=0;
-
-    /* read map file if requested */
-    if(args->map_filename!=NULL){
-        if(read_map_file(args->map_filename, &map_info)<0){
-            printf("Trouble reading map file '%s', quitting!\n",
-                   args->map_filename);
-            return 0;
-        }
-        printf("Read %d functions from the map file; call trace enabled.\n\n",
-               map_info.num_functions);
-    }
-
-    /* read object code binaries */
-    for(i=0;i<NUM_MEM_BLOCKS;i++){
-        bytes = 0;
-        if(args->bin_filename[i]!=NULL){
-
-            in = fopen(args->bin_filename[i], "rb");
-            if(in == NULL){
-                free_cpu(s);
-                printf("Can't open file %s, quitting!\n",args->bin_filename[i]);
-                return(0);
-            }
-
-            /* FIXME load offset 0x2000 for linux kernel hardcoded! */
-            //bytes = fread((s->blocks[i].mem + 0x2000), 1, s->blocks[i].size, in);
-            target = (uint8_t *)(s->blocks[i].mem + args->offset[i]);
-            while(!feof(in) &&
-                  ((bytes+1024+args->offset[i]) < (s->blocks[i].size))){
-                bytes += fread(&(target[bytes]), 1, 1024, in);
-                if(errno!=0){
-                    printf("ERROR: file load failed with code %d ('%s')\n",
-                        errno, strerror(errno));
-                    free_cpu(s);
-                    return 0;
-                }
-            }
-
-            fclose(in);
-
-            /* Now reverse the endianness of the data we just read, if it's
-             necessary. */
-             /* FIXME handle little-endian stuff (?) */
-            //reverse_endianess(target, bytes);
-
-            files_read++;
-        }
-        printf("%-16s [size= %6dKB, start= 0x%08x] loaded %d bytes.\n",
-                s->blocks[i].area_name,
-                s->blocks[i].size/1024,
-                s->blocks[i].start,
-                bytes);
-    }
-
-    if(!files_read){
-        free_cpu(s);
-        printf("No binary object files read, quitting\n");
-        return 0;
-    }
-
-    return files_read;
-}
-
-void reverse_endianess(uint8_t *data, uint32_t bytes){
-    uint8_t w[4];
-    uint32_t i, j;
-
-    for(i=0;i<bytes;i=i+4){
-        for(j=0;j<4;j++){
-            w[3-j] = data[i+j];
-        }
-        for(j=0;j<4;j++){
-            data[i+j] = w[j];
-        }
-    }
-}
-
-
-/*----------------------------------------------------------------------------*/
-
-int main(int argc,char *argv[]){
-    t_state state, *s=&state;
-
-
-
-    /* Parse command line and pass any relevant arguments to CPU record */
-    if(parse_cmd_line(argc,argv, &cmd_line_args)==0){
-        return 0;
-    }
-
-    printf("MIPS-I emulator (" __DATE__ ")\n\n");
-    if(!init_cpu(s, &cmd_line_args)){
-        printf("Trouble allocating memory, quitting!\n");
-        return 1;
-    };
-
-    /* Read binary object files into memory*/
-    if(!read_binary_files(s, &cmd_line_args)){
-        return 2;
-    }
-    printf("\n\n");
-
-    init_trace_buffer(s, &cmd_line_args);
-
-    /* NOTE: Original mlite supported loading little-endian code, which this
-      program doesn't. The endianess-conversion code has been removed.
-    */
-
-    /* Simulate a CPU reset */
-    reset_cpu(s);
-
-    /* Simulate the work of the uClinux bootloader */
-    if(cmd_line_args.memory_map == MAP_UCLINUX){
-        /* FIXME this 'bootloader' is a stub, flesh it out */
-        s->pc = 0x80002400;
-    }
-
-    /* Enter debug command interface; will only exit clean with user command */
-    do_debug(s, cmd_line_args.no_prompt);
-
-    /* Close and deallocate everything and quit */
-    close_trace_buffer(s);
-    free_cpu(s);
-    return(0);
-}
-
 /*-- Simulated COP2 interface (for CPU testing only) -------------------------*/
 
 static uint32_t cop2_get_reg(t_state *s,
@@ -2057,65 +1131,6 @@ void cop2(t_state *s, uint32_t opcode) {
 }
 
 
-/*----------------------------------------------------------------------------*/
-
-
-void init_trace_buffer(t_state *s, t_args *args){
-    int i;
-
-    /* setup misc info related to the monitor interface */
-    s->t.disasm_ptr = VECTOR_RESET;
-
-#if FILE_LOGGING_DISABLED
-    s->t.log = NULL;
-    s->t.log_triggered = 0;
-    map_info.log = NULL;
-    return;
-#else
-    /* clear trace buffer */
-    for(i=0;i<TRACE_BUFFER_SIZE;i++){
-        s->t.buf[i]=0xffffffff;
-    }
-    s->t.next = 0;
-
-    /* if file logging is enabled, open log file */
-    if(args->log_file_name!=NULL){
-        s->t.log = fopen(args->log_file_name, "w");
-        if(s->t.log==NULL){
-            printf("Error opening log file '%s', file logging disabled\n",
-                    args->log_file_name);
-        }
-    }
-    else{
-        s->t.log = NULL;
-    }
-
-    /* Setup log trigger */
-    s->t.log_triggered = 0;
-    s->t.log_trigger_address = args->log_trigger_address;
-
-    /* if file logging of function calls is enabled, open log file */
-    if(map_info.log_filename!=NULL){
-        map_info.log = fopen(map_info.log_filename, "w");
-        if(map_info.log==NULL){
-            printf("Error opening log file '%s', file logging disabled\n",
-                    map_info.log_filename);
-        }
-    }
-#endif
-}
-
-/** Dumps last jump targets as a chunk of hex numbers (older is left top) */
-void dump_trace_buffer(t_state *s){
-    int i, col;
-
-    for(i=0, col=0;i<TRACE_BUFFER_SIZE;i++, col++){
-        printf("%08x ", s->t.buf[s->t.next + i]);
-        if((col % 8)==7){
-            printf("\n");
-        }
-    }
-}
 
 /** Logs last cycle's activity (changes in state and/or loads/stores) */
 uint32_t log_cycle(t_state *s){
@@ -2187,16 +1202,6 @@ uint32_t log_cycle(t_state *s){
     return 0;
 }
 
-/** Frees debug buffers and closes log file */
-void close_trace_buffer(t_state *s){
-    if(s->t.log){
-        fclose(s->t.log);
-    }
-    if(map_info.log){
-        fclose(map_info.log);
-    }
-}
-
 /** Logs a message for each failed assertion, each in a line */
 void log_failed_assertions(t_state *s){
     unsigned bitmap = s->failed_assertions;
@@ -2231,54 +1236,6 @@ void trigger_log(t_state *s){
     s->t.lo = s->lo;
     s->t.hi = s->hi;
     s->t.epc = s->epc;
-}
-
-int32_t read_map_file(char *filename, t_map_info* map){
-    FILE *f;
-    uint32_t address, i;
-    uint32_t segment_text = 0;
-    char line[256];
-    char name[256];
-
-    f = fopen (filename, "rt");  /* open the file for reading */
-
-    if(!f){
-        return -1;
-    }
-
-   while(fgets(line, sizeof(line)-1, f) != NULL){
-       if(!strncmp(line, ".text", 5)){
-           segment_text = 1;
-       }
-       else if(line[0]==' ' && segment_text){
-            /* may be a function address */
-            for(i=0;(i<sizeof(line)-1) && (line[i]==' '); i++);
-            if(line[i]=='0'){
-                sscanf(line, "%*[ \n\t]%x%*[ \n\t]%s", &address, &(name[0]));
-
-                strncpy(map->fn_name[map->num_functions],
-                        name, MAP_MAX_NAME_LEN-1);
-                map->fn_address[map->num_functions] = address;
-                map->num_functions++;
-                if(map->num_functions >= MAP_MAX_FUNCTIONS){
-                    printf("WARNING: too many functions in map file!\n");
-                    return map->num_functions;
-                }
-            }
-       }
-       else if(line[0]=='.' && segment_text){
-           break;
-       }
-    }
-    fclose(f);
-
-#if 0
-    for(i=0;i<map->num_functions;i++){
-        printf("--> %08x %s\n", map->fn_address[i], map->fn_name[i]);
-    }
-#endif
-
-    return map->num_functions;
 }
 
 
@@ -2346,131 +1303,4 @@ int init_cpu(t_state *s, t_args *args){
         memset(s->blocks[i].mem, 0, s->blocks[i].size);
     }
     return NUM_MEM_BLOCKS;
-}
-
-int32_t parse_cmd_line(uint32_t argc, char **argv, t_args *args){
-    uint32_t i;
-
-    /* Initialize logging parameters */
-    map_info.num_functions = 0;
-    map_info.log_filename = NULL;
-    map_info.log = stdout;
-
-    /* fill cmd line args with default values */
-    args->memory_map = MAP_DEFAULT;
-    args->trap_on_reserved = 0;
-    args->stop_on_unimplemented = 0;
-    args->emulate_some_mips32 = 1;
-    args->timer_prescaler = DEFAULT_TIMER_PRESCALER;
-    args->start_addr = VECTOR_RESET;
-    args->do_unaligned = 0;
-    args->no_prompt = 0;
-    args->breakpoint = 0xffffffff;
-    args->log_file_name = "sw_sim_log.txt";
-    args->log_trigger_address = VECTOR_RESET;
-    args->map_filename = NULL;
-    for(i=0;i<NUM_MEM_BLOCKS;i++){
-        args->bin_filename[i] = NULL;
-        args->offset[i] = 0;
-    }
-
-    /* parse actual cmd line args */
-    for(i=1;i<argc;i++){
-        if(strncmp(argv[i],"--memory=", strlen("--memory="))==0){
-            args->memory_map = atoi(&(argv[i][strlen("--memory=")]));
-            /* FIXME selecting uClinux enables unaligned L/S emulation */
-            if (args->memory_map == MAP_UCLINUX){
-                args->do_unaligned = 1;
-            }
-        }
-        else if(strcmp(argv[i],"--unaligned")==0){
-            args->do_unaligned = 1;
-        }
-        else if(strcmp(argv[i],"--noprompt")==0){
-            args->no_prompt = 1;
-        }
-        else if(strcmp(argv[i],"--stop_on_unimplemented")==0){
-            args->stop_on_unimplemented = 1;
-        }
-        else if(strcmp(argv[i],"--notrap")==0){
-            args->trap_on_reserved = 0;
-        }
-        else if(strcmp(argv[i],"--nomips32")==0){
-            args->emulate_some_mips32 = 0;
-        }
-        // FIXME simplify object code file options
-        else if(strncmp(argv[i],"--bram=", strlen("--bram="))==0){
-            args->bin_filename[0] = &(argv[i][strlen("--bram=")]);
-        }
-        else if(strncmp(argv[i],"--flash=", strlen("--flash="))==0){
-            args->bin_filename[3] = &(argv[i][strlen("--flash=")]);
-        }
-        else if(strncmp(argv[i],"--xram=", strlen("--xram="))==0){
-            args->bin_filename[1] = &(argv[i][strlen("--xram=")]);
-        }
-        else if(strncmp(argv[i],"--map=", strlen("--map="))==0){
-            args->map_filename = &(argv[i][strlen("--map=")]);
-        }
-        else if(strncmp(argv[i],"--trace_log=", strlen("--trace_log="))==0){
-            map_info.log_filename = &(argv[i][strlen("--trace_log=")]);
-        }
-        else if(strncmp(argv[i],"--start=", strlen("--start="))==0){
-            sscanf(&(argv[i][strlen("--start=")]), "%x", &(args->start_addr));
-        }
-        else if(strncmp(argv[i],"--kernel=", strlen("--kernel="))==0){
-            args->bin_filename[1] = &(argv[i][strlen("--kernel=")]);
-            /* FIXME uClinux kernel 'offset' hardcoded */
-            args->offset[1] = 0x2000;
-        }
-        else if(strncmp(argv[i],"--trigger=", strlen("--trigger="))==0){
-            sscanf(&(argv[i][strlen("--trigger=")]), "%x", &(args->log_trigger_address));
-        }
-        else if(strncmp(argv[i],"--break=", strlen("--break="))==0){
-            sscanf(&(argv[i][strlen("--break=")]), "%x", &(args->breakpoint));
-        }
-        else if(strncmp(argv[i],"--breakpoint=", strlen("--breakpoint="))==0){
-            sscanf(&(argv[i][strlen("--breakpoint=")]), "%x", &(args->breakpoint));
-        }
-        else if((strcmp(argv[i],"--help")==0)||(strcmp(argv[i],"-h")==0)){
-            usage();
-            return 0;
-        }
-        else{
-            printf("unknown argument '%s'\n\n",argv[i]);
-            usage();
-            return 0;
-        }
-    }
-
-    return 1;
-}
-
-void usage(void){
-    printf("Usage:");
-    printf("    slite file.exe [arguments]\n");
-    printf("Arguments:\n");
-    printf("--bram=<file name>      : BRAM initialization file\n");
-    printf("--xram=<file name>      : XRAM initialization file\n");
-    printf("--kernel=<file name>    : XRAM initialization file for uClinux kernel\n");
-    printf("                          (loads at block offset 0x2000)\n");
-    printf("--flash=<file name>     : FLASH initialization file\n");
-    printf("--map=<file name>       : Map file to be used for tracing, if any\n");
-    printf("--trace_log=<file name> : Log file used for tracing, if any\n");
-    printf("--trigger=<hex number>  : Log trigger address\n");
-    printf("--break=<hex number>    : Breakpoint address\n");
-    printf("--start=<hex number>    : Start here instead of at reset vector\n");
-    printf("--notrap                : Reserved opcodes are NOPs and don't trap\n");
-    printf("--nomips32              : Do not emulate any mips32 opcodes\n");
-    printf("--memory=<dec number>   : Select emulated memory map\n");
-    printf("    N=0 -- Development memory map (DEFAULT):\n");
-    printf("        Code TCM at     0xbfc00000 (64KB)\n");
-    printf("        Cached RAM at   0x80000000 (512KB)\n");
-    printf("        Cached ROM at   0x90000000 (512KB) (dummy hardwired data)\n");
-    printf("        Cached FLASH at 0xa0000000 (256KB)\n");
-    printf("    N=1 -- Experimental uClinux map (under construction, do not use)\n");
-    printf("--unaligned             : Implement unaligned load/store instructions\n");
-    printf("--noprompt              : Run in batch mode\n");
-    printf("--stop_at_zero          : Stop simulation when fetching from address 0x0\n");
-    printf("--stop_on_unimplemented : Stop simulation when executing unimplemented opcode\n");
-    printf("--help, -h              : Show this usage text\n");
 }

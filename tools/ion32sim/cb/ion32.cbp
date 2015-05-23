@@ -26,6 +26,13 @@
 		<Unit filename="../src/ion32sim.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="../src/ion32sim.h" />
+		<Unit filename="../src/load_store.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../src/main.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Extensions>
 			<DoxyBlocks>
 				<comment_style block="0" line="0" />
