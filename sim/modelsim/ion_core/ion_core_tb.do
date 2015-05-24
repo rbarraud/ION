@@ -29,15 +29,32 @@ vcom -reportprogress 300 -work work ../../../src/testbench/ion_core_tb.vhdl
 # Set up the simulation.
 vsim -t ps work.ion_core_tb(testbench)
 
-# Run a script that will set up a neat waveform window for us...
-do ./ion_core_tb_wave.do
-# ...and do some other cosmetic configuration choices.
-set PrefMain(font) {Courier 9 roman normal}
+# If we're running with a GUI (as we will by default) we want to set up the 
+# wave window with a pre-packaged set of useful signals.
+if {![info exists nogui]} {
+    # Run a script that will set up a neat waveform window for us...
+    do ./ion_core_tb_wave.do
+    # ...and do some other cosmetic configuration choices.
+    set PrefMain(font) {Courier 9 roman normal}
+}
 
 # Tell simulator to ignore these warnings or we´ll be swamped in them.
 # These are produced by Z or U values in the buses and are harmless.
 set NumericStdNoWarnings 1
 set StdArithNoWarnings 1
 
-# Ready to run, do so for a resonable time.
-run 550 us
+# Ready to run, do so for a resonable time. The TB will stop when done.
+#run 10000 us
+# Quien when done.
+#quit -code 0
+
+set hitassertion 0
+onbreak {
+    set hitassertion 1
+    resume
+}
+run -all
+if {$hitassertion} {
+    puts "TB terminated by assertion.\n\n"
+}
+exit -code 0
