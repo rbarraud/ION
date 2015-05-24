@@ -62,6 +62,8 @@ move_data_section_done:
     
     jal     main                    # init done; call main()
     nop
+    li      $t0,0xFFFF8018          # store main ret value in TB_MSG_REG.
+    sw      $v0,0($t0)
 $L1:
     j       $L1
     nop
