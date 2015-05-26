@@ -44,7 +44,7 @@ STANDALONE = 1
 # The main makefile will now expect us to define a "standalone" rule to build 
 # our executable. We can cram everything in this single rule.
 standalone:
-	$(AS) -o opcode_emu.o $(SW_ROOT)/common/crt/opcode_emu.s
+	$(AS) -o opcode_emu.o $(SW_ROOT)/common/bsp/onchip/crt/opcode_emu.s
 	$(AS) $(AFLAGS) -mips32r2 -o $(EXECUTABLE).o $(TBARGS) cputest.s
 	$(LD) $(LFLAGS) -Map $(EXECUTABLE).map -s -N -o $(EXECUTABLE).axf $(EXECUTABLE).o opcode_emu.o
 	-@$(DUMP) -I elf32-big --disassemble $(EXECUTABLE).axf > $(EXECUTABLE).lst
