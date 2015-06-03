@@ -1,12 +1,30 @@
-
-# Get common makefile stuff (toolchain & system config).
-include ../common/makefile
+# This makefile will invoke the main makefile after configuring the build by 
+# setting the value of these variables:
+#
+# PLATFORM      Name of BSP to use (i.e. subdirectory of common/bsp).
+# EXECUTABLE    Name of executable file (MANDATORY).
+# DESCRIPTION   String that labels this app in several auto-generated files.
+# SIM_LENGTH    RTL simulation timeout in clock cycles.
+# LOG_TRIGGER   Address that will trigger RTL execution logging. 
+# 
+# They are optional unless stated otherwise.
+#
+# Also, you can override the default value of the folloging variables by giving 
+# them any value in this file:
+#
+# CFLAGS
+#
+# You can use the following targets to hook into the main build and e.g. set 
+# variable values before compilation of each target:
+#
+# ** target set_tb_app_variables:   Invoked from common target "tb_app".
+# ** target set_tb_core_variables:  Invoked form common target "tb_core".
 
 #-- Application setup ----------------------------------------------------------
 
-# Name of executable and label to use in VHDL files.
-TARGET = blinky
-APP_NAME = "Blinky"
+PLATFORM = onchip
+EXECUTABLE = blinky
+DESCRIPTION = "LED Blinker"
 
 # Test bench simulation timeout period in clock cycles.
 SIM_LENGTH = 90000
@@ -15,29 +33,7 @@ LOG_TRIGGER = 0xbfc00000
 
 #-- Build flag overrides -------------------------------------------------------
 
-
-#-- App build targets & rules --------------------------------------------------
-
-.PHONY: program
-program: $(TARGET).bin $(TARGET).data
-
-
-$(TARGET).axf: $(OBJS)
-	$(LD) $(LFLAGS) -Map $(TARGET).map -N -o $(TARGET).axf $(OBJS)
-	-@$(DUMP) -m mips -S --disassemble $(TARGET).axf > $(TARGET).lst
-
-%.o: %.c
-	$(CC) $(CFLAGS) $<    
-
-    
-$(TARGET).bin: $(TARGET).axf
-# Extract object code to be placed in code space
-	$(COPY) -I elf32-big -O binary $(TARGET).axf $(TARGET).bin
-
-$(TARGET).data: $(TARGET).axf
-# Extract object code to be placed in data space (useful in TBs)
-	$(COPY) -I elf32-big -j.rodata -j.bss -O binary $(TARGET).axf $(TARGET).data
-
+CFLAGS = -O2 -Wall -c -s -msoft-float -mips1 -G0 $(CC_HWSYMS)
 
 #-- Targets invoked by tb_app and tb_core (see common makefile) ----------------
 
@@ -49,9 +45,6 @@ set_tb_app_variables:
 set_tb_core_variables: 
 	$(eval TBARGS := )
 
-    
+#-- Application build configuration done, get main makefile --------------------
 
-#-- And now the usual housekeeping stuff ---------------------------------------
-
-.PHONY: clean
-
+include ../common/makefile
