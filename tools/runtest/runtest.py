@@ -50,7 +50,11 @@ def main(argv):
         parser.print_help()
         sys.exit(1)
         
-    test.run(opts.tbname, args[0], quiet=opts.quiet, check_output=opts.check_exit)
+    test.run(opts.tbname, args[0], 
+        hw=not opts.only_sw,
+        sw=not opts.only_rtl,
+        quiet=opts.quiet, 
+        check_output=opts.check_exit)
     
     
 if __name__ == "__main__":

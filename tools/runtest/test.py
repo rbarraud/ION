@@ -183,7 +183,7 @@ def sw_build(tbname, progname, quiet=False):
     
     # Run the test case on the SW simulator.
     progdir = TEST_ROOT_PATH + "/" + progname
-    command = ["make", "tb_app"]
+    command = ["make", "tb_core"]
     
     try:
         sp = subprocess.Popen(command,
@@ -317,7 +317,7 @@ def testbench_exists(tbname):
     return os.path.exists(testbench_work_dir)
     
     
-def run(tbname, progname, quiet=False, check_output=True):
+def run(tbname, progname, quiet=False, check_output=True, hw=True, sw=True):
     """Run a test on SW simulator AND on RTL simulator, compare logs. 
     
     This function will do the following:
@@ -352,14 +352,17 @@ def run(tbname, progname, quiet=False, check_output=True):
     passed &= sw_build(tbname, progname, quiet=quiet)
     if not passed:
         return False
-    passed &= sw_sim(tbname, progname, quiet=quiet, check_output=check_output)
-    if not passed:
-        return False
-    passed &= rtl_modelsim(tbname, progname, quiet=quiet, check_output=check_output)
-    if not passed:
-        return False
-        
-    passed &= compare_exec_logs(tbname, progname)
+    if sw:
+        passed &= sw_sim(tbname, progname, quiet=quiet, check_output=check_output)
+        if not passed:
+            return False
+    if hw:
+        passed &= rtl_modelsim(tbname, progname, quiet=quiet, check_output=check_output)
+        if not passed:
+            return False
+
+    if sw and hw:
+        passed &= compare_exec_logs(tbname, progname)
     
     print_outcome(tbname, progname, passed)
     
