@@ -6,27 +6,30 @@ This project is in the middle of a refactor-within-a-refactor as I try to re-sta
 ION
 ===
 
-MIPS32r1 compatible CPU.
+MIPS-I compatible CPU.
 
 This is a refactor of the [ION project available in Opencores] (http://opencores.org/project,ion).
 
-The original project is a MIPS-I implementation whereas this one is meant to be MIPS32r1 compatible.
+The aim here is to make this project actually useable and competitive with or1k for deeply embedded applications.
 
 This project is eventually to be backported to OpenCores.
 
 
-## Feature wish list
+## These are the changes that we plan to include in this refactor:
 
-* Compatible to MIPS32r1 architecture.
+* Compatible to <strike>MIPS32r1</strike>MIPS-I architecture -- MIPS-I is safe from legal hassles and powerful enough.
 * Generic COP2 interface.
 * Configurable D-Cache (direct mapped, writethrough).
 * Configurable I-Cache (direct mapped).
 * Configurable data TCM meant for BRAM implementation.
 * Configurable, initializable code TCM meant for BRAM implementation and bootstrap.
-* Optimized for area (currently less than 2100 LEs in a Cyclone-2 at 43MHz).
+* Minimalistic, easy to use MCU module with TCMs and caches.
+* 4-stage pipeline (rather than the current, messy 3-stages).
+* Cpu entity rewritten from scratch with clean, readable RTL -- submodules remain unchanged.
+* Optimized for area.
 * Whishbone pipelined interface for memory refills (code and data).
 * Whishbone pipelined interface for uncached peripherals.
-
+* Totally rewritten TB with RTL that is actually readable.
 
 
 ## Status
@@ -41,7 +44,5 @@ Things already done:
 Things missing:
 * New version not tried yet on real hardware.
 * No documentation yet.
-* Some MIPS32r1 opcodes not implemented yet.
-* Some MIPS32r1 COP0 registers not implemented yet.
 * Peripheral WB port missing.
 
