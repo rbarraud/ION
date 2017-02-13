@@ -1,48 +1,17 @@
 WARNING
 =======
 
-This project is in the middle of a refactor-within-a-refactor as I try to re-start it. In the unlikely case there's someone watching this, be aware that until further notice the project will probably be broken -- the RTL and/or the SW samples.
+_This project is stalled in the middle of an unfinished, messy refactor. It won't build and it looks terrible. Don't branch it and don't use it at all at least until you see this warning notice go away. 
+If you're really desperate for a MIPS-I and none of the other many many MIPS-I cores out there will do, then you can take a look at the [Opencores] (http://opencores.org/project,ion) version of this core._
+
 
 ION
 ===
 
 MIPS-I compatible CPU.
 
-This is a refactor of the [ION project available in Opencores] (http://opencores.org/project,ion).
+This is a copy of my [ION project available in Opencores] (http://opencores.org/project,ion) which is a MIPS-I R3000 clone.
 
-The aim here is to make this project actually useable and competitive with or1k for deeply embedded applications.
+I don't think the world really needs another R3000 clone. I started this thing for fun back in 2011 and I did have lots of fun. Now I want to preserve it against the possible sudden disappearance of OpenCores, and maybe I will even refactor it into a viable R3000. Don't hold your breath, though. 
 
-This project is eventually to be backported to OpenCores.
-
-
-## These are the changes that we plan to include in this refactor:
-
-* Compatible to <strike>MIPS32r1</strike>MIPS-I architecture -- MIPS-I is safe from legal hassles and powerful enough.
-* Generic COP2 interface.
-* Configurable D-Cache (direct mapped, writethrough).
-* Configurable I-Cache (direct mapped).
-* Configurable data TCM meant for BRAM implementation.
-* Configurable, initializable code TCM meant for BRAM implementation and bootstrap.
-* Minimalistic, easy to use MCU module with TCMs and caches.
-* 4-stage pipeline (rather than the current, messy 3-stages).
-* Cpu entity rewritten from scratch with clean, readable RTL -- submodules remain unchanged.
-* Optimized for area.
-* Whishbone pipelined interface for memory refills (code and data).
-* Whishbone pipelined interface for uncached peripherals.
-* Totally rewritten TB with RTL that is actually readable.
-
-
-## Status
-
-Things already done:
-* Basic operation (MIPS-I) in place, including HW interrupts, exceptions, etc.
-* Caches done and tested with basic configuration.
-* Small "demo" core including 16-bit SRAM interface for cache refill ports.
-* COP2 interface almost there.
-
-
-Things missing:
-* New version not tried yet on real hardware.
-* No documentation yet.
-* Peripheral WB port missing.
-
+The OpenCores repository is to remain frozen as long as OpenCores lasts. Any further development, if there is any, will happen here.
