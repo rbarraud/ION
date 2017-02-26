@@ -1,11 +1,8 @@
 # Targets: all, clean.
 
 # Executable names, adapt to your platform.
-CC = d:\dev\util\CodeBlocks\MinGW\bin\gcc
-RM = del /q
-
-#CC = gcc
-#RM = rm -f
+CC = cc
+RM = rm -f
 
 
 SRC := $(wildcard src/*.c)
