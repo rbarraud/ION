@@ -3,16 +3,16 @@
 #
 # Variables optionally set over command line:
 #
-#	TEST: 	SW test to run -- name of subdirectory of ../../sw.
+#	TEST: 	SW test to run (name of subdirectory of ../../sw).
 #
 #
 # Targets:
 #
-#	iss:	Run test on ISS ion32sim.
-#	rtl: 	Run test on RTL simulation on iverilog.
+#   iss:	Run test on ISS ion32sim.
+#   rtl: 	Run test on RTL simulation on iverilog.
 #   bin:	Build test SW.
-#	all:	Do iss+rtl and then compare execution logs.
-#	clean:	Clean simulation files *and clean sw test build*.
+#   all:	Do iss+rtl and then compare execution logs.
+#   clean:	Clean simulation files *and clean sw test build*.
 #
 ################################################################################
 
@@ -20,15 +20,15 @@
 # Obviously won't work with current VHDL RTL, part of refactor in progress.
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-
+# Config vars. 
 TEST ?= cputest
 
-CC_HIGLIGHT = "\033[1m"
-CC_NORMAL = "\033[0m"
-
+# Paths.
 ION32SIM = ../../tools/ion32sim/bin/ion32sim
 SWDIR = ../../sw
-
+# Other.
+CC_HIGLIGHT = "\033[1m"
+CC_NORMAL = "\033[0m"
 
 
 .PHONY: iss bin iss all clean
@@ -41,15 +41,12 @@ $(TEST)/firmware.bin:
 	@echo -e $(CC_HIGLIGHT)"Building '"$(TEST)"'..."$(CC_NORMAL)
 	make -C $(SWDIR)/$(TEST) all
 
-
-
-# Run test code on ISS (ion32sim)
+# Run test code on ISS (ion32sim).
 iss: bin
 	@echo -e $(CC_HIGLIGHT)"Running '"$(TEST)"' on ion32sim..."$(CC_NORMAL)
 	$(ION32SIM) --bram=$(SWDIR)/$(TEST)/firmware.bin --noprompt
 
 
-
-
 clean:
+	@rm -f *_log.txt
 	@make -C $(SWDIR)/$(TEST) clean
