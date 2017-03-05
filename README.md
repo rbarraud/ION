@@ -10,6 +10,9 @@ ION
 
 This is a copy of my [ION project available in Opencores] (http://opencores.org/project,ion) which is a MIPS-I R3000 clone.
 
-I don't think the world really needs another R3000 clone. I started this thing for fun back in 2011 and I did have lots of fun. Now I want to preserve it against the possible sudden disappearance of OpenCores, and maybe I will even refactor it into a viable R3000. Don't hold your breath, though. 
+I don't think the world really needs another MIPS clone. I started this thing for fun back in 2011 and I did have lots of fun. Now I want to preserve it against the possible sudden disappearance of OpenCores, and maybe I will even refactor it into a viable MIPS32r1. Don't hold your breath, though. 
 
 The OpenCores repository is to remain frozen as long as OpenCores lasts. Any further development, if there is any, will happen here.
+
+_(I was about to scrap the entire project except for the ISS (ion32sim) and build a MIPS-I from scratch using what I've learnt in these years. However, I've realized that building a MIPS-I toolchain has become somewhat difficult and is only going to become more difficult. So I'm going to turn this into a MIPS32r1 instead (the ISS already supports that ISA).
+The RTL is still going to be entirely scrapped though.)_
