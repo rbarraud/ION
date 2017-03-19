@@ -17,3 +17,16 @@ In this project I'm aiming at a brand new MIPS32r1 implementation which will sha
 
 This is a work in progress. There's only a basic Verilog implementation of a canonic 5-stage pipeline, along with a crude test bench and a similarly basic 'opcode tester' program. Development will advance as leisure time permits and will be tracked in the [wiki page](https://github.com/jaruiz/ION/wiki).
 
+
+Status
+------
+
+While the project is a work in progress in a very early stage of development, there's already a basic version of the CPU capable of passing an equally basic CPU opcode test (`sw/cputest`).
+
+There's a _test driver makefile_ in `sim/iv` that makes use of Icarus Verilog to simulate the RTL. It'll run a given SW test on the RTL simulation and on the ISS (`tools/ion32sim`, part of this project) and match the execution logs. This makes for a very easy development flow.
+
+Apart from Icarus Verilog, youl'll need a MIPS32r1 toolchain to play with this _unmodified_ testbench. I'm using a recent version of [BuildRoot](https://buildroot.org/)'s.
+
+Note that this project has become somewhat _Linux-centric_ in that the test makefiles assume a Linux machine.
+
+Also note that while the old RTL from a previous, abandoned version of this project has been deleted from the repo I still haven't deleted the old test SW and other bits and pieces. The only sw test useable right now is `sw/cputest`.
