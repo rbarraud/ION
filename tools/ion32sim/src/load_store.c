@@ -85,8 +85,8 @@ int mem_read(t_state *s, int size, unsigned int address, int log){
         // FIXME refactor
         printf("MEM RD ERROR @ 0x%08x [0x%08x]\n", s->pc, full_address);
         if(log_enabled(s) && log!=0 && !(s->cp0_status & (1<<16))){
-            fprintf(s->t.log, "(%08X) [%08X] <**>=%08X RD UNMAPPED\n",
-                s->pc, full_address, 0);
+            fprintf(s->t.log, "(%08x) [%08x] <%1d>=%08x RD UNMAPPED\n",
+                s->pc, full_address, size, 0);
         }
         return 0;
     }
@@ -188,9 +188,9 @@ void mem_write(t_state *s, int size, unsigned address, unsigned value, int log){
             exit(2);
         }
 
-        fprintf(s->t.log, "(%08X) [%08X] |%02X|=%08X WR\n",
+        fprintf(s->t.log, "(%08x) [%08x] <%1d>=%08x WR\n",
                 //s->op_addr, address&0xfffffffc, mask, dvalue);
-                s->op_addr, address, mask, dvalue);
+                s->op_addr, address, size, dvalue);
     }
 
     /* Handle accesses to debug registers */
@@ -249,7 +249,7 @@ void mem_write(t_state *s, int size, unsigned address, unsigned value, int log){
 
             if(s->blocks[i].flags & MEM_READONLY){
                 if(log_enabled(s) && log!=0){
-                    fprintf(s->t.log, "(%08X) [%08X] |%02X|=%08X WR READ ONLY\n",
+                    fprintf(s->t.log, "(%08x) [%08x] |%02x|=%08x WR READ ONLY\n",
                     s->op_addr, address, mask, dvalue);
                     return;
                 }
@@ -261,7 +261,7 @@ void mem_write(t_state *s, int size, unsigned address, unsigned value, int log){
         /* address out of mapped blocks: log and return zero */
         printf("MEM WR ERROR @ 0x%08x [0x%08x]\n", s->pc, address);
         if(log_enabled(s) && log!=0){
-            fprintf(s->t.log, "(%08X) [%08X] |%02X|=%08X WR UNMAPPED\n",
+            fprintf(s->t.log, "(%08x) [%08x] |%02x|=%08x WR UNMAPPED\n",
                 s->op_addr, address, mask, dvalue);
         }
         return;

@@ -181,7 +181,7 @@ static void cop2_set_reg(t_state *s,uint32_t rcop, uint32_t sel, bool ctrl, uint
 
 /* Hardware simulation */
 
-uint32_t start_load(t_state *s, uint32_t addr, int rt, int data);
+uint32_t start_load(t_state *s, uint32_t addr, int rt, int data, int size);
 uint32_t simulate_hw_irqs(t_state *s);
 
 
@@ -198,8 +198,8 @@ void log_read(t_state *s, int full_address, int word_value, int size, int log){
     // FIXME refactor
     //if(log_enabled(s) && log!=0 && !(s->cp0_status & 0x00010000)){
     if(log_enabled(s) && log!=0){
-        fprintf(s->t.log, "(%08X) [%08X] <**>=%08X RD\n",
-              s->op_addr, full_address, word_value);
+        fprintf(s->t.log, "(%08x) [%08x] <%1d>=%08x RD\n",
+              s->op_addr, full_address, size, word_value);
     }
 }
 
@@ -436,9 +436,9 @@ void mult_big_signed(int a,
 }
 
 /** Load data from memory (used to simulate load delay slots) */
-uint32_t start_load(t_state *s, uint32_t addr, int rt, int data){
+uint32_t start_load(t_state *s, uint32_t addr, int rt, int data, int size){
     /* load delay slot not simulated */
-    log_read(s, addr, data, 1, 1);
+    log_read(s, addr, data, size, 1);
     if (rt>=0 && rt<32) s->r[rt] = data;
     return data;
 }
@@ -880,23 +880,23 @@ void cycle(t_state *s, int show_mode){
         }
         break;
     case 0x20:/*LB*/    //r[rt]=(signed char)mem_read(s,1,ptr,1);  break;
-                        start_load(s, ptr, rt,(signed char)mem_read(s,1,ptr,1));
+                        start_load(s, ptr, rt,(signed char)mem_read(s,1,ptr,1), 1);
                         break;
 
     case 0x21:/*LH*/    //r[rt]=(signed short)mem_read(s,2,ptr,1); break;
-                        start_load(s, ptr, rt, (signed short)mem_read(s,2,ptr,1));
+                        start_load(s, ptr, rt, (signed short)mem_read(s,2,ptr,1), 2);
                         break;
     case 0x22:/*LWL*/   mem_lwl(s, ptr, rt, 1);
                         //printf("LWL\n");
                         break;
     case 0x23:/*LW*/    //r[rt]=mem_read(s,4,ptr,1);   break;
-                        start_load(s, ptr, rt, mem_read(s,4,ptr,1));
+                        start_load(s, ptr, rt, mem_read(s,4,ptr,1), 4);
                         break;
     case 0x24:/*LBU*/   //r[rt]=(unsigned char)mem_read(s,1,ptr,1); break;
-                        start_load(s, ptr, rt, (unsigned char)mem_read(s,1,ptr,1));
+                        start_load(s, ptr, rt, (unsigned char)mem_read(s,1,ptr,1), 1);
                         break;
     case 0x25:/*LHU*/   //r[rt]= (unsigned short)mem_read(s,2,ptr,1);
-                        start_load(s, ptr, rt, (unsigned short)mem_read(s,2,ptr,1));
+                        start_load(s, ptr, rt, (unsigned short)mem_read(s,2,ptr,1), 2);
                         break;
     case 0x26:/*LWR*/   mem_lwr(s, ptr, rt, 1);
                         //printf("LWR\n");
@@ -917,10 +917,10 @@ void cycle(t_state *s, int show_mode){
                         // unimplemented(s,"CACHE");
                         break;
     case 0x30:/*LL*/    //unimplemented(s,"LL");
-                        start_load(s, ptr, rt, mem_read(s,4,ptr,1));
+                        start_load(s, ptr, rt, mem_read(s,4,ptr,1), 4);
                         break;
 //      case 0x31:/*LWC1*/ break;
-    case 0x32:/*LWC2*/  aux = start_load(s, ptr, -1, mem_read(s,4,ptr,1));
+    case 0x32:/*LWC2*/  aux = start_load(s, ptr, -1, mem_read(s,4,ptr,1), 4);
                         cop2_set_reg(s, rt, 0, 0, aux);
                         break;
 //      case 0x33:/*LWC3*/ break;
@@ -1153,29 +1153,29 @@ uint32_t log_cycle(t_state *s){
         /* skip register zero which does not change */
         for(i=1;i<32;i++){
             if(s->t.pr[i] != s->r[i]){
-                fprintf(s->t.log, "(%08X) [%02X]=%08X\n", log_pc, i, s->r[i]);
+                fprintf(s->t.log, "(%08x) [%02x]=%08x\n", log_pc, i, s->r[i]);
             }
             s->t.pr[i] = s->r[i];
         }
         if(s->lo != s->t.lo){
-            //fprintf(s->t.log, "(%08X) [LO]=%08X\n", log_pc, s->lo);
+            //fprintf(s->t.log, "(%08x) [LO]=%08x\n", log_pc, s->lo);
         }
         s->t.lo = s->lo;
 
         if(s->hi != s->t.hi){
-            //fprintf(s->t.log, "(%08X) [HI]=%08X\n", log_pc, s->hi);
+            //fprintf(s->t.log, "(%08x) [HI]=%08x\n", log_pc, s->hi);
         }
         s->t.hi = s->hi;
 
         /* Catch changes in EPC by direct write (mtc0) and by exception */
         if(s->epc != s->t.epc){
-            fprintf(s->t.log, "(%08X) [EP]=%08X\n", log_pc, s->epc);
+            fprintf(s->t.log, "(%08x) [EP]=%08x\n", log_pc, s->epc);
         }
         s->t.epc = s->epc;
 
         if(s->cp0_status != s->t.status){
-            //@hack3 fprintf(s->t.log, "(%08X) [SR]=%08X\n", log_pc, s->cp0_status);
-            fprintf(s->t.log, "(%08X) [SR]=%08X\n", 0x0, s->cp0_status);
+            //@hack3 fprintf(s->t.log, "(%08x) [SR]=%08x\n", log_pc, s->cp0_status);
+            fprintf(s->t.log, "(%08x) [SR]=%08x\n", 0x0, s->cp0_status);
         }
         s->t.status = s->cp0_status;
 
