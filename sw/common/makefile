@@ -80,7 +80,7 @@ include $(SW_ROOT)/common/bsp/$(PLATFORM)/config/hardware.mak
 # (See comment above about -G0 flag)
 CFLAGS = -O2 -Wall -c -s -msoft-float -mips1 -G0 $(CC_HWSYMS) -I$(HALDIR)
 # LFLAGS: Use HAL (BSP) library and ErsatzLib.
-LFLAGS = -T$(LINK_SCRIPT) $(LD_HWSYMS) -eentry -I elf32-big -L $(HALLIBDIR) -lhal -L $(ELIBDIR) -le
+LFLAGS = -T$(LINK_SCRIPT) $(LD_HWSYMS) -eentry -I elf32-big
 # AFLAGS: 
 AFLAGS = $(AS_HWSYMS) -msoft-float
 # Symbol definitions for assembler and compiler.

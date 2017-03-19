@@ -2,26 +2,26 @@
 include ../Toolchain.mk
 
 # All sources are included into the main file. No independent assembly.
-FIRMWARE_OBJS = main.o
+SOFTWARE_OBJS = main.o
 
 
-all: firmware.bin firmware.lst
+all: software.bin software.lst software.hex
 
-firmware.hex: firmware.bin $(MAKEHEX)
+software.hex: software.bin $(MAKEHEX)
 	python $(MAKEHEX) $< 16384 > $@
 
-firmware.bin: firmware.elf 
+software.bin: software.elf 
 	$(TOOLCHAIN_PREFIX)objcopy -O binary $< $@
 	chmod -x $@
 
-firmware.elf: $(FIRMWARE_OBJS) sections.lds
+software.elf: $(SOFTWARE_OBJS) sections.lds
 	$(TOOLCHAIN_PREFIX)gcc -Os -mips32 -ffreestanding -nostdlib -EB -o $@ \
-		-Wl,-Bstatic,-T,sections.lds,-Map,firmware.map,--strip-debug \
-		$(FIRMWARE_OBJS) -lgcc
+		-Wl,-Bstatic,-T,sections.lds,-Map,software.map,--strip-debug \
+		$(SOFTWARE_OBJS) -lgcc
 	chmod -x $@
 
-firmware.lst: firmware.elf
-	$(TOOLCHAIN_PREFIX)objdump -D firmware.elf > firmware.lst
+software.lst: software.elf
+	$(TOOLCHAIN_PREFIX)objdump -D software.elf > software.lst
 
 main.o: main.s
 	$(TOOLCHAIN_PREFIX)gcc -c -EB -Wa,-call_nonpic,-mips32,-EB -o $@ $<
@@ -29,7 +29,7 @@ main.o: main.s
 
 
 clean:
-	rm -rf $(FIRMWARE_OBJS) $(TEST_OBJS) firmware.elf firmware.bin firmware.hex firmware.map firmware.lst
+	rm -rf $(SOFTWARE_OBJS) software.elf software.bin software.hex software.map software.lst
 
 
 

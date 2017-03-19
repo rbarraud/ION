@@ -15,18 +15,9 @@ RM = rm -f
 
 # MIPS GCC cross-toolchain -- replace with your own
 
-# CodeSourcery, win32.
-#TOOLCHAIN = D:\dev\embedded\CodeSourcery\MIPS
-#TOOLBASE = mips-sde-elf
-
 # Codescape for baremetal, win32.
-TOOLCHAIN = D:\dev\embedded\Codescape\Toolchains\mips-mti-elf\2014.07-1
-TOOLBASE = mips-mti-elf
-
-# Codebench for baremetal, linux.
-#TOOLCHAIN = /home/jaruiz/dev/util/mips/codebench
-#TOOLBASE = mips-sde-elf
-
+TOOLCHAIN = ~/dev/tools/buildRoot/buildroot-2016.11.2/output/host/usr
+TOOLBASE = mipsel-buildroot-linux-uclibc
 
 
 # Toolchain executables

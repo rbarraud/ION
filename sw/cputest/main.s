@@ -58,6 +58,8 @@
     
     .set TEST_COP2_LW_SW, 0                 # LWC2/SWC2 unimplemented so no test
     
+    .set RTL_UNDER_CONSTRUCTION, 1
+
     # FIXME these values should be read from COP0 register!
     .set ICACHE_NUM_LINES, 128              # no. of lines in the I-Cache
     .set DCACHE_NUM_LINES, 128              # no. of lines in the D-Cache
@@ -190,6 +192,8 @@ init:
     ori     $30,$0,0            # Total test error count.
     ori     $27,$0,0            # Total exception count.
 
+
+    .ifndef RTL_UNDER_CONSTRUCTION
     #---------------------------------------------------------------------------
     # Test entry in user mode and access to MFC0 from user mode.
     
@@ -217,10 +221,13 @@ init:
     .include "interlock.inc.s"
     .include "data_cache.inc.s"
     .include "instruction_cache.inc.s"
+    .endif # RTL_UNDER_CONSTRUCTION
     .include "addsub.inc.s"
     .include "slt.inc.s"
     .include "logic.inc.s"
+    .ifndef RTL_UNDER_CONSTRUCTION
     .include "muldiv.inc.s"
+    .endif # RTL_UNDER_CONSTRUCTION
     .include "mac.inc.s"
     .include "branch.inc.s"
     .include "jump.inc.s"
