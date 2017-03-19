@@ -8,11 +8,12 @@ If you're really desperate for a MIPS-I and none of the other many many MIPS-I c
 ION
 ===
 
-This is a copy of my [ION project available in Opencores] (http://opencores.org/project,ion) which is a MIPS-I R3000 clone.
+This project started as a copy of my [ION project available in Opencores] (http://opencores.org/project,ion) which is a MIPS-I R3000 clone.
 
-I don't think the world really needs another MIPS clone. I started this thing for fun back in 2011 and I did have lots of fun. Now I want to preserve it against the possible sudden disappearance of OpenCores, and maybe I will even refactor it into a viable MIPS32r1. Don't hold your breath, though. 
+I don't think the world really needs another MIPS clone. I started this thing for fun back in 2011 and I did have lots of fun. But the original code is too messy to really be worth finishing, much less evolving. So it has been abandoned.
 
-The OpenCores repository is to remain frozen as long as OpenCores lasts. Any further development, if there is any, will happen here.
+In this project I'm aiming at a brand new MIPS32r1 implementation which will share no RTL with the original project.
 
-_(I was about to scrap the entire project except for the ISS (ion32sim) and build a MIPS-I from scratch using what I've learnt in these years. However, I've realized that building a MIPS-I toolchain has become somewhat difficult and is only going to become more difficult. So I'm going to turn this into a MIPS32r1 instead (the ISS already supports that ISA).
-The RTL is still going to be entirely scrapped though.)_
+
+This is a work in progress. There's only a basic Verilog implementation of a canonic 5-stage pipeline, along with a crude test bench and a similarly basic 'opcode tester' program. Development will advance as leisure time permits and will be tracked in the [wiki page](https://github.com/jaruiz/ION/wiki).
+
