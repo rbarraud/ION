@@ -1,1 +1,0 @@
-Object code packages for synthesis will be placed here.
