@@ -10,13 +10,14 @@
 
     Major stuff remains to be done:
 
-        - COP0 & supervisor mode stuff not tested.
-        - Interrupt logic not tested.
+        - COP0 & supervisor mode stuff partially implemented.
+        - Interrupt logic partially implemented.
         - Many instructions missing.
         - No support for wait states in code or data buses.
 
     I started this module as a minimal riscv implementation. I've morphed it 
-    into a MIPS32 but some riscv traces remain.
+    into a MIPS32 but many riscv traces remain, mostly around COP0 registers
+    (called CSR here).
 
 
     Signal naming convention
@@ -55,7 +56,7 @@ module cpu
         input               DREADY_I,
         input       [1:0]   DRESP_I,
 
-        input       [15:0]  EIRQ_I
+        input       [4:0]   HWIRQ_I
     );
 
     //==== Local parameters ====================================================
@@ -158,11 +159,11 @@ module cpu
 
     //==== Per-machine state registers =========================================
 
-    // M-level CSRs.
-    reg [4:0] s42r_csr_MCAUSE;
-    reg [1:0] s42r_csr_MSTATUS;
+    // COP0 registers. @note6.
+    reg [15:0] s42r_csr_MCAUSE;
+    reg [12:0] s42r_csr_MSTATUS;
     reg [31:0] s42r_csr_MEPC;
-    reg [31:0] s42r_csr_MIP;
+    reg [31:0] s42r_csr_MIP; // FIXME merge into CAUSE
     reg [31:0] s42r_csr_MERROREPC;
     reg [31:0] s42r_csr_MCOMPARE;
     // Register bank.
@@ -170,11 +171,25 @@ module cpu
     // PC bank.
     reg [31:0] s20r_pc_nonseq;
 
+    // These macros unpack COP0 regs into useful names.
+    `define STATUS_BEV      s42r_csr_MSTATUS[12]
+    `define STATUS_IM       s42r_csr_MSTATUS[11:4]
+    `define STATUS_UM       s42r_csr_MSTATUS[3]
+    `define STATUS_ERL      s42r_csr_MSTATUS[2]
+    `define STATUS_EXL      s42r_csr_MSTATUS[1]
+    `define STATUS_IE       s42r_csr_MSTATUS[0]
+    `define CAUSE_BD        s42r_csr_MCAUSE[16]
+    `define CAUSE_CE        s42r_csr_MCAUSE[15:14]
+    `define CAUSE_IV        s42r_csr_MCAUSE[13]
+    `define CAUSE_IPHW      s42r_csr_MCAUSE[12:7]
+    `define CAUSE_IPSW      s42r_csr_MCAUSE[6:5]
+    `define CAUSE_EXCODE    s42r_csr_MCAUSE[4:0]
+
 
     //==== Forward declaration of control signals ==============================
 
     reg co_s0_en;               // FAddr stage enable.
-    reg c0_s2_stall_load;       // Decode stale stall caused by load hazard.
+    reg co_s2_stall_load;       // Decode stale stall caused by load hazard.
     reg s0_st, s1_st, s2_st, s3_st, s4_st;  // Per-stage stall controls.
 
 
@@ -321,7 +336,9 @@ module cpu
     reg s2_load_en;             // MEM load.
     reg s2_store_en;            // MEM store.
     reg [31:0] s2_mem_wdata;    // MEM write data.
-    reg s2_irq;                 // At least one pending IRQ enabled.
+    reg s2_ie;                  // Final irq enable.
+    reg [7:0] s2_masked_irq;    // IRQ lines after masking.
+    reg s2_irq_final;           // At least one pending IRQ enabled.
     reg s2_hw_trap;             // Any HW trap caught in stages 0..2.
     reg s2_go_seq;              // Sequential/Non-sequential PC selection.        
 
@@ -329,9 +346,12 @@ module cpu
     always @(*) begin
         // The load hazard stalls inserts a bubble in stage 2 by clearing s2_en.
         // (In addition to stalling stages 0 to 2.)
-        s2_en = s12r_en & ~c0_s2_stall_load;
+        s2_en = s12r_en & ~co_s2_stall_load;
     end
 
+    // Macros for several families of instruction binary pattern.
+    // Used as keys in the decoding table below.
+    // 'TA2' stands for "Table A-2" of the MIPS arch manual, vol. 2.
     `define TA2(op)         {op, 26'b?????_?????_????????????????}
     `define TA2rt0(op)      {op, 26'b?????_00000_????????????????}
     `define TA2rs0(op)      {op, 26'b00000_?????_????????????????}
@@ -339,6 +359,8 @@ module cpu
     `define TA3rs0(fn)      {26'b00000_00000_????????????????, fn}
     `define TA4(fn)         {26'b00001_?????, fn, 16'b????????????????}
 
+    // Grouped control signals output by decoding table, grouped as macros.
+    // Each macro is used for a bunch of alike instructions.
     `define IN_B(sel)       {sel,  4'b0000, 2'd3, TYP_B,   P0_X,   P1_X,   WB_N, OP_NOP}
     `define IN_BAL(sel)     {sel,  4'b0000, 2'd3, TYP_B,   P0_PCS, P1_0,   WB_R, OP_ADD}
     `define IN_IH(op)       {3'b0, 4'b0000, 2'b0, TYP_IH,  P0_RS1, P1_IMM, WB_R, op}
@@ -353,57 +375,60 @@ module cpu
     `define IN_BAD          {3'b0, 4'b0000, 2'b0, TYP_BAD, P0_X,   P1_X,   WB_N, OP_NOP}
 
     // Decoding table.
+    // TODO A few bits of decoding still done outside this table (see @note7).
     always @(*) begin
+        // FIXME A fair few instructions missing, notably COP0 and privileged.
         casez (s12r_ir)
-        `TA2    (6'b000100):        s2_m = `IN_B(3'b000);                   // BEQ
-        `TA2    (6'b000101):        s2_m = `IN_B(3'b001);                   // BNE
-        `TA2    (6'b000110):        s2_m = `IN_B(3'b010);                   // BLEZ
-        `TA2    (6'b000111):        s2_m = `IN_B(3'b011);                   // BGTZ
-        `TA4    (5'b00000):         s2_m = `IN_B(3'b100);                   // BLTZ
-        `TA4    (5'b00001):         s2_m = `IN_B(3'b101);                   // BGEZ
-        `TA4    (5'b10000):         s2_m = `IN_BAL(3'b100);                 // BLTZAL
-        `TA4    (5'b10001):         s2_m = `IN_BAL(3'b101);                 // BGEZAL      
-        `TA2rs0 (6'b001111):        s2_m = `IN_IH(OP_OR);                   // LUI
-        `TA2    (6'b001001):        s2_m = `IN_I(OP_ADD);                   // ADDIU
-        `TA2    (6'b001000):        s2_m = `IN_I(OP_ADD);                   // ADDI
-        `TA2    (6'b001101):        s2_m = `IN_IU(OP_OR);                   // ORI
-        `TA2    (6'b000011):        s2_m = `IN_J(WB_R);                     // JAL
-        `TA2    (6'b000010):        s2_m = `IN_J(WB_N);                     // J
-        `TA2    (6'b100000):        s2_m = `IN_Ilx;                         // LB
-        `TA2    (6'b100100):        s2_m = `IN_Ilx;                         // LBU
-        `TA2    (6'b100011):        s2_m = `IN_Ilx;                         // LW
-        `TA2    (6'b100001):        s2_m = `IN_Ilx;                         // LH
-        `TA2    (6'b100101):        s2_m = `IN_Ilx;                         // LHU
-        `TA2    (6'b101000):        s2_m = `IN_Isx;                         // SB
-        `TA2    (6'b101011):        s2_m = `IN_Isx;                         // SW
-        `TA2    (6'b101001):        s2_m = `IN_Isx;                         // SH
+        `TA2    (6'b000100):        s2_m = `IN_B(3'b000);       // BEQ
+        `TA2    (6'b000101):        s2_m = `IN_B(3'b001);       // BNE
+        `TA2    (6'b000110):        s2_m = `IN_B(3'b010);       // BLEZ
+        `TA2    (6'b000111):        s2_m = `IN_B(3'b011);       // BGTZ
+        `TA4    (5'b00000):         s2_m = `IN_B(3'b100);       // BLTZ
+        `TA4    (5'b00001):         s2_m = `IN_B(3'b101);       // BGEZ
+        `TA4    (5'b10000):         s2_m = `IN_BAL(3'b100);     // BLTZAL
+        `TA4    (5'b10001):         s2_m = `IN_BAL(3'b101);     // BGEZAL      
+        `TA2rs0 (6'b001111):        s2_m = `IN_IH(OP_OR);       // LUI
+        `TA2    (6'b001001):        s2_m = `IN_I(OP_ADD);       // ADDIU
+        `TA2    (6'b001000):        s2_m = `IN_I(OP_ADD);       // ADDI
+        `TA2    (6'b001101):        s2_m = `IN_IU(OP_OR);       // ORI
+        `TA2    (6'b000011):        s2_m = `IN_J(WB_R);         // JAL
+        `TA2    (6'b000010):        s2_m = `IN_J(WB_N);         // J
+        `TA2    (6'b100000):        s2_m = `IN_Ilx;             // LB
+        `TA2    (6'b100100):        s2_m = `IN_Ilx;             // LBU
+        `TA2    (6'b100011):        s2_m = `IN_Ilx;             // LW
+        `TA2    (6'b100001):        s2_m = `IN_Ilx;             // LH
+        `TA2    (6'b100101):        s2_m = `IN_Ilx;             // LHU
+        `TA2    (6'b101000):        s2_m = `IN_Isx;             // SB
+        `TA2    (6'b101011):        s2_m = `IN_Isx;             // SW
+        `TA2    (6'b101001):        s2_m = `IN_Isx;             // SH
 
-        `TA3    (6'b001000):        s2_m = `IN_JR;                          // JR
-        `TA3    (6'b100000):        s2_m = `IN_R(OP_ADD);                   // ADD
-        `TA3    (6'b100001):        s2_m = `IN_R(OP_ADD);                   // ADDU @note2
-        `TA3    (6'b100010):        s2_m = `IN_R(OP_SUB);                   // SUB
-        `TA3    (6'b100011):        s2_m = `IN_R(OP_SUB);                   // SUBU
-        `TA3    (6'b101010):        s2_m = `IN_R(OP_SLT);                   // SLT
-        `TA3    (6'b101011):        s2_m = `IN_R(OP_SLTU);                  // SLTU
-        `TA2    (6'b001010):        s2_m = `IN_I(OP_SLT);                   // SLTI
-        `TA2    (6'b001011):        s2_m = `IN_IU(OP_SLTU);                 // SLTIU
-        `TA3    (6'b100100):        s2_m = `IN_R(OP_AND);                   // AND
-        `TA3    (6'b100101):        s2_m = `IN_R(OP_OR);                    // OR
-        `TA3    (6'b100110):        s2_m = `IN_R(OP_XOR);                   // XOR
-        `TA3    (6'b100111):        s2_m = `IN_R(OP_NOR);                   // NOR
-        `TA2    (6'b001100):        s2_m = `IN_IU(OP_AND);                  // ANDI
-        `TA2    (6'b001101):        s2_m = `IN_IU(OP_OR);                   // ORI
-        `TA2    (6'b001110):        s2_m = `IN_IU(OP_XOR);                  // XORI
-        `TA2    (6'b001111):        s2_m = `IN_IU(OP_NOR);                  // NORI
-        `TA3rs0 (6'b000000):        s2_m = `IN_IS(OP_SLL);                  // SLL
-        `TA3    (6'b000100):        s2_m = `IN_R(OP_SLL);                   // SLLV
-        `TA3rs0 (6'b000010):        s2_m = `IN_IS(OP_SRL);                  // SRL
-        `TA3    (6'b000110):        s2_m = `IN_R(OP_SRL);                   // SRLV
-        `TA3rs0 (6'b000011):        s2_m = `IN_IS(OP_SRA);                  // SRA
-        `TA3    (6'b000111):        s2_m = `IN_R(OP_SRA);                   // SRAV
+        `TA3    (6'b001000):        s2_m = `IN_JR;              // JR
+        `TA3    (6'b100000):        s2_m = `IN_R(OP_ADD);       // ADD
+        `TA3    (6'b100001):        s2_m = `IN_R(OP_ADD);       // ADDU @note2
+        `TA3    (6'b100010):        s2_m = `IN_R(OP_SUB);       // SUB
+        `TA3    (6'b100011):        s2_m = `IN_R(OP_SUB);       // SUBU
+        `TA3    (6'b101010):        s2_m = `IN_R(OP_SLT);       // SLT
+        `TA3    (6'b101011):        s2_m = `IN_R(OP_SLTU);      // SLTU
+        `TA2    (6'b001010):        s2_m = `IN_I(OP_SLT);       // SLTI
+        `TA2    (6'b001011):        s2_m = `IN_IU(OP_SLTU);     // SLTIU
+        `TA3    (6'b100100):        s2_m = `IN_R(OP_AND);       // AND
+        `TA3    (6'b100101):        s2_m = `IN_R(OP_OR);        // OR
+        `TA3    (6'b100110):        s2_m = `IN_R(OP_XOR);       // XOR
+        `TA3    (6'b100111):        s2_m = `IN_R(OP_NOR);       // NOR
+        `TA2    (6'b001100):        s2_m = `IN_IU(OP_AND);      // ANDI
+        `TA2    (6'b001101):        s2_m = `IN_IU(OP_OR);       // ORI
+        `TA2    (6'b001110):        s2_m = `IN_IU(OP_XOR);      // XORI
+        `TA2    (6'b001111):        s2_m = `IN_IU(OP_NOR);      // NORI
+        `TA3rs0 (6'b000000):        s2_m = `IN_IS(OP_SLL);      // SLL
+        `TA3    (6'b000100):        s2_m = `IN_R(OP_SLL);       // SLLV
+        `TA3rs0 (6'b000010):        s2_m = `IN_IS(OP_SRL);      // SRL
+        `TA3    (6'b000110):        s2_m = `IN_R(OP_SRL);       // SRLV
+        `TA3rs0 (6'b000011):        s2_m = `IN_IS(OP_SRA);      // SRA
+        `TA3    (6'b000111):        s2_m = `IN_R(OP_SRA);       // SRAV
 
-        default:                                   s2_m = `IN_BAD;          // All others
+        default:                    s2_m = `IN_BAD;             // All others
         endcase
+        // Unpack the control signals output by the table.
         s2_bxx_cond_sel                     = s2_m[24:22];
         {s2_load_en, s2_store_en}           = s2_m[21:20];
         {s2_eret,  s2_flow_sel, s2_type}    = s2_m[19:12];
@@ -476,9 +501,11 @@ module cpu
         // CSR read multiplexor.
         case (s2_csr_index)
         8'b01011_000:   s2_csr = s42r_csr_MCOMPARE;
-        8'b01100_000:   s2_csr = {28'h0, s42r_csr_MSTATUS[1], 
-                                  2'd0,  s42r_csr_MSTATUS[0]};
-        8'b01101_000:   s2_csr = {s42r_csr_MCAUSE[4], 27'h0, s42r_csr_MCAUSE[3:0]};
+        8'b01100_000:   s2_csr = {9'h0, `STATUS_BEV, 6'h0, `STATUS_IM, 3'h0,
+                                  `STATUS_UM, `STATUS_ERL, `STATUS_EXL, `STATUS_IE};  
+        8'b01101_000:   s2_csr = {`CAUSE_BD, `CAUSE_CE, 3'b0, `CAUSE_IV, 7'b0,
+                                  `CAUSE_IPHW, 1'b0, `CAUSE_IPSW, 1'b0, 
+                                  `CAUSE_EXCODE, 2'b0};
         8'b01110_000:   s2_csr = s42r_csr_MEPC;
         8'b01111_000:   s2_csr = FEATURE_PRID;
         8'b10000_000:   s2_csr = FEATURE_CONFIG0;
@@ -546,18 +573,22 @@ module cpu
 
     // Interrupt.  (@note5)
     always @(*) begin
-        s2_irq = |(s42r_csr_MIP) & (s42r_csr_MSTATUS[0]); // FIXME
-        s2_hw_trap = s2_irq; // Our only HW trap so far in stages 0..2.
+        s2_ie = `STATUS_IE & ~(`STATUS_ERL | `STATUS_EXL);
+        // TODO timer interrupt request missing.
+        s2_masked_irq = {1'b0, HWIRQ_I, `CAUSE_IPSW} & `STATUS_IM;
+        s2_irq_final = |(s2_masked_irq) & s2_ie;
+        s2_hw_trap = s2_irq_final; // Our only HW trap so far in stages 0..2.
     end
 
     // Trap logic.
     always @(*) begin
+        // FIXME RISCV stuff! (that should be in decoding table, too)
         s2_trap_ebreak_ecall = (s12r_ir == 32'h00100073) | (s12r_ir == 32'h00000073);
         s2_exception_code = s12r_ir[20]?    4'b0011 :   // EBREAK
-                            s2_irq?         4'b0001 :   // IRQ // FIXME encode
+                            s2_irq_final?   4'b0001 :   // IRQ // FIXME encode
                                             4'b1011;    // ECALL
-        s2_trap = s2_trap_ebreak_ecall | s2_irq; // TODO other exceptions 
-        s2_trap_cause = {s2_irq, s2_exception_code};
+        s2_trap = s2_trap_ebreak_ecall | s2_irq_final;  // TODO other exceptions 
+        s2_trap_cause = {s2_irq_final, s2_exception_code};
     end
 
     // MEM control logic.
@@ -566,9 +597,9 @@ module cpu
         s2_mem_addr = s2_rs1 + s2_mem_addr_imm;
         
         s2_mem_trans = (s2_load_en | s2_store_en)? 2'b10 : 2'b00; // NONSEQ.
-        s2_load_exz = s12r_ir[28];
+        s2_load_exz = s12r_ir[28]; // @note7.
 
-        case (s2_opcode[1:0])
+        case (s2_opcode[1:0]) // @note7.
         2'b00:     s2_mem_size = 2'b00;
         2'b01:     s2_mem_size = 2'b01;
         2'b10:     s2_mem_size = 2'b10;
@@ -756,6 +787,7 @@ module cpu
 
     // CSR input logic.
     always @(*) begin
+        // FIXME RISCV remnants!
         // IE 'stack' in MSTATUS register.
         s4_status_cur = s42r_csr_MSTATUS;
         s4_status = 
@@ -763,7 +795,7 @@ module cpu
             s34r_eret ? {s4_status_cur[1], s4_status_cur[1]} :
                         {s4_status_cur[1], s4_status_cur[0]};
         // MIP -- set incoming interrupt if any.
-        s4_irq_raised = {EIRQ_I, 16'h0}; // FIXME MSIP/MTIP missing.
+        s4_irq_raised = {8'h0, s2_masked_irq, 16'h0}; // FIXME MSIP/MTIP missing.
         s4_mip_updated = s4_irq_raised | s42r_csr_MIP;
     end
 
@@ -794,11 +826,11 @@ module cpu
         co_dhaz_rs2_ld = (s3_en & s23r_load_en & (s23r_rd_index==s2_rs2_index));
 
 
-        c0_s2_stall_load = (co_dhaz_rs1_ld | co_dhaz_rs2_ld);
+        co_s2_stall_load = (co_dhaz_rs1_ld | co_dhaz_rs2_ld);
 
         s4_st = 1'b0;
         s3_st = s4_st;
-        s2_st = s3_st | c0_s2_stall_load;
+        s2_st = s3_st | co_s2_stall_load;
         s1_st = s2_st;
         s0_st = s1_st;
         
@@ -815,3 +847,5 @@ endmodule // cpu
 // @note3 -- EPC is not available yet to 1st instruction after trap.
 // @note4 -- IE reenabled on instruction after ERET.
 // @note5 -- EPC saved by IRQ is victim instruction, NOT the following one.
+// @note6 -- COP0 regs 'packed': implemented bits registered, others h-wired.
+// @note7 -- Bits of decoding outside decoding table.
