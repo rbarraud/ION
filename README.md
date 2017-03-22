@@ -2,8 +2,7 @@ WARNING
 =======
 
 _This project is a work in progress, advancing at a leisurely pace. Not much to see here at the moment, unless you'd like to take a look at a skinny MIPS32r1 CPU implemented in under 900 lines of code. It goes without saying that the project is not yet fit for any practical purpose. I would not branch it or use it at all if I were you, at least not until this warning notice goes away. 
-
-If you're really desperate for a MIPS-I and none of the other many many MIPS-I cores out there will do, then you can take a look at the [Opencores] (http://opencores.org/project,ion) version of this core._
+If you're really desperate for a MIPS-I and none of the other many many MIPS-I cores out there will do, then you can take a look at the [Opencores] (http://opencores.org/project,ion) ancestor of this core._
 
 
 ION
@@ -28,6 +27,4 @@ There's a _test driver makefile_ in `sim/iv` that makes use of Icarus Verilog to
 
 Apart from Icarus Verilog, youl'll need a MIPS32r1 toolchain to play with this _unmodified_ testbench. I'm using a recent version of [BuildRoot](https://buildroot.org/)'s.
 
-Note that this project has become somewhat _Linux-centric_ in that the test makefiles assume a Linux machine.
-
-Also note that while the old RTL from a previous, abandoned version of this project has been deleted from the repo I still haven't deleted the old test SW and other bits and pieces. The only sw test useable right now is `sw/cputest`.
+Note that while the old RTL from a previous, abandoned version of this project has been deleted from the repo I still haven't deleted the old test SW and other bits and pieces. The only sw test useable right now is `sw/cputest`.
