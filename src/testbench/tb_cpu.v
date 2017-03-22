@@ -97,7 +97,7 @@ module testbench;
     reg  [31:0] data_waddr;
     reg  [31:0] mem_op_pc; 
     reg  [31:0] mem_rdata;
-    reg  [15:0] hw_irq;
+    reg  [ 4:0] hw_irq;
 
     cpu #(
         
@@ -122,7 +122,7 @@ module testbench;
         .DREADY_I       (data_ready),
         .DRESP_I        (data_resp),
 
-        .EIRQ_I         (hw_irq)
+        .HWIRQ_I        (hw_irq)
     );
 
 
