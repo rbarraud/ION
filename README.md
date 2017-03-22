@@ -2,13 +2,13 @@ WARNING
 =======
 
 _This project is a work in progress, advancing at a leisurely pace. Not much to see here at the moment, unless you'd like to take a look at a skinny MIPS32r1 CPU implemented in under 900 lines of code. It goes without saying that the project is not yet fit for any practical purpose. I would not branch it or use it at all if I were you, at least not until this warning notice goes away. 
-If you're really desperate for a MIPS-I and none of the other many many MIPS-I cores out there will do, then you can take a look at the [Opencores] (http://opencores.org/project,ion) ancestor of this core._
+If you're really desperate for a MIPS-I and none of the other many many MIPS-I cores out there will do, then you can take a look at the [Opencores](http://opencores.org/project,ion) ancestor of this core._
 
 
 ION
 ===
 
-This project started as a copy of my [ION project available in Opencores] (http://opencores.org/project,ion) which is a MIPS-I R3000 clone.
+This project started as a copy of my [ION project available in Opencores](http://opencores.org/project,ion) which is a MIPS-I R3000 clone.
 
 I don't think the world really needs another MIPS clone. I started this thing for fun back in 2011 and I did have lots of fun. But the original code is too messy to really be worth finishing, much less evolving. So it has been abandoned.
 
