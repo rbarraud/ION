@@ -193,7 +193,7 @@ init:
     ori     $27,$0,0            # Total exception count.
 
 
-    .ifndef RTL_UNDER_CONSTRUCTION
+    #.ifndef RTL_UNDER_CONSTRUCTION
     #---------------------------------------------------------------------------
     # Test entry in user mode and access to MFC0 from user mode.
     
@@ -206,14 +206,16 @@ init:
     mtc0    $2,$12              # ...NOW
     nop                         # @hack7: COP0 hazard, we need a nop here.
 
+    .ifndef RTL_UNDER_CONSTRUCTION
     mfc0    $3,$12              # This should trigger a COP0 missing exception.
     nop
     CMP     $4,$27,1            # Check that we got an exception...
     CMP     $4,$26,0x0b << 2    # ...and check the cause code.
-    
+    .endif # RTL_UNDER_CONSTRUCTION
     PRINT_RESULT 
     
 
+    .ifndef RTL_UNDER_CONSTRUCTION
     .include "break_syscall.inc.s"
     .include "hw_interrupts.inc.s"
     .include "debug_regs.inc.s"
