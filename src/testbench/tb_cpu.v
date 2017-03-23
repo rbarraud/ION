@@ -149,6 +149,12 @@ module testbench;
                     "(%08H) [%02h]=%08h\n", s34r_pc, uut.s34r_rd_index, uut.s4_wb_data); 
             end   
         end
+        if (uut.s4_en & uut.s34r_wb_csr_en) begin
+            if ((uut.s34r_csr_xindex != 4'hf)) begin
+                $fwrite(logfile,
+                    "(%08H) [%02h]=%08h\n", 0, uut.s34r_csr_xindex, uut.s34r_alu_res); 
+            end   
+        end        
         s23r_pc <= uut.s12r_pc;
         s34r_pc <= s23r_pc;
     end
@@ -156,7 +162,7 @@ module testbench;
     // Waveform display visual aid: mark passage over some address.
     reg mark;
     always @(*) begin
-        mark = uut.s01r_pc == 32'hbfc01220;
+        mark = uut.s01r_pc == 32'hbfc001e4;
     end
 
     // Waveform display visual aid: cycle count reference.
@@ -256,6 +262,8 @@ module testbench;
 
 
     //-- Interrupts ------------------------------------------------------------
+
+    initial hw_irq = 0;
 
     // TODO HW interrupts not simulated.
     always @(*)

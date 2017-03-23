@@ -35,7 +35,7 @@
 module cpu
     #(
         parameter OPTION_RESET_ADDR = 32'hbfc00000,
-        parameter OPTION_TRAP_ADDR = 32'h00000010
+        parameter OPTION_TRAP_ADDR =  32'hbfc00180
     )
     (
         input               CLK,
@@ -134,10 +134,10 @@ module cpu
             else if(enable & ~st) \
                 name <= loadval;
 
-    `define CSREGT(st, name, trapen, trapval) \
+    `define CSREGT(st, name, resval, trapen, trapval) \
         always @(posedge CLK) \
             if (RESET_I) \
-                s42r_csr_``name <= 32'h0; \
+                s42r_csr_``name <= resval; \
             else begin \
                 if (s4_en & ~st & trapen) \
                     s42r_csr_``name <= trapval; \
@@ -355,9 +355,10 @@ module cpu
     `define TA2(op)         {op, 26'b?????_?????_????????????????}
     `define TA2rt0(op)      {op, 26'b?????_00000_????????????????}
     `define TA2rs0(op)      {op, 26'b00000_?????_????????????????}
-    `define TA3(fn)         {26'b00000_?????_????????????????, fn}
-    `define TA3rs0(fn)      {26'b00000_00000_????????????????, fn}
-    `define TA4(fn)         {26'b00001_?????, fn, 16'b????????????????}
+    `define TA3(fn)         {26'b000000_?????_????????????????, fn}
+    `define TA3rs0(fn)      {26'b000000_00000_????????????????, fn}
+    `define TA4(fn)         {26'b000001_?????, fn, 16'b????????????????}
+    `define TA9(mt)         {6'b010000, mt, 21'b?????_?????_00000000_???}
 
     // Grouped control signals output by decoding table, grouped as macros.
     // Each macro is used for a bunch of alike instructions.
@@ -372,6 +373,7 @@ module cpu
     `define IN_IS(op)       {3'b0, 4'b0000, 2'b0, TYP_S,   P0_IMM, P1_RS2, WB_R, op}
     `define IN_R(op)        {3'b0, 4'b0000, 2'b0, TYP_R,   P0_RS1, P1_RS2, WB_R, op}
     `define IN_JR           {3'b0, 4'b0000, 2'b1, TYP_I,   P0_PCS, P1_0,   WB_N, OP_ADD}
+    `define IN_COP0(w,ret)  {3'b0, 4'b0000, 2'd0, TYP_I,   P0_0, P1_RS2, w,    OP_OR}
     `define IN_BAD          {3'b0, 4'b0000, 2'b0, TYP_BAD, P0_X,   P1_X,   WB_N, OP_NOP}
 
     // Decoding table.
@@ -425,6 +427,7 @@ module cpu
         `TA3    (6'b000110):        s2_m = `IN_R(OP_SRL);       // SRLV
         `TA3rs0 (6'b000011):        s2_m = `IN_IS(OP_SRA);      // SRA
         `TA3    (6'b000111):        s2_m = `IN_R(OP_SRA);       // SRAV
+        `TA9    (5'b00100):         s2_m = `IN_COP0(WB_C,1'b0); // MTC0
 
         default:                    s2_m = `IN_BAD;             // All others
         endcase
@@ -447,7 +450,7 @@ module cpu
         s2_rs1_index = s12r_ir[25:21];
         s2_rs2_index = s12r_ir[20:16];
         s2_rd_index = s2_link? 5'b11111 : s2_3reg? s12r_ir[15:11] : s12r_ir[20:16];
-        s2_csr_index = {s12r_ir[15:11] & s12r_ir[2:0]};
+        s2_csr_index = {s12r_ir[15:11], s12r_ir[2:0]};
         
         // Decode immediate field.
         s2_j_immediate = {s01r_pc[31:28], s12r_ir[25:0], 2'b00};
@@ -737,8 +740,7 @@ module cpu
     reg [31:0] s4_load_data;    // Data from MEM load.
     reg [31:0] s4_wb_data;      // Writeback data (ALU or MEM).
     reg [4:0] s4_trap_cause;    // Value to load in MCAUSE CSR.
-    reg [1:0] s4_status;        // Value to load on MSTATUS CSR.
-    reg [1:0] s4_status_cur;    // Value currently in MSTATUS CSR.
+    reg [13:0] s4_status;       // Value to load on MSTATUS CSR.
     reg [31:0] s4_mip_updated;  // Updated MIP after raising new IRQ.
     reg [31:0] s4_irq_raised;   // New interrupt, one-hot encoded.
 
@@ -779,21 +781,32 @@ module cpu
     end 
 
     // CSR 'writeback ports'.
-    `CSREGT(s4_st, MCAUSE,  s34r_trap, s4_trap_cause)
-    `CSREGT(s4_st, MEPC,    s34r_trap, s34r_epc) // @note3
-    `CSREGT(s4_st, MERROREPC, s34r_trap, s34r_epc) // @note3
-    `CSREGT(s4_st, MSTATUS, s34r_trap|s34r_eret, s4_status) // @note4
+    `CSREGT(s4_st, MCAUSE,      17'h0,      s34r_trap, s4_trap_cause)
+    `CSREGT(s4_st, MEPC,        32'h0,      s34r_trap, s34r_epc) // @note3
+    `CSREGT(s4_st, MERROREPC,   32'h0,      s34r_trap, s34r_epc) // @note3
+    `CSREGT(s4_st, MSTATUS,     13'h1004,   s34r_trap|s34r_eret, s4_status)
     `CSREG (s4_st, MCOMPARE)
 
-    // CSR input logic.
+    // CSR input logic. These values are only used if the CSR is not loaded
+    // using MTC0, see macros CSREGT and CSREG.
     always @(*) begin
-        // FIXME RISCV remnants!
-        // IE 'stack' in MSTATUS register.
-        s4_status_cur = s42r_csr_MSTATUS;
-        s4_status = 
-            s34r_trap ? {s4_status_cur[0], 1'b0} :
-            s34r_eret ? {s4_status_cur[1], s4_status_cur[1]} :
-                        {s4_status_cur[1], s4_status_cur[0]};
+        // STATUS logic: flags modified by TRAP/ERET. 
+        s4_status = s42r_csr_MSTATUS;
+        casez ({s34r_trap, s34r_eret})
+        2'b1?: begin  // TRAP | (TRAP & ERET)
+            s4_status[1] = 1'b1; // EXL = 0
+        end 
+        2'b01: begin  // ERET
+            if (`STATUS_ERL) begin
+                s4_status[2] = 1'b0; // ERL = 0
+            end
+            else begin
+                s4_status[1] = 1'b0; // EXL = 0
+            end            
+        end
+        default:; // No change to STATUS flags.
+        endcase
+
         // MIP -- set incoming interrupt if any.
         s4_irq_raised = {8'h0, s2_masked_irq, 16'h0}; // FIXME MSIP/MTIP missing.
         s4_mip_updated = s4_irq_raised | s42r_csr_MIP;
@@ -825,7 +838,6 @@ module cpu
         co_dhaz_rs1_ld = (s3_en & s23r_load_en & (s23r_rd_index==s2_rs1_index));
         co_dhaz_rs2_ld = (s3_en & s23r_load_en & (s23r_rd_index==s2_rs2_index));
 
-
         co_s2_stall_load = (co_dhaz_rs1_ld | co_dhaz_rs2_ld);
 
         s4_st = 1'b0;
@@ -833,7 +845,6 @@ module cpu
         s2_st = s3_st | co_s2_stall_load;
         s1_st = s2_st;
         s0_st = s1_st;
-        
     end
 
 
@@ -845,7 +856,7 @@ endmodule // cpu
 //           FIXME won't work once wait states are implemented. 
 // @note2 -- No traps on arith overflow implemented.
 // @note3 -- EPC is not available yet to 1st instruction after trap.
-// @note4 -- IE reenabled on instruction after ERET.
+// @note4 -- 
 // @note5 -- EPC saved by IRQ is victim instruction, NOT the following one.
 // @note6 -- COP0 regs 'packed': implemented bits registered, others h-wired.
 // @note7 -- Bits of decoding outside decoding table.
