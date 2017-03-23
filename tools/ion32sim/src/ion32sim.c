@@ -1169,13 +1169,13 @@ uint32_t log_cycle(t_state *s){
 
         /* Catch changes in EPC by direct write (mtc0) and by exception */
         if(s->epc != s->t.epc){
-            fprintf(s->t.log, "(%08x) [EP]=%08x\n", log_pc, s->epc);
+            fprintf(s->t.log, "(%08x) [03]=%08x\n", log_pc, s->epc);
         }
         s->t.epc = s->epc;
 
         if(s->cp0_status != s->t.status){
-            //@hack3 fprintf(s->t.log, "(%08x) [SR]=%08x\n", log_pc, s->cp0_status);
-            fprintf(s->t.log, "(%08x) [SR]=%08x\n", 0x0, s->cp0_status);
+            //@hack3 fprintf(s->t.log, "(%08x) [01]=%08x\n", log_pc, s->cp0_status);
+            fprintf(s->t.log, "(%08x) [01]=%08x\n", 0x0, s->cp0_status);
         }
         s->t.status = s->cp0_status;
 
