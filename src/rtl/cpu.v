@@ -134,7 +134,7 @@ module cpu
             else if(enable & ~st) \
                 name <= loadval;
 
-    `define CSREGT(st, name, resval, trapen, trapval) \
+    `define CSREGT(st, name, resval, trapen, trapval, loadval) \
         always @(posedge CLK) \
             if (RESET_I) \
                 s42r_csr_``name <= resval; \
@@ -142,7 +142,7 @@ module cpu
                 if (s4_en & ~st & trapen) \
                     s42r_csr_``name <= trapval; \
                 else if (s4_en & s34r_wb_csr_en & (s34r_csr_xindex==CSRB_``name)) \
-                    s42r_csr_``name <= s34r_alu_res; \
+                    s42r_csr_``name <= loadval; \
             end 
 
     `define CSREG(st, name) \
@@ -160,7 +160,7 @@ module cpu
     //==== Per-machine state registers =========================================
 
     // COP0 registers. @note6.
-    reg [15:0] s42r_csr_MCAUSE;
+    reg [16:0] s42r_csr_MCAUSE;
     reg [12:0] s42r_csr_MSTATUS;
     reg [31:0] s42r_csr_MEPC;
     reg [31:0] s42r_csr_MIP; // FIXME merge into CAUSE
@@ -172,24 +172,31 @@ module cpu
     reg [31:0] s20r_pc_nonseq;
 
     // These macros unpack COP0 regs into useful names.
-    `define STATUS_BEV      s42r_csr_MSTATUS[12]
-    `define STATUS_IM       s42r_csr_MSTATUS[11:4]
-    `define STATUS_UM       s42r_csr_MSTATUS[3]
-    `define STATUS_ERL      s42r_csr_MSTATUS[2]
-    `define STATUS_EXL      s42r_csr_MSTATUS[1]
-    `define STATUS_IE       s42r_csr_MSTATUS[0]
-    `define CAUSE_BD        s42r_csr_MCAUSE[16]
-    `define CAUSE_CE        s42r_csr_MCAUSE[15:14]
-    `define CAUSE_IV        s42r_csr_MCAUSE[13]
-    `define CAUSE_IPHW      s42r_csr_MCAUSE[12:7]
-    `define CAUSE_IPSW      s42r_csr_MCAUSE[6:5]
-    `define CAUSE_EXCODE    s42r_csr_MCAUSE[4:0]
+    `define STATUS_BEV          s42r_csr_MSTATUS[12]
+    `define STATUS_IM           s42r_csr_MSTATUS[11:4]
+    `define STATUS_UM           s42r_csr_MSTATUS[3]
+    `define STATUS_ERL          s42r_csr_MSTATUS[2]
+    `define STATUS_EXL          s42r_csr_MSTATUS[1]
+    `define STATUS_IE           s42r_csr_MSTATUS[0]
+    `define STATUS_PACK(w)      {w[22],w[15:8],w[4],w[2],w[1],w[0]}
+    `define STATUS_UNPACK(p)    {9'h0,p[12],6'h0,p[11:4],3'h0,p[3:0]}
+    `define CAUSE_BD            s42r_csr_MCAUSE[16]
+    `define CAUSE_CE            s42r_csr_MCAUSE[15:14]
+    `define CAUSE_IV            s42r_csr_MCAUSE[13]
+    `define CAUSE_IPHW          s42r_csr_MCAUSE[12:7]
+    `define CAUSE_IPSW          s42r_csr_MCAUSE[6:5]
+    `define CAUSE_EXCODE        s42r_csr_MCAUSE[4:0]
+    `define CAUSE_PACK(w)       {w[31],w[29:28],w[23],w[15:8],w[6:2]}
+    `define CAUSE_UNPACK(p)     {p[16],1'b0,p[15:14],4'b0,p[13],7'b0,p[12:5],1'b0,p[4:0],2'b0}
+
 
 
     //==== Forward declaration of control signals ==============================
 
     reg co_s0_en;               // FAddr stage enable.
-    reg co_s2_stall_load;       // Decode stale stall caused by load hazard.
+    reg co_s0_bubble;           // Insert bubble in FAddr stage.
+    reg co_s1_bubble;           // Insert bubble in FData stage.
+    reg co_s2_bubble;           // Insert bubble in Decode stage.
     reg s0_st, s1_st, s2_st, s3_st, s4_st;  // Per-stage stall controls.
 
 
@@ -230,7 +237,7 @@ module cpu
 
     always @(*) begin
         // FIXME only if cycle is complete?
-        s1_en = s01r_en;
+        s1_en = s01r_en & ~co_s1_bubble;
         s1_ir = s12r_continue? s12r_irs : CRDATA_I; // @note1
     end
 
@@ -267,7 +274,7 @@ module cpu
     reg s23r_load_exz;          // 1 if MEM subword load zero-extends to word.
     reg s23r_trap;              // TRAP event CSR control passed on to EX.
     reg s23r_eret;              // ERET event CSR control passed on to EX.
-    reg [4:0] s23r_trap_cause;  // Combined IRQ+Cause code passed on to EX.
+    reg [4:0] s23r_trap_cause;  // Trap cause code passed on to EX.
     reg [31:0] s23r_epc;        // Next EPC to be passed on to next stages.
 
     reg s2_en;                  // DE stage enable.
@@ -280,7 +287,7 @@ module cpu
     reg [4:0] s2_rd_index;      // Index for RD from IR.
     reg [7:0] s2_csr_index;     // Index for CSR from IR (Reg index + sel).
     reg [3:0] s2_csr_xindex;    // Index for CSR translated.
-    reg [24:0] s2_m;            // Concatenation of other signals for clarity.
+    reg [27:0] s2_m;            // Concatenation of other signals for clarity.
     reg [3:0] s2_type;          // Format of instruction in IR.
     reg s2_link;                // Save PC to r31.
     reg [2:0] s2_p0_sel;        // ALU argument 0 selection.
@@ -295,11 +302,13 @@ module cpu
 
     reg s2_invalid;             // IR is invalid;
     reg [1:0] s2_flow_sel;      // {00,01,10,11} = {seq/trap, JALR, JAL, Bxx}.
-    reg s2_trap_ebreak_ecall;   // Trap caused by EBREAK or ECALL instruction.
+    reg s2_cop0_access;         // COP0 access instruction in IR.
+    reg s2_user_mode;           // 1 -> user mode, 0 -> kernel mode.
+    reg s2_trap_break_syscall;  // Trap caused by BREAK or SYSCALL instruction.
+    reg s2_trap_cop_unusable;   // Trap caused by COP access in user mode.
     reg s2_trap;                // Take trap for any cause.
     reg s2_eret;                // ERET instruction.
-    reg [3:0] s2_exception_code;// Exception code, iif s2_trap. 
-    reg [4:0] s2_trap_cause;    // irq flag + exception code.
+    reg [4:0] s2_trap_cause;    // Trap cause code.
 
     reg [31:0] s2_pc_branch;    // Branch target;
     reg [31:0] s2_pc_jump;      // Jump (JAL) target;
@@ -344,37 +353,39 @@ module cpu
 
     // Pipeline bubble logic.
     always @(*) begin
-        // The load hazard stalls inserts a bubble in stage 2 by clearing s2_en.
-        // (In addition to stalling stages 0 to 2.)
-        s2_en = s12r_en & ~co_s2_stall_load;
+        // The load hazard stalls & trap stalls inserts a bubble in stage 2 by 
+        // clearing s2_en (in addition to stalling stages 0 to 2.)
+        s2_en = s12r_en & ~co_s2_bubble;
     end
 
     // Macros for several families of instruction binary pattern.
     // Used as keys in the decoding table below.
     // 'TA2' stands for "Table A-2" of the MIPS arch manual, vol. 2.
-    `define TA2(op)         {op, 26'b?????_?????_????????????????}
-    `define TA2rt0(op)      {op, 26'b?????_00000_????????????????}
-    `define TA2rs0(op)      {op, 26'b00000_?????_????????????????}
-    `define TA3(fn)         {26'b000000_?????_????????????????, fn}
-    `define TA3rs0(fn)      {26'b000000_00000_????????????????, fn}
-    `define TA4(fn)         {26'b000001_?????, fn, 16'b????????????????}
-    `define TA9(mt)         {6'b010000, mt, 21'b?????_?????_00000000_???}
+    `define TA2(op)     {op, 26'b?????_?????_????????????????}
+    `define TA2rt0(op)  {op, 26'b?????_00000_????????????????}
+    `define TA2rs0(op)  {op, 26'b00000_?????_????????????????}
+    `define TA3(fn)     {26'b000000_?????_????????????????, fn}
+    `define TA3rs0(fn)  {26'b000000_00000_????????????????, fn}
+    `define TA4(fn)     {26'b000001_?????, fn, 16'b????????????????}
+    `define TA9(mt)     {6'b010000, mt, 21'b?????_?????_00000000_???}
+    `define TA10(fn)    {26'b010000_1_0000000000000000000, fn}
 
     // Grouped control signals output by decoding table, grouped as macros.
     // Each macro is used for a bunch of alike instructions.
-    `define IN_B(sel)       {sel,  4'b0000, 2'd3, TYP_B,   P0_X,   P1_X,   WB_N, OP_NOP}
-    `define IN_BAL(sel)     {sel,  4'b0000, 2'd3, TYP_B,   P0_PCS, P1_0,   WB_R, OP_ADD}
-    `define IN_IH(op)       {3'b0, 4'b0000, 2'b0, TYP_IH,  P0_RS1, P1_IMM, WB_R, op}
-    `define IN_IU(op)       {3'b0, 4'b0000, 2'b0, TYP_IU,  P0_RS1, P1_IMM, WB_R, op}
-    `define IN_Ilx          {3'b0, 4'b1000, 2'b0, TYP_I,   P0_RS1, P1_IMM, WB_R, OP_NOP}
-    `define IN_Isx          {3'b0, 4'b0100, 2'b0, TYP_I,   P0_RS1, P1_IMM, WB_N, OP_NOP}
-    `define IN_I(op)        {3'b0, 4'b0000, 2'b0, TYP_I,   P0_RS1, P1_IMM, WB_R, op}
-    `define IN_J(link)      {3'b0, 4'b0000, 2'd2, TYP_J,   P0_PCS, P1_0,   link, OP_ADD}
-    `define IN_IS(op)       {3'b0, 4'b0000, 2'b0, TYP_S,   P0_IMM, P1_RS2, WB_R, op}
-    `define IN_R(op)        {3'b0, 4'b0000, 2'b0, TYP_R,   P0_RS1, P1_RS2, WB_R, op}
-    `define IN_JR           {3'b0, 4'b0000, 2'b1, TYP_I,   P0_PCS, P1_0,   WB_N, OP_ADD}
-    `define IN_COP0(w,ret)  {3'b0, 4'b0000, 2'd0, TYP_I,   P0_0, P1_RS2, w,    OP_OR}
-    `define IN_BAD          {3'b0, 4'b0000, 2'b0, TYP_BAD, P0_X,   P1_X,   WB_N, OP_NOP}
+    `define IN_B(sel)   {3'b000, sel,  4'h0, 2'd3, TYP_B,   P0_X,   P1_X,   WB_N, OP_NOP}
+    `define IN_BAL(sel) {3'b000, sel,  4'h0, 2'd3, TYP_B,   P0_PCS, P1_0,   WB_R, OP_ADD}
+    `define IN_IH(op)   {3'b000, 3'b0, 4'h0, 2'b0, TYP_IH,  P0_RS1, P1_IMM, WB_R, op}
+    `define IN_IU(op)   {3'b000, 3'b0, 4'h0, 2'b0, TYP_IU,  P0_RS1, P1_IMM, WB_R, op}
+    `define IN_Ilx      {3'b000, 3'b0, 4'h8, 2'b0, TYP_I,   P0_RS1, P1_IMM, WB_R, OP_NOP}
+    `define IN_Isx      {3'b000, 3'b0, 4'h4, 2'b0, TYP_I,   P0_RS1, P1_IMM, WB_N, OP_NOP}
+    `define IN_I(op)    {3'b000, 3'b0, 4'h0, 2'b0, TYP_I,   P0_RS1, P1_IMM, WB_R, op}
+    `define IN_J(link)  {3'b000, 3'b0, 4'h0, 2'd2, TYP_J,   P0_PCS, P1_0,   link, OP_ADD}
+    `define IN_IS(op)   {3'b000, 3'b0, 4'h0, 2'b0, TYP_S,   P0_IMM, P1_RS2, WB_R, op}
+    `define IN_R(op)    {3'b000, 3'b0, 4'h0, 2'b0, TYP_R,   P0_RS1, P1_RS2, WB_R, op}
+    `define IN_JR       {3'b000, 3'b0, 4'h0, 2'b1, TYP_I,   P0_PCS, P1_0,   WB_N, OP_ADD}
+    `define IN_CP0(r,w) {3'b001, 3'b0, 4'h0, 2'd0, TYP_I,   P0_0,   r,      w,    OP_OR}
+    `define SPEC(r)     {3'b000, 3'b0, 3'h0,r, 2'd0, TYP_I, P0_0,   P1_X,   WB_N, OP_NOP}
+    `define IN_BAD      {3'b000, 3'b0, 4'h0, 2'b0, TYP_BAD, P0_X,   P1_X,   WB_N, OP_NOP}
 
     // Decoding table.
     // TODO A few bits of decoding still done outside this table (see @note7).
@@ -427,11 +438,16 @@ module cpu
         `TA3    (6'b000110):        s2_m = `IN_R(OP_SRL);       // SRLV
         `TA3rs0 (6'b000011):        s2_m = `IN_IS(OP_SRA);      // SRA
         `TA3    (6'b000111):        s2_m = `IN_R(OP_SRA);       // SRAV
-        `TA9    (5'b00100):         s2_m = `IN_COP0(WB_C,1'b0); // MTC0
+        `TA9    (5'b00100):         s2_m = `IN_CP0(P1_RS2,WB_C);// MTC0
+        `TA9    (5'b00000):         s2_m = `IN_CP0(P1_CSR,WB_R);// MFC0
+        `TA10   (6'b011000):        s2_m = `SPEC(1'b1);         // ERET
+
 
         default:                    s2_m = `IN_BAD;             // All others
         endcase
         // Unpack the control signals output by the table.
+        s2_trap_break_syscall               = s2_m[27:26];
+        s2_cop0_access                      = s2_m[25];
         s2_bxx_cond_sel                     = s2_m[24:22];
         {s2_load_en, s2_store_en}           = s2_m[21:20];
         {s2_eret,  s2_flow_sel, s2_type}    = s2_m[19:12];
@@ -441,6 +457,8 @@ module cpu
         s2_3reg = (s2_type==TYP_R) | (s2_type == TYP_P) | (s2_type == TYP_S);
         s2_link = (s2_p0_sel==P0_PCS) & s2_wb_en;
     end
+
+    initial $display("--> %h", `TA10   (6'b011000));
 
     // Extract some common instruction fields including immediate field.
     always @(*) begin
@@ -504,11 +522,8 @@ module cpu
         // CSR read multiplexor.
         case (s2_csr_index)
         8'b01011_000:   s2_csr = s42r_csr_MCOMPARE;
-        8'b01100_000:   s2_csr = {9'h0, `STATUS_BEV, 6'h0, `STATUS_IM, 3'h0,
-                                  `STATUS_UM, `STATUS_ERL, `STATUS_EXL, `STATUS_IE};  
-        8'b01101_000:   s2_csr = {`CAUSE_BD, `CAUSE_CE, 3'b0, `CAUSE_IV, 7'b0,
-                                  `CAUSE_IPHW, 1'b0, `CAUSE_IPSW, 1'b0, 
-                                  `CAUSE_EXCODE, 2'b0};
+        8'b01100_000:   s2_csr = `STATUS_UNPACK(s42r_csr_MSTATUS);  
+        8'b01101_000:   s2_csr = `CAUSE_UNPACK(s42r_csr_MCAUSE);
         8'b01110_000:   s2_csr = s42r_csr_MEPC;
         8'b01111_000:   s2_csr = FEATURE_PRID;
         8'b10000_000:   s2_csr = FEATURE_CONFIG0;
@@ -542,7 +557,7 @@ module cpu
 
         // Final PC change mux. Includes branch cond evaluation and HW-driven TRAPs.
         s2_go_seq = 1'b0;
-        casez ({(s2_hw_trap|s2_eret),s2_bxx_cond_val,s2_flow_sel})
+        casez ({(s2_trap|s2_hw_trap|s2_eret),s2_bxx_cond_val,s2_flow_sel})
         4'b1???:    s2_pc_nonseq = s2_pc_trap_eret;
         4'b0?01:    s2_pc_nonseq = s2_pc_jalr;
         4'b0?10:    s2_pc_nonseq = s2_pc_jump;
@@ -585,13 +600,20 @@ module cpu
 
     // Trap logic.
     always @(*) begin
-        // FIXME RISCV stuff! (that should be in decoding table, too)
-        s2_trap_ebreak_ecall = (s12r_ir == 32'h00100073) | (s12r_ir == 32'h00000073);
-        s2_exception_code = s12r_ir[20]?    4'b0011 :   // EBREAK
-                            s2_irq_final?   4'b0001 :   // IRQ // FIXME encode
-                                            4'b1011;    // ECALL
-        s2_trap = s2_trap_ebreak_ecall | s2_irq_final;  // TODO other exceptions 
-        s2_trap_cause = {s2_irq_final, s2_exception_code};
+        s2_user_mode = {`STATUS_UM,`STATUS_ERL,`STATUS_EXL}==3'b100;
+        s2_trap_cop_unusable = s2_cop0_access & s2_user_mode;
+
+        // Encode trap cause as per table 9.31 in arch manual vol 3.
+        casez ({s2_irq_final,s2_trap_cop_unusable,s2_trap_break_syscall})
+        4'b1???: s2_trap_cause = 5'b00000;      // Int -- Interrupt.
+        4'b01??: s2_trap_cause = 5'b01011;      // CpU -- Coprocessor unusable.
+        4'b0010: s2_trap_cause = 5'b01001;      // Bp -- Breakpoint.
+        4'b0001: s2_trap_cause = 5'b01000;      // Sys -- Syscall.
+        default: s2_trap_cause = 5'b00000;      // Don't care.
+        endcase
+
+        // Final trap OR.
+        s2_trap = s2_trap_break_syscall | s2_trap_cop_unusable | s2_irq_final;
     end
 
     // MEM control logic.
@@ -660,7 +682,7 @@ module cpu
     reg [3:0] s34r_csr_xindex;  // CSR WB target (translated index).
     reg s34r_trap;              // TRAP event CSR control passed on to WB.
     reg s34r_eret;              // ERET event CSR control passed on to WB.
-    reg [4:0] s34r_trap_cause;  // Combined IRQ+Cause code passed on to WB.
+    reg [4:0] s34r_trap_cause;  // Trap cause code passed on to WB.
     reg [31:0] s34r_epc;        // Next EPC to be passed on to next stages.
     reg [32:0] s3_arg0_ext;     // ALU arg0 extended for arith ops.
     reg [32:0] s3_arg1_ext;     // ALU arg1 extended for arith ops.
@@ -739,8 +761,8 @@ module cpu
     reg s4_en;                  // EX stage enable.
     reg [31:0] s4_load_data;    // Data from MEM load.
     reg [31:0] s4_wb_data;      // Writeback data (ALU or MEM).
-    reg [4:0] s4_trap_cause;    // Value to load in MCAUSE CSR.
-    reg [13:0] s4_status;       // Value to load on MSTATUS CSR.
+    reg [4:0] s4_trap_cause;    // Cause code to load in MCAUSE CSR.
+    reg [13:0] s4_status_trap;  // Value to load on MSTATUS CSR on trap.
     reg [31:0] s4_mip_updated;  // Updated MIP after raising new IRQ.
     reg [31:0] s4_irq_raised;   // New interrupt, one-hot encoded.
 
@@ -780,28 +802,21 @@ module cpu
         end
     end 
 
-    // CSR 'writeback ports'.
-    `CSREGT(s4_st, MCAUSE,      17'h0,      s34r_trap, s4_trap_cause)
-    `CSREGT(s4_st, MEPC,        32'h0,      s34r_trap, s34r_epc) // @note3
-    `CSREGT(s4_st, MERROREPC,   32'h0,      s34r_trap, s34r_epc) // @note3
-    `CSREGT(s4_st, MSTATUS,     13'h1004,   s34r_trap|s34r_eret, s4_status)
-    `CSREG (s4_st, MCOMPARE)
-
     // CSR input logic. These values are only used if the CSR is not loaded
     // using MTC0, see macros CSREGT and CSREG.
     always @(*) begin
         // STATUS logic: flags modified by TRAP/ERET. 
-        s4_status = s42r_csr_MSTATUS;
+        s4_status_trap = s42r_csr_MSTATUS;
         casez ({s34r_trap, s34r_eret})
         2'b1?: begin  // TRAP | (TRAP & ERET)
-            s4_status[1] = 1'b1; // EXL = 0
+            s4_status_trap[1] = 1'b1; // EXL = 0
         end 
         2'b01: begin  // ERET
             if (`STATUS_ERL) begin
-                s4_status[2] = 1'b0; // ERL = 0
+                s4_status_trap[2] = 1'b0; // ERL = 0
             end
             else begin
-                s4_status[1] = 1'b0; // EXL = 0
+                s4_status_trap[1] = 1'b0; // EXL = 0
             end            
         end
         default:; // No change to STATUS flags.
@@ -812,6 +827,14 @@ module cpu
         s4_mip_updated = s4_irq_raised | s42r_csr_MIP;
     end
 
+    // CSR 'writeback ports'.
+    `CSREGT(s4_st, MCAUSE, 17'h0, s34r_trap, s4_trap_cause, `CAUSE_PACK(s34r_alu_res))
+    `CSREGT(s4_st, MEPC, 32'h0, s34r_trap, s34r_epc, s34r_alu_res)
+    `CSREGT(s4_st, MERROREPC, 32'h0, s34r_trap, s34r_epc, s34r_alu_res)
+    `CSREGT(s4_st, MSTATUS, 13'h1004, s34r_trap|s34r_eret, s4_status_trap, `STATUS_PACK(s34r_alu_res))
+    `CSREG (s4_st, MCOMPARE)
+
+
     //==== Control logic =======================================================
 
 
@@ -821,28 +844,46 @@ module cpu
     reg co_dhaz_rs2_s4;         // S4 wb matches rs2 read. 
     reg co_dhaz_rs1_ld;         // S3vload matches rs1 read.
     reg co_dhaz_rs2_ld;         // S3vload matches rs2 read.
+    reg co_s2_stall_load;       // Decode stage stall, by load hazard.
+    reg co_s2_stall_trap;       // Decode stage stall, SW trap. 
+    reg co_s012_stall_eret;     // Stages 0..2 stall, ERET. 
+    reg temp;
 
+    `PREG (1'b0,  temp, 1'b0, EN_ALWAYS, s4_en)
 
     always @(*) begin
-        co_s0_en = ~RESET_I;
+        co_s0_en = ~RESET_I & ~co_s0_bubble;
     end
 
     always @(*) begin
-        // Data hazard: stage 3 about to write reg used in stage 2.
+        // Data hazard: instr. on stage 3 will write on reg used in stage 2.
         co_dhaz_rs1_s3 = (s3_en & s23r_wb_en & (s23r_rd_index==s2_rs1_index));
         co_dhaz_rs2_s3 = (s3_en & s23r_wb_en & (s23r_rd_index==s2_rs2_index));
-        // Data hazard: stage 4 about to write reg used in stage 2.
+        // Data hazard: instr on stage 4 will write on reg used in stage 2.
         co_dhaz_rs1_s4 = (s4_en & s34r_wb_en & (s34r_rd_index==s2_rs1_index));
         co_dhaz_rs2_s4 = (s4_en & s34r_wb_en & (s34r_rd_index==s2_rs2_index));
-        // Load data hazard: stage 3 about to load data used in stage 2.
+        // Load data hazard: instr. on stage 3 will load data used in stage 2.
         co_dhaz_rs1_ld = (s3_en & s23r_load_en & (s23r_rd_index==s2_rs1_index));
         co_dhaz_rs2_ld = (s3_en & s23r_load_en & (s23r_rd_index==s2_rs2_index));
 
         co_s2_stall_load = (co_dhaz_rs1_ld | co_dhaz_rs2_ld);
+        // Stall S0..2 until bubble propagates from S2..4. @note3.
+        co_s2_stall_trap = s23r_trap & s4_en;
+
+        // Stall & bubble S0..2 until bubble propagates to S4. @note4.
+        co_s012_stall_eret = s23r_eret & s4_en;
+
+        co_s2_bubble = co_s2_stall_load | co_s2_stall_trap | co_s012_stall_eret; 
+        // FIXME bubble stage 1 too in traps so that instruction after victim 
+        // does not get executed twice (before and after trap handler).
+
+        co_s1_bubble = co_s012_stall_eret;
+        co_s0_bubble = co_s012_stall_eret;
+
 
         s4_st = 1'b0;
         s3_st = s4_st;
-        s2_st = s3_st | co_s2_stall_load;
+        s2_st = s3_st | co_s2_bubble;
         s1_st = s2_st;
         s0_st = s1_st;
     end
@@ -855,8 +896,15 @@ endmodule // cpu
 //           saved during the stall cycle, NOT the code bus.
 //           FIXME won't work once wait states are implemented. 
 // @note2 -- No traps on arith overflow implemented.
-// @note3 -- EPC is not available yet to 1st instruction after trap.
-// @note4 -- 
+// @note3 -- So that trap values have time to reach STATUS and CAUSE regs in 
+//           stage 4 before 1st trap handler instruction is executed.
+//           This should work with MEM wait states and whatever's in stages
+//           3 & 4 at the time of the trap.
+// @note4 -- On ERET we stall the pipeline until the STATUS change reaches S4.
+//           So instruction after ERET lands on user mode.
+//           Also bubble stages 0..1. This means that the two instructions after
+//           ERET (sequential after ERET + instruction at EPC) will be fetched 
+//           and will be dropped (not executed).
 // @note5 -- EPC saved by IRQ is victim instruction, NOT the following one.
 // @note6 -- COP0 regs 'packed': implemented bits registered, others h-wired.
 // @note7 -- Bits of decoding outside decoding table.
