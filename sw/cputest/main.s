@@ -152,35 +152,35 @@ entry:
     #---------------------------------------------------------------------------
     # Trap handler address. 
     .org    0x0180
-    
-    # Upon entry, if the exception cause is SYSCALL...
-    # We'll do a few changes in the registers (see below) so that the main 
-    # program can be sure the ISR executed and the cause code was right, etc.
-interrupt_vector:
-    mfc0    $26,$13             # 
+
+    # For all kinds of trap we'll do a few register changes (see below) so the 
+    # main test code knows the ISR executed and CAUSE got the right value.
+    # For SYSCALL traps we'll do a more elaborate check.
+trap_vector:
+    mfc0    $26,$13             # Is this a SYSCALL trap?
     andi    $26,$26,0x007c
     addi    $26,$26,-(8<<2)
-    beqz    $26,syscall_test
-    nop
-interrupt_test:
+    beqz    $26,syscall_test    # It is, so do SYSCALL test.
+    nop 
+trap_exit:
     mfc0    $26,$13             # Return with trap cause register in $26.
     move    $25,$24             # Copy $24 into $25.
     addi    $27,$27,1           # Increment exception count.
     eret
     addi    $27,$27,1           # Increment exception count. Should NOT execute.
 syscall_test:    
-    .ifgt   TEST_COP2_IF
+    .ifgt   TEST_COP2_IF        # FIXME explain or remove this.
     mfc0    $26,$14
     lw      $26,-4($26)
     andi    $26,$26,0xffc0
     xori    $26,$26,0x0040
-    bnez    $26, interrupt_test
+    bnez    $26, trap_exit
     move    $26,$31
     jal     cop2_test_function
     nop
     move    $31,$26
     .endif  # TEST_COP2_IF
-    b       interrupt_test
+    b       trap_exit
     nop
 
 init:
@@ -193,6 +193,19 @@ init:
     ori     $27,$0,0            # Total exception count.
 
 
+    #---------------------------------------------------------------------------
+    # Check the most basic functionality of mtc0 and mfc0.
+
+    INIT_TEST msg_mtc_mfc
+    li      $2,0x00000001
+    mtc0    $2,$12
+    nop
+    nop
+    mfc0    $3,$12
+    CMP     $2,$3,0x00000001
+    PRINT_RESULT
+
+
     #.ifndef RTL_UNDER_CONSTRUCTION
     #---------------------------------------------------------------------------
     # Test entry in user mode and access to MFC0 from user mode.
@@ -203,8 +216,9 @@ init:
     # Note only HW interrupts 7 and 2 are enabled, and SR.IE is 1.
     PUTS    msg_user_mode
     li      $2,0x00408411       # Enter user mode...
-    mtc0    $2,$12              # ...NOW
-    nop                         # @hack7: COP0 hazard, we need a nop here.
+    mtc0    $2,$12              #
+    nop                         # 
+    nop                         # ...NOW.
 
     .ifndef RTL_UNDER_CONSTRUCTION
     mfc0    $3,$12              # This should trigger a COP0 missing exception.
@@ -214,6 +228,8 @@ init:
     .endif # RTL_UNDER_CONSTRUCTION
     PRINT_RESULT 
     
+    #---------------------------------------------------------------------------
+    # Go on to run the individual instruction/feature tests.
 
     .ifndef RTL_UNDER_CONSTRUCTION
     .include "break_syscall.inc.s"
@@ -289,6 +305,7 @@ msg_fail:               .asciiz     "ERROR\n"
 msg_program_pass:       .asciiz     "\nTest PASSED\n\n"
 msg_program_fail:       .asciiz     "\nTest FAILED\n\n"
 msg_user_mode:          .asciiz     "Entering user mode........... "
+msg_mtc_mfc:            .asciiz     "Testing basic MTC0/MFC0...... "
     .text
 
     .end entry
