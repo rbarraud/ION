@@ -1,8 +1,8 @@
 /**
     MIPS32r1 CPU.
 
-    Conventional 5-stage MIPS32r1 implementation. 
-    Optimized for ease of development and maintenance. 
+    Conventional 5-stage MIPS32r1 implementation.
+    Optimized for ease of development and maintenance.
 
 
     UNFINISHED!
@@ -15,7 +15,7 @@
         - Many instructions missing.
         - No support for wait states in code or data buses.
 
-    I started this module as a minimal riscv implementation. I've morphed it 
+    I started this module as a minimal riscv implementation. I've morphed it
     into a MIPS32 but many riscv traces remain, mostly around COP0 registers
     (called CSR here).
 
@@ -75,7 +75,7 @@ module cpu
 
     localparam EN_ALWAYS = 1'b1;
 
-    localparam TYP_J =      4'b0000; 
+    localparam TYP_J =      4'b0000;
     localparam TYP_B =      4'b0001;
     localparam TYP_I =      4'b0010;
     localparam TYP_M =      4'b0011;
@@ -120,6 +120,7 @@ module cpu
 
     //==== Register macros -- all DFFs inferred using these ====================
 
+    // Pipeline reg. Has enable for stalls.
     `define PREG(st, name, resval, enable, loadval) \
         always @(posedge CLK) \
             if (RESET_I) \
@@ -127,6 +128,7 @@ module cpu
             else if(enable & ~st) \
                 name <= loadval;
 
+    // Same as PREG but gets CLEARED when the stage is bubbled.
     `define PREGC(st, name, resval, enable, loadval) \
         always @(posedge CLK) \
             if (RESET_I || ~enable) \
@@ -134,6 +136,7 @@ module cpu
             else if(enable & ~st) \
                 name <= loadval;
 
+    // COP0 reg. Load ports for MTC0 writebacks AND traps.
     `define CSREGT(st, name, resval, trapen, trapval, loadval) \
         always @(posedge CLK) \
             if (RESET_I) \
@@ -143,18 +146,15 @@ module cpu
                     s42r_csr_``name <= trapval; \
                 else if (s4_en & s34r_wb_csr_en & (s34r_csr_xindex==CSRB_``name)) \
                     s42r_csr_``name <= loadval; \
-            end 
+            end
 
+    // COP0 reg. Load port for MTC0 only.
     `define CSREG(st, name) \
         always @(posedge CLK) \
             if (RESET_I) \
                 s42r_csr_``name <= 32'h0; \
             else if (s4_en & ~st & s34r_wb_csr_en & (s34r_csr_xindex==CSRB_``name)) \
-                s42r_csr_``name <= s34r_alu_res; 
-
-
-    // FIXME Per-machine CSRs unimplemented
-    `define CSREGM(st, name)
+                s42r_csr_``name <= s34r_alu_res;
 
 
     //==== Per-machine state registers =========================================
@@ -201,13 +201,13 @@ module cpu
 
 
     //==== Pipeline stage 0 -- Fetch-Address ===================================
-    // Address phase of fetch cycle.     
+    // Address phase of fetch cycle.
 
     reg [31:0] s0_pc_fetch;     // Fetch address (PC of next instruction).
     reg s01r_en;                // FData stage enable carried from FAaddr.
     reg [31:0] s01r_pc;         // PC of instr in FData stage.
-    reg [31:0] s01r_pc_seq;     
-    
+    reg [31:0] s01r_pc_seq;
+
 
     // Fetch address mux: sequential or non sequential.
     always @(*) begin
@@ -252,7 +252,7 @@ module cpu
     `PREG (1'b0,  s12r_en, 1'b0, EN_ALWAYS, s1_en)
     `PREG (s1_st, s12r_pc, OPTION_RESET_ADDR, s1_en, s01r_pc)
     `PREG (s1_st, s12r_pc_seq, OPTION_RESET_ADDR, s1_en, s01r_pc_seq)
-    
+
 
     //==== Pipeline stage Decode ===============================================
     // Last stage of Fetch pipeline, first of Execute pipeline.
@@ -330,7 +330,7 @@ module cpu
     reg [31:0] s2_rs1_bank;     // Register RS1 value read from bank.
     reg [31:0] s2_rs2_bank;     // Register RS2 value read from bank.
     reg [31:0] s2_rs1;          // Register RS1 value after FFWD mux.
-    reg [31:0] s2_rs2;          // Register RS2 value after FFWD mux.    
+    reg [31:0] s2_rs2;          // Register RS2 value after FFWD mux.
     reg s2_rs12_equal;          // RS1 == RS2.
     reg s2_bxx_cond_val;        // Set if Bxx condition is true.
     reg [2:0] s2_bxx_cond_sel;  // Selection of branch condition.
@@ -341,7 +341,7 @@ module cpu
     reg [31:0] s2_mem_addr_imm; // Immediate value used to compute mem address.
     reg [1:0] s2_mem_trans;     // MEM transaction type.
     reg [1:0] s2_mem_size;      // MEM transaction size.
-    reg s2_load_exz;            // 1 if MEM subword load zero-extends to word. 
+    reg s2_load_exz;            // 1 if MEM subword load zero-extends to word.
     reg s2_load_en;             // MEM load.
     reg s2_store_en;            // MEM store.
     reg [31:0] s2_mem_wdata;    // MEM write data.
@@ -349,11 +349,11 @@ module cpu
     reg [7:0] s2_masked_irq;    // IRQ lines after masking.
     reg s2_irq_final;           // At least one pending IRQ enabled.
     reg s2_hw_trap;             // Any HW trap caught in stages 0..2.
-    reg s2_go_seq;              // Sequential/Non-sequential PC selection.        
+    reg s2_go_seq;              // Sequential/Non-sequential PC selection.
 
     // Pipeline bubble logic.
     always @(*) begin
-        // The load hazard stalls & trap stalls inserts a bubble in stage 2 by 
+        // The load hazard stalls & trap stalls inserts a bubble in stage 2 by
         // clearing s2_en (in addition to stalling stages 0 to 2.)
         s2_en = s12r_en & ~co_s2_bubble;
     end
@@ -399,7 +399,7 @@ module cpu
         `TA4    (5'b00000):         s2_m = `IN_B(3'b100);       // BLTZ
         `TA4    (5'b00001):         s2_m = `IN_B(3'b101);       // BGEZ
         `TA4    (5'b10000):         s2_m = `IN_BAL(3'b100);     // BLTZAL
-        `TA4    (5'b10001):         s2_m = `IN_BAL(3'b101);     // BGEZAL      
+        `TA4    (5'b10001):         s2_m = `IN_BAL(3'b101);     // BGEZAL
         `TA2rs0 (6'b001111):        s2_m = `IN_IH(OP_OR);       // LUI
         `TA2    (6'b001001):        s2_m = `IN_I(OP_ADD);       // ADDIU
         `TA2    (6'b001000):        s2_m = `IN_I(OP_ADD);       // ADDI
@@ -469,7 +469,7 @@ module cpu
         s2_rs2_index = s12r_ir[20:16];
         s2_rd_index = s2_link? 5'b11111 : s2_3reg? s12r_ir[15:11] : s12r_ir[20:16];
         s2_csr_index = {s12r_ir[15:11], s12r_ir[2:0]};
-        
+
         // Decode immediate field.
         s2_j_immediate = {s01r_pc[31:28], s12r_ir[25:0], 2'b00};
         s2_b_immediate = {{14{s12r_ir[15]}}, s12r_ir[15:0], 2'b00};
@@ -504,7 +504,7 @@ module cpu
     always @(*) begin
         s2_rs1 = co_dhaz_rs1_s3? s3_alu_res : co_dhaz_rs1_s4? s4_wb_data : s2_rs1_bank;
         s2_rs2 = co_dhaz_rs2_s3? s3_alu_res : co_dhaz_rs2_s4? s4_wb_data : s2_rs2_bank;
-    end 
+    end
 
     // CSR bank multiplexors.
     always @(*) begin
@@ -522,7 +522,7 @@ module cpu
         // CSR read multiplexor.
         case (s2_csr_index)
         8'b01011_000:   s2_csr = s42r_csr_MCOMPARE;
-        8'b01100_000:   s2_csr = `STATUS_UNPACK(s42r_csr_MSTATUS);  
+        8'b01100_000:   s2_csr = `STATUS_UNPACK(s42r_csr_MSTATUS);
         8'b01101_000:   s2_csr = `CAUSE_UNPACK(s42r_csr_MCAUSE);
         8'b01110_000:   s2_csr = s42r_csr_MEPC;
         8'b01111_000:   s2_csr = FEATURE_PRID;
@@ -564,8 +564,8 @@ module cpu
         4'b0111:    s2_pc_nonseq = s2_pc_branch;
         default:    begin
                     s2_pc_nonseq = s2_pc_trap_eret;
-                    s2_go_seq = 1'b1; // meaning no jump at all.           
-                    end 
+                    s2_go_seq = 1'b1; // meaning no jump at all.
+                    end
         endcase
     end
 
@@ -576,7 +576,7 @@ module cpu
         P0_RS1:     s2_arg0 = s2_rs1;
         P0_PCS:     s2_arg0 = s01r_pc_seq; // JAL (-> instr after delay slot)
         P0_PC:      s2_arg0 = s12r_pc; // AUIPC
-        P0_IMM:     s2_arg0 = s2_immediate; // Shift instructions 
+        P0_IMM:     s2_arg0 = s2_immediate; // Shift instructions
         default:    s2_arg0 = 32'h0;
         endcase
 
@@ -620,7 +620,7 @@ module cpu
     always @(*) begin
         s2_mem_addr_imm = s2_i_immediate;
         s2_mem_addr = s2_rs1 + s2_mem_addr_imm;
-        
+
         s2_mem_trans = (s2_load_en | s2_store_en)? 2'b10 : 2'b00; // NONSEQ.
         s2_load_exz = s12r_ir[28]; // @note7.
 
@@ -711,7 +711,7 @@ module cpu
         s3_arg1_ext[31:0] = s23r_arg1;
         s3_arg1_ext[32] = s23r_alu_op[1]? 1'b0 : s23r_arg1[31];
 
-        s3_alu_addsub = s23r_alu_op[0]? 
+        s3_alu_addsub = s23r_alu_op[0]?
             s3_arg0_ext - s3_arg1_ext :
             s3_arg0_ext + s3_arg1_ext;
 
@@ -719,25 +719,26 @@ module cpu
         2'b10,
         2'b11:      s3_alu_arith = {31'h0, s3_alu_addsub[32]};
         default:    s3_alu_arith = s3_alu_addsub[31:0];
-        endcase        
+        endcase
 
         case (s23r_alu_op[1:0])
         2'b00:      s3_alu_shift = s23r_arg1 << s23r_arg0[4:0];
         2'b10:      s3_alu_shift = s23r_arg1 >> s23r_arg0[4:0];
         default:    s3_alu_shift = $signed(s23r_arg1) >>> s23r_arg0[4:0];
-        endcase        
+        endcase
 
         case (s23r_alu_op[1:0])
         2'b00:      s3_alu_logic = s23r_arg0 | s23r_arg1;
         2'b01:      s3_alu_logic = s23r_arg0 & s23r_arg1;
         2'b10:      s3_alu_logic = s23r_arg0 ^ s23r_arg1;
         default:    s3_alu_logic = ~(s23r_arg0 | s23r_arg1);
-        endcase 
+        endcase
 
         s3_alu_noarith = s23r_alu_op[3]? s3_alu_logic : s3_alu_shift;
         s3_alu_res = s23r_alu_op[4]? s3_alu_arith : s3_alu_noarith;
     end
 
+    // EX-WB pipeline registers.
     `PREG (1'b0,  s34r_en, 1'b0, EN_ALWAYS, s3_en)
     `PREG (s3_st, s34r_alu_res, 32'h0, s3_en, s3_alu_res)
     `PREGC(s3_st, s34r_wb_en, 1'b0, s3_en, s23r_wb_en)
@@ -780,7 +781,7 @@ module cpu
         endcase
         if (~s34r_load_exz) begin
             case (s34r_mem_size)
-            2'b00: s4_load_data[31:8] = {24{s4_load_data[7]}}; 
+            2'b00: s4_load_data[31:8] = {24{s4_load_data[7]}};
             2'b01: s4_load_data[31:16] = {16{s4_load_data[15]}};
             endcase
         end
@@ -789,7 +790,7 @@ module cpu
     always @(*) begin
         s4_en = s34r_en;
         // FIXME ready/split ignored
-        s4_wb_data = s34r_load_en? s4_load_data : s34r_alu_res; 
+        s4_wb_data = s34r_load_en? s4_load_data : s34r_alu_res;
         // FIXME traps caught in WB stage missing.
         s4_excode = s34r_excode;
     end
@@ -799,24 +800,24 @@ module cpu
         if (s4_en & ~s4_st & s34r_wb_en) begin
             s42r_rbank[s34r_rd_index] <= s4_wb_data;
         end
-    end 
+    end
 
     // CSR input logic. These values are only used if the CSR is not loaded
     // using MTC0, see macros CSREGT and CSREG.
     always @(*) begin
-        // STATUS logic: flags modified by TRAP/ERET. 
+        // STATUS logic: flags modified by TRAP/ERET.
         s4_status_trap = s42r_csr_MSTATUS;
         casez ({s34r_trap, s34r_eret})
         2'b1?: begin  // TRAP | (TRAP & ERET)
             s4_status_trap[1] = 1'b1; // EXL = 0
-        end 
+        end
         2'b01: begin  // ERET
             if (`STATUS_ERL) begin
                 s4_status_trap[2] = 1'b0; // ERL = 0
             end
             else begin
                 s4_status_trap[1] = 1'b0; // EXL = 0
-            end            
+            end
         end
         default:; // No change to STATUS flags.
         endcase
@@ -838,14 +839,14 @@ module cpu
 
 
     reg co_dhaz_rs1_s3;         // S3 wb matches rs1 read.
-    reg co_dhaz_rs2_s3;         // S3 wb matches rs2 read. 
+    reg co_dhaz_rs2_s3;         // S3 wb matches rs2 read.
     reg co_dhaz_rs1_s4;         // S4 wb matches rs1 read.
-    reg co_dhaz_rs2_s4;         // S4 wb matches rs2 read. 
+    reg co_dhaz_rs2_s4;         // S4 wb matches rs2 read.
     reg co_dhaz_rs1_ld;         // S3vload matches rs1 read.
     reg co_dhaz_rs2_ld;         // S3vload matches rs2 read.
     reg co_s2_stall_load;       // Decode stage stall, by load hazard.
-    reg co_s2_stall_trap;       // Decode stage stall, SW trap. 
-    reg co_s012_stall_eret;     // Stages 0..2 stall, ERET. 
+    reg co_s2_stall_trap;       // Decode stage stall, SW trap.
+    reg co_s012_stall_eret;     // Stages 0..2 stall, ERET.
     reg temp;
 
     `PREG (1'b0,  temp, 1'b0, EN_ALWAYS, s4_en)
@@ -872,8 +873,8 @@ module cpu
         // Stall & bubble S0..2 until bubble propagates to S4. @note4.
         co_s012_stall_eret = s23r_eret & s4_en;
 
-        co_s2_bubble = co_s2_stall_load | co_s2_stall_trap | co_s012_stall_eret; 
-        // FIXME bubble stage 1 too in traps so that instruction after victim 
+        co_s2_bubble = co_s2_stall_load | co_s2_stall_trap | co_s012_stall_eret;
+        // FIXME bubble stage 1 too in traps so that instruction after victim
         // does not get executed twice (before and after trap handler).
 
         co_s1_bubble = co_s012_stall_eret;
@@ -891,18 +892,18 @@ module cpu
 endmodule // cpu
 
 // FIXME extract notes
-// @note1 -- The cycle after a load-hazard-stall we load IR with the value we 
+// @note1 -- The cycle after a load-hazard-stall we load IR with the value we
 //           saved during the stall cycle, NOT the code bus.
-//           FIXME won't work once wait states are implemented. 
+//           FIXME won't work once wait states are implemented.
 // @note2 -- No traps on arith overflow implemented.
-// @note3 -- So that trap values have time to reach STATUS and CAUSE regs in 
+// @note3 -- So that trap values have time to reach STATUS and CAUSE regs in
 //           stage 4 before 1st trap handler instruction is executed.
 //           This should work with MEM wait states and whatever's in stages
 //           3 & 4 at the time of the trap.
 // @note4 -- On ERET we stall the pipeline until the STATUS change reaches S4.
 //           So instruction after ERET lands on user mode.
 //           Also bubble stages 0..1. This means that the two instructions after
-//           ERET (sequential after ERET + instruction at EPC) will be fetched 
+//           ERET (sequential after ERET + instruction at EPC) will be fetched
 //           and will be dropped (not executed).
 // @note5 -- EPC saved by IRQ is victim instruction, NOT the following one.
 // @note6 -- COP0 regs 'packed': implemented bits registered, others h-wired.
