@@ -24,6 +24,13 @@
 
 #include "ion32sim.h"
 
+/*---- Local macros ----------------------------------------------------------*/
+
+/** Mask for several COP0 regs, 1 per bit that is actually implemenmted. */
+#define STATUS_MASK     (0x0040ff17)
+#define CAUSE_MASK      (0xb080ff7c)
+
+
 /*---- Static data -----------------------------------------------------------*/
 
 t_map memory_maps[NUM_MEM_MAPS] = {
@@ -661,9 +668,14 @@ void cycle(t_state *s, int show_mode){
     s->pc = s->pc_next;
     s->pc_next = s->pc_next + 4;
 
-    // Instructions in the delay slot of ERET will NOT be executed.
+    // Instructions in the delay slot of ERET will NOT be executed...
     if (s->eret_delay_slot) {
         s->eret_delay_slot = 0;
+        return;
+    }
+    // ...nor will instructions that caused a trap.
+    if (s->trap_delay_slot) {
+        s->trap_delay_slot = 0;
         return;
     }
 
@@ -764,8 +776,8 @@ void cycle(t_state *s, int show_mode){
     case 0x0e:/*XORI*/   r[rt]=r[rs]^imm;         break;
     case 0x0f:/*LUI*/    r[rt]=(imm<<16);         break;
     case 0x10:/*COP0*/
-        //printf("STATUS = %08x\n", s->cp0_status);
         if(KERNEL_MODE){
+            //fprintf(s->t.log, "STATUS = %08x\n", s->cp0_status);
             if(opcode==0x42000010){  // rfe
                 unimplemented(s,"RFE");
                 /* restore ('pop') the KU/IE flag values */
@@ -787,13 +799,13 @@ void cycle(t_state *s, int show_mode){
                 //printf("ERET :: STATUS = %08x\n", s->cp0_status);
             }
             else if((opcode & (1<<23)) == 0){  //move from CP0 (mfc0)
-                //printf("mfc0: [%02d]=0x%08x @ [0x%08x]\n", rd, s->cp0_status, epc);
+                //fprintf(s->t.log, "MFC0 $%02d (%08x)\n", rd, opcode);
                 switch(rd){
                     case 8: r[rt] = 0; break; // FIXME BadVAddr
                     case 9: r[rt] = 0; break; // FIXME Count
                     case 11: r[rt] = 0; break; // FIXME Compare
-                    case 12: r[rt]=s->cp0_status & 0xf048fe17; break;
-                    case 13: r[rt]=s->cp0_cause & 0xb0a0ff7c; break;
+                    case 12: r[rt]=(s->cp0_status & STATUS_MASK); break;
+                    case 13: r[rt]=(s->cp0_cause & CAUSE_MASK); break;
                     case 14: r[rt]=s->epc; break;
                     case 15: r[rt]=CPU_ID; break;
                     case 16:
@@ -814,9 +826,9 @@ void cycle(t_state *s, int show_mode){
                     case 11: s->cp0_compare = r[rt]; break;
                     case 12: s->sr_load_pending_value = r[rt];
                              s->sr_load_pending = true;
+                             fprintf(s->t.log, "(%08x) [01]=%08x\n", 0x0 /* log_pc */, r[rt] & STATUS_MASK);
                              break;
-                             //printf("mtc0: [SR]=0x%08x @ [0x%08x]\n", s->cp0_status, epc);
-                    case 13: s->cp0_cause = r[rt] & 0xb0c0fefc; break;
+                    case 13: s->cp0_cause = r[rt] & CAUSE_MASK; break;
                     case 16:
                         if ((func&0x07)==0) {
                             s->cp0_config0 = r[rt] & 0x00030000;
@@ -835,13 +847,7 @@ void cycle(t_state *s, int show_mode){
         }
         else{
             /* tried to execute mtc* or mfc* in user mode: trap */
-            //fprintf(stderr, "COP0 UNAVAILABLE [0x%08x] = 0x%x %c -- \n",
-            //       epc, opcode, (s->delay_slot? 'D':' '));
-            //print_opcode_fields(opcode);
-            //printf("\n");
-            //printf("STATUS = %08x\n", s->cp0_status);
-            //exit(0);
-
+            s->trap_delay_slot = 1;
             s->trap_cause = 11; /* unavailable coprocessor */
         }
         break;
@@ -1174,16 +1180,18 @@ uint32_t log_cycle(t_state *s){
         s->t.epc = s->epc;
 
         if(s->cp0_status != s->t.status){
-            //@hack3 fprintf(s->t.log, "(%08x) [01]=%08x\n", log_pc, s->cp0_status);
-            fprintf(s->t.log, "(%08x) [01]=%08x\n", 0x0, s->cp0_status);
+            // TODO we'll only log status changes caused by MTC0.
+            #if 0
+            fprintf(s->t.log, "(%08x) [01]=%08x\n", 0x0 /* log_pc */, s->cp0_status & STATUS_MASK);
+            #endif
         }
-        s->t.status = s->cp0_status;
+        s->t.status = s->cp0_status & STATUS_MASK;
 
         // When SR is loaded via a MTC0, the load is delayed by one cycle.
         // We update the register after checking for a change (above), so the
         // logged value will be correct.
         if (s->sr_load_pending) {
-            s->cp0_status = s->sr_load_pending_value & 0xf048ff17;
+            s->cp0_status = s->sr_load_pending_value & STATUS_MASK;
             s->sr_load_pending = false;
         }
 
@@ -1257,6 +1265,7 @@ void reset_cpu(t_state *s){
     s->pc = cmd_line_args.start_addr; /* reset start vector or cmd line address */
     s->delay_slot = 0;
     s->eret_delay_slot = 0;
+    s->trap_delay_slot = 0;
     s->failed_assertions = 0; /* no failed assertions pending */
     s->cp0_status = SR_BEV | SR_ERL;
     s->instruction_ctr = 0;

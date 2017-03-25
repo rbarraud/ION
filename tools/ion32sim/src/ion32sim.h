@@ -264,6 +264,7 @@ typedef struct s_state {
    int irqStatus;               /**< DEPRECATED, to be removed */
    int skip;
    int eret_delay_slot;
+   int trap_delay_slot;
    t_trace t;
    t_block blocks[NUM_MEM_BLOCKS];
    int wakeup;
