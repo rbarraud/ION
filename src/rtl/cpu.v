@@ -232,7 +232,7 @@ module cpu
     reg [31:0] s12r_irs;        // FIXME explain.
     reg [31:0] s12r_pc;         // PC of instruction in DE stage.
     reg [31:0] s12r_pc_seq;     // PC of instr following fdr_pc_de one.
-    reg s12r_continue;
+    reg s12r_continue;          // Will pulse high after a data-hazard-stall.
     reg [31:0] s1_ir;           // Mux at input of IR reg.
 
     always @(*) begin
@@ -274,7 +274,7 @@ module cpu
     reg s23r_load_exz;          // 1 if MEM subword load zero-extends to word.
     reg s23r_trap;              // TRAP event CSR control passed on to EX.
     reg s23r_eret;              // ERET event CSR control passed on to EX.
-    reg [4:0] s23r_trap_cause;  // Trap cause code passed on to EX.
+    reg [4:0] s23r_excode;      // Trap cause code passed on to EX.
     reg [31:0] s23r_epc;        // Next EPC to be passed on to next stages.
 
     reg s2_en;                  // DE stage enable.
@@ -304,11 +304,11 @@ module cpu
     reg [1:0] s2_flow_sel;      // {00,01,10,11} = {seq/trap, JALR, JAL, Bxx}.
     reg s2_cop0_access;         // COP0 access instruction in IR.
     reg s2_user_mode;           // 1 -> user mode, 0 -> kernel mode.
-    reg s2_trap_break_syscall;  // Trap caused by BREAK or SYSCALL instruction.
+    reg [1:0] s2_break_syscall; // Trap caused by BREAK or SYSCALL instruction.
     reg s2_trap_cop_unusable;   // Trap caused by COP access in user mode.
     reg s2_trap;                // Take trap for any cause.
     reg s2_eret;                // ERET instruction.
-    reg [4:0] s2_trap_cause;    // Trap cause code.
+    reg [4:0] s2_excode;        // Trap cause code.
 
     reg [31:0] s2_pc_branch;    // Branch target;
     reg [31:0] s2_pc_jump;      // Jump (JAL) target;
@@ -446,7 +446,7 @@ module cpu
         default:                    s2_m = `IN_BAD;             // All others
         endcase
         // Unpack the control signals output by the table.
-        s2_trap_break_syscall               = s2_m[27:26];
+        s2_break_syscall                    = s2_m[27:26];
         s2_cop0_access                      = s2_m[25];
         s2_bxx_cond_sel                     = s2_m[24:22];
         {s2_load_en, s2_store_en}           = s2_m[21:20];
@@ -604,16 +604,16 @@ module cpu
         s2_trap_cop_unusable = s2_cop0_access & s2_user_mode;
 
         // Encode trap cause as per table 9.31 in arch manual vol 3.
-        casez ({s2_irq_final,s2_trap_cop_unusable,s2_trap_break_syscall})
-        4'b1???: s2_trap_cause = 5'b00000;      // Int -- Interrupt.
-        4'b01??: s2_trap_cause = 5'b01011;      // CpU -- Coprocessor unusable.
-        4'b0010: s2_trap_cause = 5'b01001;      // Bp -- Breakpoint.
-        4'b0001: s2_trap_cause = 5'b01000;      // Sys -- Syscall.
-        default: s2_trap_cause = 5'b00000;      // Don't care.
+        casez ({s2_irq_final,s2_trap_cop_unusable,s2_break_syscall})
+        4'b1???: s2_excode = 5'b00000;      // Int -- Interrupt.
+        4'b01??: s2_excode = 5'b01011;      // CpU -- Coprocessor unusable.
+        4'b0010: s2_excode = 5'b01001;      // Bp -- Breakpoint.
+        4'b0001: s2_excode = 5'b01000;      // Sys -- Syscall.
+        default: s2_excode = 5'b00000;      // Don't care.
         endcase
 
         // Final trap OR.
-        s2_trap = s2_trap_break_syscall | s2_trap_cop_unusable | s2_irq_final;
+        s2_trap = (|s2_break_syscall) | s2_trap_cop_unusable | s2_irq_final;
     end
 
     // MEM control logic.
@@ -661,7 +661,7 @@ module cpu
     `PREGC(s2_st, s23r_trap, 1'd0, s2_en, s2_trap)
     `PREGC(s2_st, s23r_eret, 1'd0, s2_en, s2_eret)
     `PREG (s2_st, s23r_epc, 32'h0, s2_en & s2_trap, s12r_pc)
-    `PREG (s2_st, s23r_trap_cause, 5'd0, s2_en & s2_trap, s2_trap_cause)
+    `PREG (s2_st, s23r_excode, 5'd0, s2_en & s2_trap, s2_excode)
 
 
     //==== Pipeline stage Execute ==============================================
@@ -682,7 +682,7 @@ module cpu
     reg [3:0] s34r_csr_xindex;  // CSR WB target (translated index).
     reg s34r_trap;              // TRAP event CSR control passed on to WB.
     reg s34r_eret;              // ERET event CSR control passed on to WB.
-    reg [4:0] s34r_trap_cause;  // Trap cause code passed on to WB.
+    reg [4:0] s34r_excode;      // Trap cause code passed on to WB.
     reg [31:0] s34r_epc;        // Next EPC to be passed on to next stages.
     reg [32:0] s3_arg0_ext;     // ALU arg0 extended for arith ops.
     reg [32:0] s3_arg1_ext;     // ALU arg1 extended for arith ops.
@@ -752,7 +752,7 @@ module cpu
     `PREGC(s3_st, s34r_trap, 1'd0, s3_en, s23r_trap)
     `PREGC(s3_st, s34r_eret, 1'd0, s3_en, s23r_eret)
     `PREG (s3_st, s34r_epc, 32'h0, s3_en & s23r_trap, s23r_epc)
-    `PREG (s3_st, s34r_trap_cause, 5'd0, s3_en & s23r_trap, s23r_trap_cause)
+    `PREG (s3_st, s34r_excode, 5'd0, s3_en & s23r_trap, s23r_excode)
 
 
     //==== Pipeline stage Writeback ============================================
@@ -761,10 +761,9 @@ module cpu
     reg s4_en;                  // EX stage enable.
     reg [31:0] s4_load_data;    // Data from MEM load.
     reg [31:0] s4_wb_data;      // Writeback data (ALU or MEM).
-    reg [4:0] s4_trap_cause;    // Cause code to load in MCAUSE CSR.
+    reg [4:0] s4_excode;        // Cause code to load in MCAUSE CSR.
+    reg [16:0] s4_cause_trap;   // Value to load on packed CAUSE reg on traps.
     reg [13:0] s4_status_trap;  // Value to load on MSTATUS CSR on trap.
-    reg [31:0] s4_mip_updated;  // Updated MIP after raising new IRQ.
-    reg [31:0] s4_irq_raised;   // New interrupt, one-hot encoded.
 
     assign DWDATA_O = s34r_mem_wdata;
 
@@ -792,7 +791,7 @@ module cpu
         // FIXME ready/split ignored
         s4_wb_data = s34r_load_en? s4_load_data : s34r_alu_res; 
         // FIXME traps caught in WB stage missing.
-        s4_trap_cause = s34r_trap_cause;
+        s4_excode = s34r_excode;
     end
 
     // Register bank write port.
@@ -822,13 +821,13 @@ module cpu
         default:; // No change to STATUS flags.
         endcase
 
-        // MIP -- set incoming interrupt if any.
-        s4_irq_raised = {8'h0, s2_masked_irq, 16'h0}; // FIXME MSIP/MTIP missing.
-        s4_mip_updated = s4_irq_raised | s42r_csr_MIP;
+        // FIXME Cause BC, CE, IV fields h-wired to zero.
+        // FIXME loading interrupts from stage 2!
+        s4_cause_trap = {1'b0,2'b00,1'b0, s2_masked_irq, s4_excode};
     end
 
     // CSR 'writeback ports'.
-    `CSREGT(s4_st, MCAUSE, 17'h0, s34r_trap, s4_trap_cause, `CAUSE_PACK(s34r_alu_res))
+    `CSREGT(s4_st, MCAUSE, 17'h0, s34r_trap, s4_cause_trap, `CAUSE_PACK(s34r_alu_res))
     `CSREGT(s4_st, MEPC, 32'h0, s34r_trap, s34r_epc, s34r_alu_res)
     `CSREGT(s4_st, MERROREPC, 32'h0, s34r_trap, s34r_epc, s34r_alu_res)
     `CSREGT(s4_st, MSTATUS, 13'h1004, s34r_trap|s34r_eret, s4_status_trap, `STATUS_PACK(s34r_alu_res))
