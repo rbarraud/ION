@@ -4,6 +4,9 @@
     Conventional 5-stage MIPS32r1 implementation.
     Optimized for ease of development and maintenance.
 
+    The 'architecture manual' referenced in the comments is revision 3.12 of 
+    MIPS Technologies' 'MIPS® Architecture For Programmers' (MD00090).
+
 
     UNFINISHED!
     ~~~~~~~~~~~
@@ -23,7 +26,7 @@
     Signal naming convention
     ~~~~~~~~~~~~~~~~~~~~~~~~
 
-    Signals are prefixed according th the pipeline stage they belong to:
+    Signals are prefixed according to the pipeline stage they belong to:
 
         sX_*    - Combinational signal within stage X.
         sXYr_*  - Register, input from stage X, output to stage Y.
@@ -61,61 +64,45 @@ module cpu
 
     //==== Local parameters ====================================================
 
+    // Hardwired values of several CSR. Not really user-configurable.
     localparam FEATURE_PRID =           32'h00000000;
     localparam FEATURE_CONFIG0 =        32'h00000000;
     localparam FEATURE_CONFIG1 =        32'h00000000;
 
-    // Translated indices of writeable CSRs.
-    localparam CSRB_MCOMPARE =          4'b0000;
-    localparam CSRB_MSTATUS =           4'b0001;
-    localparam CSRB_MCAUSE =            4'b0010;
-    localparam CSRB_MEPC =              4'b0011;
-    localparam CSRB_MCONFIG0 =          4'b0100;
-    localparam CSRB_MERROREPC =         4'b0101;
+    // Translated indices of implemented, writeable CSRs.
+    // Smaller than spec index to save a few DFFs in the pipeline regs.
+    // (Read-only regs don't need their indices propagated to writeback stage.)
+    localparam 
+        CSRB_MCOMPARE =  4'b0000, CSRB_MSTATUS =   4'b0001,
+        CSRB_MCAUSE =    4'b0010, CSRB_MEPC =      4'b0011,
+        CSRB_MCONFIG0 =  4'b0100, CSRB_MERROREPC = 4'b0101;
 
-    localparam EN_ALWAYS = 1'b1;
+    // Instruction formats. Used to decode position of instruction fields.
+    localparam 
+        TYP_J = 4'b0000, TYP_B = 4'b0001, TYP_I = 4'b0010, TYP_M = 4'b0011,
+        TYP_S = 4'b0100, TYP_R = 4'b0101, TYP_P = 4'b0110, TYP_T = 4'b0111,
+        TYP_E = 4'b1000, TYP_IH =4'b1001, TYP_IU =4'b1010, TYP_BAD = 4'b1111;
 
-    localparam TYP_J =      4'b0000;
-    localparam TYP_B =      4'b0001;
-    localparam TYP_I =      4'b0010;
-    localparam TYP_M =      4'b0011;
-    localparam TYP_S =      4'b0100;
-    localparam TYP_R =      4'b0101;
-    localparam TYP_P =      4'b0110;
-    localparam TYP_T =      4'b0111;
-    localparam TYP_E =      4'b1000;
-    localparam TYP_IH =     4'b1001;
-    localparam TYP_IU =     4'b1010;
-    localparam TYP_BAD =    4'b1111;
+    // Selection mux control for ALU operand 0.
+    localparam 
+        P0_0   = 3'b000, P0_RS1 = 3'b001, P0_PC = 3'b010, 
+        P0_PCS = 3'b011, P0_IMM = 3'b100, P0_X  = 3'b000;
 
-    localparam P0_0 =       3'b000;
-    localparam P0_RS1 =     3'b001;
-    localparam P0_PC =      3'b010;
-    localparam P0_PCS =     3'b011;
-    localparam P0_IMM =     3'b100;
-    localparam P0_X =       3'b000;
-    localparam P1_0 =       2'b00;
-    localparam P1_RS2 =     2'b01;
-    localparam P1_CSR =     2'b10;
-    localparam P1_IMM =     2'b11;
-    localparam P1_X =       2'b00;
+    // Selection mux control for ALU operand 1.
+    localparam 
+        P1_0 =   2'b00,  P1_RS2 = 2'b01,  P1_CSR = 2'b10, 
+        P1_IMM = 2'b11,  P1_X =   2'b00;
 
-    localparam OP_NOP =     5'b00000;
-    localparam OP_SLL =     5'b00100;
-    localparam OP_SRL =     5'b00110;
-    localparam OP_SRA =     5'b00111;
-    localparam OP_ADD =     5'b10000;
-    localparam OP_SUB =     5'b10001;
-    localparam OP_SLT =     5'b10101;
-    localparam OP_SLTU =    5'b10111;
-    localparam OP_OR =      5'b01000;
-    localparam OP_AND =     5'b01001;
-    localparam OP_XOR =     5'b01010;
-    localparam OP_NOR =     5'b01011;
+    // ALU operation selection.
+    localparam 
+        OP_NOP =  5'b00000, OP_SLL =  5'b00100, OP_SRL =  5'b00110,
+        OP_SRA =  5'b00111, OP_ADD =  5'b10000, OP_SUB =  5'b10001,
+        OP_SLT =  5'b10101, OP_SLTU = 5'b10111, OP_OR =   5'b01000,
+        OP_AND =  5'b01001, OP_XOR =  5'b01010, OP_NOR =  5'b01011;
 
-    localparam WB_R =       2'b10;
-    localparam WB_N =       2'b00;
-    localparam WB_C =       2'b01;
+    // Writeback selection ({R}egister bank, {C}SR or {N}one).
+    localparam 
+        WB_R = 2'b10, WB_N = 2'b00, WB_C = 2'b01;
 
 
     //==== Register macros -- all DFFs inferred using these ====================
@@ -128,7 +115,7 @@ module cpu
             else if(enable & ~st) \
                 name <= loadval;
 
-    // Same as PREG but gets CLEARED when the stage is bubbled.
+    // Same as PREG but gets RESET when the stage is bubbled.
     `define PREGC(st, name, resval, enable, loadval) \
         always @(posedge CLK) \
             if (RESET_I || ~enable) \
@@ -159,7 +146,7 @@ module cpu
 
     //==== Per-machine state registers =========================================
 
-    // COP0 registers. @note6.
+    // COP0 registers. Note they are 'packed' (@note6).
     reg [16:0] s42r_csr_MCAUSE;
     reg [12:0] s42r_csr_MSTATUS;
     reg [31:0] s42r_csr_MEPC;
@@ -172,6 +159,7 @@ module cpu
     reg [31:0] s20r_pc_nonseq;
 
     // These macros unpack COP0 regs into useful names.
+    // Also define packed-to-32 and 32-to-packed macros.
     `define STATUS_BEV          s42r_csr_MSTATUS[12]
     `define STATUS_IM           s42r_csr_MSTATUS[11:4]
     `define STATUS_UM           s42r_csr_MSTATUS[3]
@@ -218,7 +206,7 @@ module cpu
     assign CTRANS_O = co_s0_en? 2'b10 : 2'b00;
 
     // FA-FD pipeline registers.
-    `PREG (1'b0,  s01r_en, 1'b0, EN_ALWAYS, co_s0_en)
+    `PREG (1'b0,  s01r_en, 1'b0, 1'b1, co_s0_en)
     `PREG (s0_st, s01r_pc, OPTION_RESET_ADDR-4, co_s0_en, s0_pc_fetch)
     `PREG (s0_st, s01r_pc_seq, OPTION_RESET_ADDR, co_s0_en, s0_pc_fetch + 4)
 
@@ -249,7 +237,7 @@ module cpu
     `PREG (1'b0,  s12r_continue, 1'b0, 1'b1, s1_st)
 
     // FD-DE pipeline registers.
-    `PREG (1'b0,  s12r_en, 1'b0, EN_ALWAYS, s1_en)
+    `PREG (1'b0,  s12r_en, 1'b0, 1'b1, s1_en)
     `PREG (s1_st, s12r_pc, OPTION_RESET_ADDR, s1_en, s01r_pc)
     `PREG (s1_st, s12r_pc_seq, OPTION_RESET_ADDR, s1_en, s01r_pc_seq)
 
@@ -370,7 +358,7 @@ module cpu
     `define TA9(mt)     {6'b010000, mt, 21'b?????_?????_00000000_???}
     `define TA10(fn)    {26'b010000_1_0000000000000000000, fn}
 
-    // Grouped control signals output by decoding table, grouped as macros.
+    // Grouped control signals output by decoding table.
     // Each macro is used for a bunch of alike instructions.
     `define IN_B(sel)   {3'b000, sel,  4'h0, 2'd3, TYP_B,   P0_X,   P1_X,   WB_N, OP_NOP}
     `define IN_BAL(sel) {3'b000, sel,  4'h0, 2'd3, TYP_B,   P0_PCS, P1_0,   WB_R, OP_ADD}
@@ -390,7 +378,7 @@ module cpu
     // Decoding table.
     // TODO A few bits of decoding still done outside this table (see @note7).
     always @(*) begin
-        // FIXME A fair few instructions missing, notably COP0 and privileged.
+        // FIXME Many instructions missing.
         casez (s12r_ir)
         `TA2    (6'b000100):        s2_m = `IN_B(3'b000);       // BEQ
         `TA2    (6'b000101):        s2_m = `IN_B(3'b001);       // BNE
@@ -441,8 +429,6 @@ module cpu
         `TA9    (5'b00100):         s2_m = `IN_CP0(P1_RS2,WB_C);// MTC0
         `TA9    (5'b00000):         s2_m = `IN_CP0(P1_CSR,WB_R);// MFC0
         `TA10   (6'b011000):        s2_m = `SPEC(1'b1);         // ERET
-
-
         default:                    s2_m = `IN_BAD;             // All others
         endcase
         // Unpack the control signals output by the table.
@@ -457,8 +443,6 @@ module cpu
         s2_3reg = (s2_type==TYP_R) | (s2_type == TYP_P) | (s2_type == TYP_S);
         s2_link = (s2_p0_sel==P0_PCS) & s2_wb_en;
     end
-
-    initial $display("--> %h", `TA10   (6'b011000));
 
     // Extract some common instruction fields including immediate field.
     always @(*) begin
@@ -643,7 +627,7 @@ module cpu
 
 
     // DE-EX pipeline registers.
-    `PREG (1'b0,  s23r_en, 1'b0, EN_ALWAYS, s2_en)
+    `PREG (1'b0,  s23r_en, 1'b0, 1'b1, s2_en)
     `PREG (s2_st, s23r_arg0, 32'h0, s2_en, s2_arg0)
     `PREG (s2_st, s23r_arg1, 32'h0, s2_en, s2_arg1)
     `PREGC(s2_st, s23r_wb_en, 1'b0, s2_en, s2_wb_en & ~s2_trap)
@@ -739,7 +723,7 @@ module cpu
     end
 
     // EX-WB pipeline registers.
-    `PREG (1'b0,  s34r_en, 1'b0, EN_ALWAYS, s3_en)
+    `PREG (1'b0,  s34r_en, 1'b0, 1'b1, s3_en)
     `PREG (s3_st, s34r_alu_res, 32'h0, s3_en, s3_alu_res)
     `PREGC(s3_st, s34r_wb_en, 1'b0, s3_en, s23r_wb_en)
     `PREG (s3_st, s34r_rd_index, 5'd0, s3_en, s23r_rd_index)
@@ -849,7 +833,7 @@ module cpu
     reg co_s012_stall_eret;     // Stages 0..2 stall, ERET.
     reg temp;
 
-    `PREG (1'b0,  temp, 1'b0, EN_ALWAYS, s4_en)
+    `PREG (1'b0,  temp, 1'b0, 1'b1, s4_en)
 
     always @(*) begin
         co_s0_en = ~RESET_I & ~co_s0_bubble;
