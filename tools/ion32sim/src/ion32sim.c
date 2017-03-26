@@ -502,6 +502,7 @@ void process_traps(t_state *s, uint32_t epc, uint32_t rSave, uint32_t rt){
         /* Compute vector address as a function of the type of exception. */
         /* FIXME vector address harcoded */
         s->pc_next = VECTOR_TRAP;
+        s->pc = VECTOR_TRAP;
         /* Simulation control flags... */
         s->skip = 1; /* skip instruction following victim */
     }
@@ -668,14 +669,9 @@ void cycle(t_state *s, int show_mode){
     s->pc = s->pc_next;
     s->pc_next = s->pc_next + 4;
 
-    // Instructions in the delay slot of ERET will NOT be executed...
+    // Instructions in the delay slot of ERET will NOT be executed.
     if (s->eret_delay_slot) {
         s->eret_delay_slot = 0;
-        return;
-    }
-    // ...nor will instructions that caused a trap.
-    if (s->trap_delay_slot) {
-        s->trap_delay_slot = 0;
         return;
     }
 
@@ -778,11 +774,8 @@ void cycle(t_state *s, int show_mode){
     case 0x10:/*COP0*/
         if(KERNEL_MODE){
             //fprintf(s->t.log, "STATUS = %08x\n", s->cp0_status);
-            if(opcode==0x42000010){  // rfe
+            if(opcode==0x42000010){  // rfe -- not MIPS32 really.
                 unimplemented(s,"RFE");
-                /* restore ('pop') the KU/IE flag values */
-                //s->cp0_status = (s->cp0_status & 0xfffffff0) |
-                //             ((s->cp0_status & 0x03c) >> 2);
             }
             if(opcode==0x42000018){  // eret
                 s->skip = 0;
@@ -799,7 +792,6 @@ void cycle(t_state *s, int show_mode){
                 //printf("ERET :: STATUS = %08x\n", s->cp0_status);
             }
             else if((opcode & (1<<23)) == 0){  //move from CP0 (mfc0)
-                //fprintf(s->t.log, "MFC0 $%02d (%08x)\n", rd, opcode);
                 switch(rd){
                     case 8: r[rt] = 0; break; // FIXME BadVAddr
                     case 9: r[rt] = 0; break; // FIXME Count
@@ -847,7 +839,6 @@ void cycle(t_state *s, int show_mode){
         }
         else{
             /* tried to execute mtc* or mfc* in user mode: trap */
-            s->trap_delay_slot = 1;
             s->trap_cause = 11; /* unavailable coprocessor */
         }
         break;
@@ -1174,9 +1165,10 @@ uint32_t log_cycle(t_state *s){
         s->t.hi = s->hi;
 
         /* Catch changes in EPC by direct write (mtc0) and by exception */
-        if(s->epc != s->t.epc){
-            fprintf(s->t.log, "(%08x) [03]=%08x\n", log_pc, s->epc);
-        }
+        // TODO actually, log only MTC0
+        //if(s->epc != s->t.epc){
+        //    fprintf(s->t.log, "(%08x) [03]=%08x\n", log_pc, s->epc);
+        //}
         s->t.epc = s->epc;
 
         if(s->cp0_status != s->t.status){
@@ -1265,7 +1257,6 @@ void reset_cpu(t_state *s){
     s->pc = cmd_line_args.start_addr; /* reset start vector or cmd line address */
     s->delay_slot = 0;
     s->eret_delay_slot = 0;
-    s->trap_delay_slot = 0;
     s->failed_assertions = 0; /* no failed assertions pending */
     s->cp0_status = SR_BEV | SR_ERL;
     s->instruction_ctr = 0;
