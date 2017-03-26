@@ -163,6 +163,10 @@ trap_vector:
     beqz    $26,syscall_test    # It is, so do SYSCALL test.
     nop 
 trap_exit:
+    # FIXME current RTL skips instruction at EPC on ERET so don't advance it.
+    #mfc0    $26,$14
+    #addi    $26,4
+    #mtc0    $26,$14
     mfc0    $26,$13             # Return with trap cause register in $26.
     move    $25,$24             # Copy $24 into $25.
     addi    $27,$27,1           # Increment exception count.
@@ -205,8 +209,6 @@ init:
     CMP     $2,$3,0x00000001
     PRINT_RESULT
 
-
-    #.ifndef RTL_UNDER_CONSTRUCTION
     #---------------------------------------------------------------------------
     # Test entry in user mode and access to MFC0 from user mode.
     
@@ -220,16 +222,14 @@ init:
     nop                         # 
     nop                         # ...NOW.
 
-    .ifndef RTL_UNDER_CONSTRUCTION
     mfc0    $3,$12              # This should trigger a COP0 missing exception.
     nop
     CMP     $4,$27,1            # Check that we got an exception...
     CMP     $4,$26,0x0b << 2    # ...and check the cause code.
-    .endif # RTL_UNDER_CONSTRUCTION
     PRINT_RESULT 
     
     #---------------------------------------------------------------------------
-    # Go on to run the individual instruction/feature tests.
+    # In user mode. Go on to run the individual instruction/feature tests.
 
     .ifndef RTL_UNDER_CONSTRUCTION
     .include "break_syscall.inc.s"
