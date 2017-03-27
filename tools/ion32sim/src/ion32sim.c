@@ -655,9 +655,8 @@ void cycle(t_state *s, int show_mode){
         return;
     }
 
-    /* epc will point to the intruction after the victim instruction; by
-       default that's the instruction after this one */
-    epc = s->pc + 4;
+    /* epc will point to the victim instruction */
+    epc = s->pc;
 
     /* If we catch a jump instruction jumping to itself, assume we hit the
        end of the program and quit. */
@@ -806,7 +805,7 @@ void cycle(t_state *s, int show_mode){
                             } else {
                                 r[rt] = 0;
                             }; break;
-                    case 30: r[rt] = s->cp0_errorpc;
+                    case 30: r[rt] = s->epc;
                     default:
                         /* FIXME log access to unimplemented CP0 register */
                         printf("mfc0 [%02d]->%02d @ [0x%08x]\n", rd, rt,s->pc);
@@ -821,6 +820,9 @@ void cycle(t_state *s, int show_mode){
                              fprintf(s->t.log, "(%08x) [01]=%08x\n", 0x0 /* log_pc */, r[rt] & STATUS_MASK);
                              break;
                     case 13: s->cp0_cause = r[rt] & CAUSE_MASK; break;
+                    case 14: s->epc = r[rt]; 
+                             fprintf(s->t.log, "(%08x) [03]=%08x\n", 0x0 /* log_pc */, r[rt]);
+                             break;
                     case 16:
                         if ((func&0x07)==0) {
                             s->cp0_config0 = r[rt] & 0x00030000;
