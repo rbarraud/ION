@@ -378,7 +378,7 @@ module cpu
     `define IN_R(op)    {3'b000, 3'b0, 4'h0, 2'b0, TYP_R,   P0_RS1, P1_RS2, WB_R, op}
     `define IN_JR       {3'b000, 3'b0, 4'h0, 2'b1, TYP_I,   P0_PCS, P1_0,   WB_N, OP_ADD}
     `define IN_CP0(r,w) {3'b001, 3'b0, 4'h0, 2'd0, TYP_I,   P0_0,   r,      w,    OP_OR}
-    `define SPEC(r)     {3'b000, 3'b0, 3'h0,r, 2'd0, TYP_I, P0_0,   P1_X,   WB_N, OP_NOP}
+    `define SPEC(q,r)   {q,      3'b0, 3'h0,r, 2'd0, TYP_I, P0_0,   P1_X,   WB_N, OP_NOP}
     `define IN_BAD      {3'b000, 3'b0, 4'h0, 2'b0, TYP_BAD, P0_X,   P1_X,   WB_N, OP_NOP}
 
     // Decoding table.
@@ -434,7 +434,10 @@ module cpu
         `TA3    (6'b000111):        s2_m = `IN_R(OP_SRA);       // SRAV
         `TA9    (5'b00100):         s2_m = `IN_CP0(P1_RS2,WB_C);// MTC0
         `TA9    (5'b00000):         s2_m = `IN_CP0(P1_CSR,WB_R);// MFC0
-        `TA10   (6'b011000):        s2_m = `SPEC(1'b1);         // ERET
+        `TA10   (6'b011000):        s2_m = `SPEC(3'b0,1'b1);    // ERET
+        `TA3    (6'b001100):        s2_m = `SPEC(3'b010,1'b0);  // SYSCALL
+        `TA3    (6'b001101):        s2_m = `SPEC(3'b100,1'b0);  // BREAK
+
         default:                    s2_m = `IN_BAD;             // All others
         endcase
         // Unpack the control signals output by the table.
@@ -863,8 +866,8 @@ module cpu
 
         // S2 will bubble on load, trap and eret stalls.
         co_s2_bubble = co_s2_stall_load | co_s2_stall_trap | co_s012_stall_eret;
-        // S1 will bubble on eret stalls.
-        co_s1_bubble = co_s012_stall_eret;
+        // S1 will bubble on eret and trap stalls. @note8;
+        co_s1_bubble = co_s2_stall_trap | co_s012_stall_eret;
         // S0 does not bubble for now.
         co_s0_bubble = 1'b0;
 
@@ -897,3 +900,4 @@ endmodule // cpu
 // @note5 -- EPC saved by IRQ is victim instruction, NOT the following one.
 // @note6 -- COP0 regs 'packed': implemented bits registered, others h-wired.
 // @note7 -- Bits of decoding outside decoding table.
+// @note8 -- Which bubbles the instruction after ERET, SYSCALL or BREAK. 
