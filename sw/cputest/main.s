@@ -163,10 +163,10 @@ trap_vector:
     beqz    $26,syscall_test    # It is, so do SYSCALL test.
     nop 
 trap_exit:
-    # FIXME current RTL skips instruction at EPC on ERET so don't advance it.
-    #mfc0    $26,$14
-    #addi    $26,4
-    #mtc0    $26,$14
+    mfc0    $26,$14             # EPC points at victim instruction. In this test
+    addi    $26,4               # we'll always want to return to the instruction
+    mtc0    $26,$14             # after the victim so move EPC ahead.
+ 
     mfc0    $26,$13             # Return with trap cause register in $26.
     move    $25,$24             # Copy $24 into $25.
     addi    $27,$27,1           # Increment exception count.
