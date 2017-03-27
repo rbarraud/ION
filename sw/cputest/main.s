@@ -231,8 +231,8 @@ init:
     #---------------------------------------------------------------------------
     # In user mode. Go on to run the individual instruction/feature tests.
 
-    .ifndef RTL_UNDER_CONSTRUCTION
     .include "break_syscall.inc.s"
+    .ifndef RTL_UNDER_CONSTRUCTION
     .include "hw_interrupts.inc.s"
     .include "debug_regs.inc.s"
     .include "gpio_regs.inc.s"
