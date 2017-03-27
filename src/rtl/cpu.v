@@ -181,7 +181,6 @@ module cpu
 
     //==== Forward declaration of control signals ==============================
 
-    reg co_s0_en;               // FAddr stage enable.
     reg co_s0_bubble;           // Insert bubble in FAddr stage.
     reg co_s1_bubble;           // Insert bubble in FData stage.
     reg co_s2_bubble;           // Insert bubble in Decode stage.
@@ -191,6 +190,7 @@ module cpu
     //==== Pipeline stage 0 -- Fetch-Address ===================================
     // Address phase of fetch cycle.
 
+    reg s0_en;                  // FAddr stage enable.
     reg [31:0] s0_pc_fetch;     // Fetch address (PC of next instruction).
     reg s01r_en;                // FData stage enable carried from FAaddr.
     reg [31:0] s01r_pc;         // PC of instr in FData stage.
@@ -199,42 +199,48 @@ module cpu
 
     // Fetch address mux: sequential or non sequential.
     always @(*) begin
+        s0_en = ~RESET_I & ~co_s0_bubble;
         s0_pc_fetch = s2_go_seq? s01r_pc_seq : s2_pc_nonseq;
     end
 
+    // FIXME assuming no wait states, ignoring bus response.
     assign CADDR_O = s0_pc_fetch;
-    assign CTRANS_O = co_s0_en? 2'b10 : 2'b00;
+    assign CTRANS_O = s0_en? 2'b10 : 2'b00;
 
     // FA-FD pipeline registers.
-    `PREG (1'b0,  s01r_en, 1'b0, 1'b1, co_s0_en)
-    `PREG (s0_st, s01r_pc, OPTION_RESET_ADDR-4, co_s0_en, s0_pc_fetch)
-    `PREG (s0_st, s01r_pc_seq, OPTION_RESET_ADDR, co_s0_en, s0_pc_fetch + 4)
+    `PREG (1'b0,  s01r_en, 1'b0, 1'b1, s0_en)
+    `PREG (s0_st, s01r_pc, OPTION_RESET_ADDR-4, s0_en, s0_pc_fetch)
+    `PREG (s0_st, s01r_pc_seq, OPTION_RESET_ADDR, s0_en, s0_pc_fetch + 4)
 
 
     //==== Pipeline stage 1 -- Fetch-Data ======================================
     // Data phase of fetch cycle.
 
     reg s1_en;                  // FD stage enable.
+    reg s1_mem_truncated;       // Code cycle truncated by (non-code) stall.
+    reg s12r_mem_truncated;     // 
     reg s12r_en;                // Decode stage enable carried from FData.
     reg [31:0] s12r_ir;         // Instruction register (valid in stage DE).
     reg [31:0] s12r_irs;        // FIXME explain.
     reg [31:0] s12r_pc;         // PC of instruction in DE stage.
     reg [31:0] s12r_pc_seq;     // PC of instr following fdr_pc_de one.
-    reg s12r_continue;          // Will pulse high after a data-hazard-stall.
     reg [31:0] s1_ir;           // Mux at input of IR reg.
 
     always @(*) begin
         // FIXME only if cycle is complete?
         s1_en = s01r_en & ~co_s1_bubble;
-        s1_ir = s12r_continue? s12r_irs : CRDATA_I; // @note1
+        // If we have a word coming in on code bus but this stage is stalled,
+        // store it in s12r_irs and remember we've truncated a cycle.
+        s1_mem_truncated = s1_st & CREADY_I; 
+        s1_ir = s12r_mem_truncated? s12r_irs : CRDATA_I; // @note1
     end
 
     // Load IR from code bus (if cycle is complete) OR saved IR after a stall.
     `PREG (s1_st, s12r_ir, 32'h0, s1_en & CREADY_I, s1_ir)
     // When stage 1 is stalled, save IR to be used after end of stall.
-    `PREG (1'b0,  s12r_irs, 32'h0, s1_en & CREADY_I & s1_st, CRDATA_I)
-    // Will pulse high after a data-hazard-stall.
-    `PREG (1'b0,  s12r_continue, 1'b0, 1'b1, s1_st)
+    `PREG (1'b0,  s12r_irs, 32'h0, s1_mem_truncated, CRDATA_I)
+    // Remember if we have saved a code word from a truncated code cycle.
+    `PREG (1'b0,  s12r_mem_truncated, 1'b0, 1'b1, s1_mem_truncated)
 
     // FD-DE pipeline registers.
     `PREG (1'b0,  s12r_en, 1'b0, 1'b1, s1_en)
@@ -835,10 +841,8 @@ module cpu
 
     `PREG (1'b0,  temp, 1'b0, 1'b1, s4_en)
 
-    always @(*) begin
-        co_s0_en = ~RESET_I & ~co_s0_bubble;
-    end
 
+    // TODO this block will be tidied up when the logic is done.
     always @(*) begin
         // Data hazard: instr. on stage 3 will write on reg used in stage 2.
         co_dhaz_rs1_s3 = (s3_en & s23r_wb_en & (s23r_rd_index==s2_rs1_index));
@@ -850,26 +854,26 @@ module cpu
         co_dhaz_rs1_ld = (s3_en & s23r_load_en & (s23r_rd_index==s2_rs1_index));
         co_dhaz_rs2_ld = (s3_en & s23r_load_en & (s23r_rd_index==s2_rs2_index));
 
+        // Stall S0..2 while load data hazard is resolved.
         co_s2_stall_load = (co_dhaz_rs1_ld | co_dhaz_rs2_ld);
-        // Stall S0..2 until bubble propagates from S2..4. @note3.
+        // Stall S0..2 until trap bubble propagates from to S4. @note3.
         co_s2_stall_trap = s23r_trap & s4_en;
-
-        // Stall & bubble S0..2 until bubble propagates to S4. @note4.
+        // Stall & bubble S0..2 until eret bubble propagates to S4. @note4.
         co_s012_stall_eret = s23r_eret & s4_en;
 
+        // S2 will bubble on load, trap and eret stalls.
         co_s2_bubble = co_s2_stall_load | co_s2_stall_trap | co_s012_stall_eret;
-        // FIXME bubble stage 1 too in traps so that instruction after victim
-        // does not get executed twice (before and after trap handler).
-
+        // S1 will bubble on eret stalls.
         co_s1_bubble = co_s012_stall_eret;
-        co_s0_bubble = co_s012_stall_eret;
+        // S0 does not bubble for now.
+        co_s0_bubble = 1'b0;
 
-
+        // Stall logic (bunch of OR gates).
         s4_st = 1'b0;
         s3_st = s4_st;
-        s2_st = s3_st | co_s2_bubble;
-        s1_st = s2_st;
-        s0_st = s1_st;
+        s2_st = s3_st | co_s012_stall_eret | co_s2_stall_load | co_s2_stall_trap;
+        s1_st = s2_st | co_s012_stall_eret;
+        s0_st = s1_st | co_s012_stall_eret;
     end
 
 
@@ -878,7 +882,7 @@ endmodule // cpu
 // FIXME extract notes
 // @note1 -- The cycle after a load-hazard-stall we load IR with the value we
 //           saved during the stall cycle, NOT the code bus.
-//           FIXME won't work once wait states are implemented.
+//           FIXME not sure it'll work once wait states are implemented.
 // @note2 -- No traps on arith overflow implemented.
 // @note3 -- So that trap values have time to reach STATUS and CAUSE regs in
 //           stage 4 before 1st trap handler instruction is executed.
@@ -886,9 +890,10 @@ endmodule // cpu
 //           3 & 4 at the time of the trap.
 // @note4 -- On ERET we stall the pipeline until the STATUS change reaches S4.
 //           So instruction after ERET lands on user mode.
-//           Also bubble stages 0..1. This means that the two instructions after
-//           ERET (sequential after ERET + instruction at EPC) will be fetched
-//           and will be dropped (not executed).
+//           Also bubble stage 1 but not 0. This means that the instructions 
+//           after ERET (sequential after ERET) will be fetched and will be 
+//           dropped (not executed). Whereas the next one (at EPC) will be 
+//           fetched and executed.
 // @note5 -- EPC saved by IRQ is victim instruction, NOT the following one.
 // @note6 -- COP0 regs 'packed': implemented bits registered, others h-wired.
 // @note7 -- Bits of decoding outside decoding table.
