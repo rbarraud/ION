@@ -5,7 +5,12 @@ include ../Toolchain.mk
 SOFTWARE_OBJS = main.o
 
 
-all: software.bin software.lst software.hex
+all: software.bin software.lst software.hex software.rom.inc
+
+# FIXME Memory sizes hardcoded, should be make variables.
+
+software.rom.inc: software.hex
+	python $(HEX2ROM) $< 4096 ctcm > $@
 
 software.hex: software.bin $(MAKEHEX)
 	python $(MAKEHEX) $< 16384 > $@
