@@ -236,7 +236,9 @@ init:
     .include "hw_interrupts.inc.s"
     .include "debug_regs.inc.s"
     .include "gpio_regs.inc.s"
+    .endif # RTL_UNDER_CONSTRUCTION
     .include "interlock.inc.s"
+    .ifndef RTL_UNDER_CONSTRUCTION
     .include "data_cache.inc.s"
     .include "instruction_cache.inc.s"
     .endif # RTL_UNDER_CONSTRUCTION
