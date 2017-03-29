@@ -274,8 +274,7 @@ module cpu
     reg s2_en;                  // DE stage enable.
     reg s23r_en;                // Execute stage enable carried over from Dec.
     reg [31:0] s2_pc_nonseq;    // Next PC if any possible jump is taken.
-    reg [5:0] s2_opcode;        // IR opcode field.
-    reg [2:0] s2_func3;         // IR func3 field.
+    reg [1:0] s2_opcode;        // IR opcode field (2 bits used out of 6).
     reg [4:0] s2_rs1_index;     // Index for RS1 from IR.
     reg [4:0] s2_rs2_index;     // Index for RS2 from IR.
     reg [4:0] s2_rd_index;      // Index for RD from IR.
@@ -358,9 +357,9 @@ module cpu
     `define TA2(op)     {op, 26'b?????_?????_????????????????}
     `define TA2rt0(op)  {op, 26'b?????_00000_????????????????}
     `define TA2rs0(op)  {op, 26'b00000_?????_????????????????}
-    `define TA3(fn)     {26'b000000_?????_????????????????, fn}
-    `define TA3rs0(fn)  {26'b000000_00000_????????????????, fn}
-    `define TA4(fn)     {26'b000001_?????, fn, 16'b????????????????}
+    `define TA3(fn)     {26'b000000_?????_???????????????, fn}
+    `define TA3rs0(fn)  {26'b000000_00000_???????????????, fn}
+    `define TA4(fn)     {11'b000001_?????, fn, 16'b????????????????}
     `define TA9(mt)     {6'b010000, mt, 21'b?????_?????_00000000_???}
     `define TA10(fn)    {26'b010000_1_0000000000000000000, fn}
 
@@ -397,7 +396,6 @@ module cpu
         `TA2rs0 (6'b001111):        s2_m = `IN_IH(OP_OR);       // LUI
         `TA2    (6'b001001):        s2_m = `IN_I(OP_ADD);       // ADDIU
         `TA2    (6'b001000):        s2_m = `IN_I(OP_ADD);       // ADDI
-        `TA2    (6'b001101):        s2_m = `IN_IU(OP_OR);       // ORI
         `TA2    (6'b000011):        s2_m = `IN_J(WB_R);         // JAL
         `TA2    (6'b000010):        s2_m = `IN_J(WB_N);         // J
         `TA2    (6'b100000):        s2_m = `IN_Ilx;             // LB
@@ -425,7 +423,6 @@ module cpu
         `TA2    (6'b001100):        s2_m = `IN_IU(OP_AND);      // ANDI
         `TA2    (6'b001101):        s2_m = `IN_IU(OP_OR);       // ORI
         `TA2    (6'b001110):        s2_m = `IN_IU(OP_XOR);      // XORI
-        `TA2    (6'b001111):        s2_m = `IN_IU(OP_NOR);      // NORI
         `TA3rs0 (6'b000000):        s2_m = `IN_IS(OP_SLL);      // SLL
         `TA3    (6'b000100):        s2_m = `IN_R(OP_SLL);       // SLLV
         `TA3rs0 (6'b000010):        s2_m = `IN_IS(OP_SRL);      // SRL
@@ -455,8 +452,7 @@ module cpu
 
     // Extract some common instruction fields including immediate field.
     always @(*) begin
-        s2_opcode = s12r_ir[31:26];
-        s2_func3 = s12r_ir[14:12];
+        s2_opcode = s12r_ir[27:26];
 
         s2_rs1_index = s12r_ir[25:21];
         s2_rs2_index = s12r_ir[20:16];
@@ -757,7 +753,7 @@ module cpu
     reg [31:0] s4_wb_data;      // Writeback data (ALU or MEM).
     reg [4:0] s4_excode;        // Cause code to load in MCAUSE CSR.
     reg [16:0] s4_cause_trap;   // Value to load on packed CAUSE reg on traps.
-    reg [13:0] s4_status_trap;  // Value to load on MSTATUS CSR on trap.
+    reg [12:0] s4_status_trap;  // Value to load on MSTATUS CSR on trap.
 
     assign DWDATA_O = s34r_mem_wdata;
 
