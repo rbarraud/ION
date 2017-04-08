@@ -61,13 +61,23 @@
 `define IO_TERMINATE        32'hffff8018
 // Size of simulated memory in bytes.
 `define RAM_SIZE_BYTES      (128*1024)
-// 
+// I'll have to clean this up eventually and do a real memory interface. 
 `define RAM_BLOCK_ADDR_MASK (32'h0001ffff)
+// Get wait state config from command line, if given.
+`ifndef WAIT_STATES
+`define WAIT_STATES 0
+`endif
 
 
 //------------------------------------------------------------------------------
 
 module testbench;
+
+    // For the time being, both buses will have the wame wait state config
+    // and both will have the same # of ws in all cycles.
+    // TODO data bus does not have any wait states.
+    localparam CODE_WAIT_STATES = `WAIT_STATES;
+
 
     reg clk = 1;
     reg reset = 1;
@@ -79,6 +89,9 @@ module testbench;
     //--- UUT instantiation ----------------------------------------------------
 
     wire [31:0] code_addr;
+    reg  [31:0] code_addr_reg;
+    reg         code_cycle_pending;
+    reg         code_cycle_start;
     wire [ 1:0] code_trans;
     reg         code_ready;
     reg  [ 1:0] code_resp;
@@ -154,7 +167,7 @@ module testbench;
                 $fwrite(logfile,
                     "(%08H) [%02h]=%08h\n", 0, uut.s34r_csr_xindex, uut.s34r_alu_res); 
             end   
-        end        
+        end 
         s23r_pc <= uut.s12r_pc;
         s34r_pc <= s23r_pc;
     end
@@ -182,30 +195,46 @@ module testbench;
         $readmemh({`SWDIR, `TEST_STR, "/software.hex"}, memory);
     end
 
-    // Bogus registers used to simulate bus protocol.
+    integer code_wstate_ctr;
+
+    always @(*) begin
+        code_cycle_start = (code_trans == 2'b10);
+        //code_rdata = memory[(code_addr_reg & `RAM_BLOCK_ADDR_MASK) >> 2];
+    end
+
     always @(posedge clk) begin
         if (reset) begin
-            code_rdata <= 32'h0;
-            code_resp <= 2'b00;
-            code_ready <= 1'b0;            
+            code_wstate_ctr <= 0;          
         end
         else begin
-            if (code_trans == 2'b10) begin
-                code_rdata <= memory[(code_addr & `RAM_BLOCK_ADDR_MASK) >> 2];
-                code_resp <= 2'b00;
-                code_ready <= 1'b1;
-            end  
-            else begin
-                code_rdata <= 32'h0;
-                code_resp <= 2'b00;
-                code_ready <= 1'b0;
+            if ((code_trans == 2'b10) && (code_wstate_ctr==0)) begin
+                code_wstate_ctr <= CODE_WAIT_STATES;
             end
+            else begin
+                code_wstate_ctr <= (code_wstate_ctr > 0)? code_wstate_ctr - 1 : 0;
+            end  
         end
+    end
+
+    always @(posedge clk) begin
+        if (reset) begin
+            code_addr_reg <= 32'h0;          
+        end
+        else if ((code_trans == 2'b10) && (code_wstate_ctr==0)) begin
+            code_addr_reg <= code_addr;
+        end
+    end
+
+    always @(posedge clk) begin
+        # 0.1;
+        code_ready = (code_wstate_ctr == 0);
+        code_resp = 2'b00;         
+        code_rdata = code_ready? memory[(code_addr_reg & `RAM_BLOCK_ADDR_MASK) >> 2] :  32'h0; 
     end
 
     //-- Data memory bus -------------------------------------------------------    
 
-    // Bogus registers use dto simulate bus protocol.
+    // Bogus registers used to simulate bus protocol.
     always @(posedge clk) begin
         #0.1;
         if (reset) begin

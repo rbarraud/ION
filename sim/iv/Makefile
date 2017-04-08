@@ -4,7 +4,10 @@
 # Variables optionally set over command line:
 #
 #	TEST:   SW test to run (name of subdirectory of ../../sw).
-#
+#			Defaults to 'cputest'.
+#   WAITS:  # of wait states inserted in ALL code and data mem cycles.
+#			(TODO actually, only on the code bus.)
+#			Defaults to 0.
 #
 # Targets:
 #
@@ -22,6 +25,7 @@
 
 # Config vars. 
 TEST ?= cputest
+WAITS ?= 0
 
 # Project layout.
 SWDIR = ../../sw
@@ -38,6 +42,8 @@ CC_NORMAL = "\033[0m"
 # source files for CPU and CPU+cache+TCM.
 RTL_SOURCES = $(RTLDIR)/testbench/tb_cpu.v $(RTLDIR)/rtl/cpu.v
 
+# MAcros passed on to the TB.
+RTL_MACROS = -D WAIT_STATES=$(WAITS)
 
 #-------------------------------------------------------------------------------
 
@@ -81,7 +87,7 @@ rtl: testbench.exe $(TEST_OBJ)
 	vvp -N testbench.exe
 
 testbench.exe: $(RTL_SOURCES)
-	iverilog -g2005 -o testbench.exe $(RTL_SOURCES)
+	iverilog -g2005 -o testbench.exe $(RTL_SOURCES) $(RTL_MACROS)
 	@chmod -x testbench.exe
 
 # Waveform generation.
