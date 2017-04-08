@@ -143,6 +143,16 @@ module cpu
             else if (s4_en & ~st & s34r_wb_csr_en & (s34r_csr_xindex==CSRB_``name)) \
                 s42r_csr_``name <= s34r_alu_res;
 
+    `define RSREG(name, setcond, resetcond) \
+        always @(posedge CLK) \
+            if (RESET_I) \
+                name <= 1'b0; \
+            else begin \
+                if ( setcond ) \
+                    name <= 1'b1; \
+                else if ( resetcond ) \
+                    name <= 1'b0; \
+            end
 
     //==== Per-machine state registers =========================================
 
@@ -155,8 +165,6 @@ module cpu
     reg [31:0] s42r_csr_MCOMPARE;
     // Register bank.
     reg [31:0] s42r_rbank [0:31];
-    // PC bank.
-    reg [31:0] s20r_pc_nonseq;
 
     // These macros unpack COP0 regs into useful names.
     // Also define packed-to-32 and 32-to-packed macros.
@@ -184,6 +192,10 @@ module cpu
     reg co_s0_bubble;           // Insert bubble in FAddr stage.
     reg co_s1_bubble;           // Insert bubble in FData stage.
     reg co_s2_bubble;           // Insert bubble in Decode stage.
+    reg co_s1_bubble_trigger;   
+    reg cor_s1_bubble_pending;
+    reg co_s2_bubble_trigger;   
+    reg cor_s2_bubble_pending;
     reg s0_st, s1_st, s2_st, s3_st, s4_st;  // Per-stage stall controls.
 
 
@@ -191,6 +203,8 @@ module cpu
     // Address phase of fetch cycle.
 
     reg s0_en;                  // FAddr stage enable.
+    reg s01r_pending;           // Cycle in progress in code bus.
+    reg s0_pending;             // 
     reg [31:0] s0_pc_fetch;     // Fetch address (PC of next instruction).
     reg s01r_en;                // FData stage enable carried from FAaddr.
     reg [31:0] s01r_pc;         // PC of instr in FData stage.
@@ -201,14 +215,20 @@ module cpu
     always @(*) begin
         s0_en = ~RESET_I & ~co_s0_bubble;
         s0_pc_fetch = s2_go_seq? s01r_pc_seq : s2_pc_nonseq;
+        // A new cycle is started whenever this stage is enabled and it is 
+        // terminated whenever CREADY comes high.
+        s0_pending = s0_en | (s01r_pending & ~CREADY_I);
     end
 
-    // FIXME assuming no wait states, ignoring bus response.
+    // Drive code bus straight from stage control signals.
     assign CADDR_O = s0_pc_fetch;
     assign CTRANS_O = s0_en? 2'b10 : 2'b00;
 
+    // Remember if there's a bus cycle in progress. 
+    `PREG (s0_st, s01r_pending, 0, 1, s0_pending)
+
     // FA-FD pipeline registers.
-    `PREG (1'b0,  s01r_en, 1'b0, 1'b1, s0_en)
+    `PREG (s0_st,  s01r_en, 1'b1, 1'b1, s0_en)
     `PREG (s0_st, s01r_pc, OPTION_RESET_ADDR-4, s0_en, s0_pc_fetch)
     `PREG (s0_st, s01r_pc_seq, OPTION_RESET_ADDR, s0_en, s0_pc_fetch + 4)
 
@@ -227,7 +247,6 @@ module cpu
     reg [31:0] s1_ir;           // Mux at input of IR reg.
 
     always @(*) begin
-        // FIXME only if cycle is complete?
         s1_en = s01r_en & ~co_s1_bubble;
         // If we have a word coming in on code bus but this stage is stalled,
         // store it in s12r_irs and remember we've truncated a cycle.
@@ -235,17 +254,17 @@ module cpu
         s1_ir = s12r_mem_truncated? s12r_irs : CRDATA_I; // @note1
     end
 
-    // Load IR from code bus (if cycle is complete) OR saved IR after a stall.
-    `PREG (s1_st, s12r_ir, 32'h0, s1_en & CREADY_I, s1_ir)
+    // Load IR from code bus (if cycle complete) OR saved IR after a stall.
+    `PREGC(s1_st, s12r_ir, 32'h0, s1_en & CREADY_I, s1_ir) // @note9
     // When stage 1 is stalled, save IR to be used after end of stall.
     `PREG (1'b0,  s12r_irs, 32'h0, s1_mem_truncated, CRDATA_I)
     // Remember if we have saved a code word from a truncated code cycle.
     `PREG (1'b0,  s12r_mem_truncated, 1'b0, 1'b1, s1_mem_truncated)
 
     // FD-DE pipeline registers.
-    `PREG (1'b0,  s12r_en, 1'b0, 1'b1, s1_en)
+    `PREG (s1_st, s12r_en, 1'b1, 1'b1, s1_en)
     `PREG (s1_st, s12r_pc, OPTION_RESET_ADDR, s1_en, s01r_pc)
-    `PREG (s1_st, s12r_pc_seq, OPTION_RESET_ADDR, s1_en, s01r_pc_seq)
+    `PREG (s1_st, s12r_pc_seq, OPTION_RESET_ADDR+4, s1_en, s01r_pc_seq)
 
 
     //==== Pipeline stage Decode ===============================================
@@ -626,13 +645,9 @@ module cpu
         endcase
     end
 
-    // DE-FA pipeline registers.
-    // Update PC (PC writeback sits on DE-FA boundary).
-    `PREG (1'b0, s20r_pc_nonseq, OPTION_RESET_ADDR, s2_en, s2_pc_nonseq)
-
 
     // DE-EX pipeline registers.
-    `PREG (1'b0,  s23r_en, 1'b0, 1'b1, s2_en)
+    `PREG (s2_st,  s23r_en, 1'b0, 1'b1, s2_en)
     `PREG (s2_st, s23r_arg0, 32'h0, s2_en, s2_arg0)
     `PREG (s2_st, s23r_arg1, 32'h0, s2_en, s2_arg1)
     `PREGC(s2_st, s23r_wb_en, 1'b0, s2_en, s2_wb_en & ~s2_trap)
@@ -836,9 +851,7 @@ module cpu
     reg co_s2_stall_load;       // Decode stage stall, by load hazard.
     reg co_s2_stall_trap;       // Decode stage stall, SW trap.
     reg co_s012_stall_eret;     // Stages 0..2 stall, ERET.
-    reg temp;
-
-    `PREG (1'b0,  temp, 1'b0, 1'b1, s4_en)
+    reg co_sx_code_wait;
 
 
     // TODO this block will be tidied up when the logic is done.
@@ -860,29 +873,39 @@ module cpu
         // Stall & bubble S0..2 until eret bubble propagates to S4. @note4.
         co_s012_stall_eret = s23r_eret & s4_en;
 
+        co_sx_code_wait = s01r_pending & ~CREADY_I;
+
+
         // S2 will bubble on load, trap and eret stalls.
-        co_s2_bubble = co_s2_stall_load | co_s2_stall_trap | co_s012_stall_eret;
+        co_s2_bubble_trigger = co_s2_stall_load | co_s2_stall_trap | co_s012_stall_eret | co_sx_code_wait;
         // S1 will bubble on eret and trap stalls. @note8;
-        co_s1_bubble = co_s2_stall_trap | co_s012_stall_eret;
+        co_s1_bubble_trigger = co_s2_stall_trap | co_s012_stall_eret;
         // S0 does not bubble for now.
         co_s0_bubble = 1'b0;
 
-        // Stall logic (bunch of OR gates).
+        co_s1_bubble = co_s1_bubble_trigger; // | cor_s1_bubble_pending;
+        // FIXME broken! will freeze on ERET!
+        co_s2_bubble = co_s2_bubble_trigger; // | cor_s2_bubble_pending;
+
+        // Stall logic. A bunch of OR gates whose truth table is declared 
+        // procedurally, please note the order of the assignments.
         s4_st = 1'b0;
         s3_st = s4_st;
-        s2_st = s3_st | co_s012_stall_eret | co_s2_stall_load | co_s2_stall_trap;
-        s1_st = s2_st | co_s012_stall_eret;
-        s0_st = s1_st | co_s012_stall_eret;
+        s2_st = s3_st | co_s012_stall_eret | co_s2_stall_load | co_s2_stall_trap | co_sx_code_wait;
+        s1_st = s2_st;
+        s0_st = s1_st;
     end
+
+    `RSREG(cor_s1_bubble_pending, co_s1_bubble_trigger & s1_st, ~s1_st) 
+    `RSREG(cor_s2_bubble_pending, co_s2_bubble_trigger & s2_st, ~s2_st) 
 
 
 endmodule // cpu
 
 // FIXME extract notes
 // @note1 -- The cycle after a load-hazard-stall we load IR with the value we
-//           saved during the stall cycle, NOT the code bus.
-//           FIXME not sure it'll work once wait states are implemented.
-// @note2 -- No traps on arith overflow implemented.
+//           saved during the stall cycle, NOT from the code bus.
+// @note2 -- No traps on arith overflow implemented so ADD==ADDU.
 // @note3 -- So that trap values have time to reach STATUS and CAUSE regs in
 //           stage 4 before 1st trap handler instruction is executed.
 //           This should work with MEM wait states and whatever's in stages
@@ -897,3 +920,5 @@ endmodule // cpu
 // @note6 -- COP0 regs 'packed': implemented bits registered, others h-wired.
 // @note7 -- Bits of decoding outside decoding table.
 // @note8 -- Which bubbles the instruction after ERET, SYSCALL or BREAK. 
+// @note9 -- Relies on the fact that 0x0 is a NOP opcode. So when stage 1 is 
+//           bubbled, IR is cleared to NOP.
