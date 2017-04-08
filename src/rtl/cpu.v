@@ -143,16 +143,6 @@ module cpu
             else if (s4_en & ~st & s34r_wb_csr_en & (s34r_csr_xindex==CSRB_``name)) \
                 s42r_csr_``name <= s34r_alu_res;
 
-    `define RSREG(name, setcond, resetcond) \
-        always @(posedge CLK) \
-            if (RESET_I) \
-                name <= 1'b0; \
-            else begin \
-                if ( setcond ) \
-                    name <= 1'b1; \
-                else if ( resetcond ) \
-                    name <= 1'b0; \
-            end
 
     //==== Per-machine state registers =========================================
 
@@ -192,10 +182,6 @@ module cpu
     reg co_s0_bubble;           // Insert bubble in FAddr stage.
     reg co_s1_bubble;           // Insert bubble in FData stage.
     reg co_s2_bubble;           // Insert bubble in Decode stage.
-    reg co_s1_bubble_trigger;   
-    reg cor_s1_bubble_pending;
-    reg co_s2_bubble_trigger;   
-    reg cor_s2_bubble_pending;
     reg s0_st, s1_st, s2_st, s3_st, s4_st;  // Per-stage stall controls.
 
 
@@ -320,6 +306,7 @@ module cpu
     reg s2_trap_cop_unusable;   // Trap caused by COP access in user mode.
     reg s2_trap;                // Take trap for any cause.
     reg s2_eret;                // ERET instruction.
+    reg s2_skip_seq_instr;      // Skip instruction at stage 1 (traps/erets/etc.)
     reg [4:0] s2_excode;        // Trap cause code.
 
     reg [31:0] s2_pc_branch;    // Branch target;
@@ -622,6 +609,9 @@ module cpu
 
         // Final trap OR.
         s2_trap = (|s2_break_syscall) | s2_trap_cop_unusable | s2_irq_final;
+
+        // All the cases where we'll want to abort the 'next' instruction.
+        s2_skip_seq_instr = s2_trap | s2_hw_trap | s2_eret;
     end
 
     // MEM control logic.
@@ -877,15 +867,12 @@ module cpu
 
 
         // S2 will bubble on load, trap and eret stalls.
-        co_s2_bubble_trigger = co_s2_stall_load | co_s2_stall_trap | co_s012_stall_eret | co_sx_code_wait;
-        // S1 will bubble on eret and trap stalls. @note8;
-        co_s1_bubble_trigger = co_s2_stall_trap | co_s012_stall_eret;
+        co_s2_bubble = co_s2_stall_load | co_s2_stall_trap | co_s012_stall_eret | co_sx_code_wait;
+        // S1 will bubble on eret and trap stalls AND when the next seq instruction
+        // needs to be skipped for other reasons. @note8;
+        co_s1_bubble = co_s2_stall_trap | co_s012_stall_eret | s2_skip_seq_instr;
         // S0 does not bubble for now.
         co_s0_bubble = 1'b0;
-
-        co_s1_bubble = co_s1_bubble_trigger; // | cor_s1_bubble_pending;
-        // FIXME broken! will freeze on ERET!
-        co_s2_bubble = co_s2_bubble_trigger; // | cor_s2_bubble_pending;
 
         // Stall logic. A bunch of OR gates whose truth table is declared 
         // procedurally, please note the order of the assignments.
@@ -895,9 +882,6 @@ module cpu
         s1_st = s2_st;
         s0_st = s1_st;
     end
-
-    `RSREG(cor_s1_bubble_pending, co_s1_bubble_trigger & s1_st, ~s1_st) 
-    `RSREG(cor_s2_bubble_pending, co_s2_bubble_trigger & s2_st, ~s2_st) 
 
 
 endmodule // cpu
