@@ -73,10 +73,11 @@
 
 module testbench;
 
-    // For the time being, both buses will have the wame wait state config
+    // TODO For the time being, both buses will have the same wait state config
     // and both will have the same # of ws in all cycles.
-    // TODO data bus does not have any wait states.
     localparam CODE_WAIT_STATES = `WAIT_STATES;
+    // TODO And data bus does not have any wait states.
+    localparam DATA_WAIT_STATES = 0;//`WAIT_STATES;
 
 
     reg clk = 1;
@@ -89,9 +90,6 @@ module testbench;
     //--- UUT instantiation ----------------------------------------------------
 
     wire [31:0] code_addr;
-    reg  [31:0] code_addr_reg;
-    reg         code_cycle_pending;
-    reg         code_cycle_start;
     wire [ 1:0] code_trans;
     reg         code_ready;
     reg  [ 1:0] code_resp;
@@ -106,6 +104,7 @@ module testbench;
     wire [31:0] data_wdata;
     wire        data_write;
     reg         data_wpending;
+    reg         data_rpending;
     reg  [ 1:0] data_wsize;
     reg  [31:0] data_waddr;
     reg  [31:0] mem_op_pc; 
@@ -155,21 +154,21 @@ module testbench;
     reg [31:0] s34r_pc;
     always @(posedge clk) begin
         #1;
-        if (uut.s4_en & uut.s34r_wb_en) begin
+        if (uut.s4_en & uut.s34r_wb_en & ~uut.s4_st) begin
             if ((uut.s34r_rd_index != 0) && 
                 (uut.s42r_rbank[uut.s34r_rd_index] !== uut.s4_wb_data)) begin
                 $fwrite(logfile,
                     "(%08H) [%02h]=%08h\n", s34r_pc, uut.s34r_rd_index, uut.s4_wb_data); 
             end   
         end
-        if (uut.s4_en & uut.s34r_wb_csr_en) begin
+        if (uut.s4_en & uut.s34r_wb_csr_en & ~uut.s4_st) begin
             if ((uut.s34r_csr_xindex != 4'hf)) begin
                 $fwrite(logfile,
                     "(%08H) [%02h]=%08h\n", 0, uut.s34r_csr_xindex, uut.s34r_alu_res); 
             end   
         end 
-        s23r_pc <= uut.s12r_pc;
-        s34r_pc <= s23r_pc;
+        if (~uut.s2_st) s23r_pc <= uut.s12r_pc;
+        if (~uut.s3_st) s34r_pc <= s23r_pc;
     end
 
     // Waveform display visual aid: mark passage over some address.
@@ -185,7 +184,7 @@ module testbench;
     end
 
 
-    //-- Code memory bus -------------------------------------------------------
+    //-- Memory ----------------------------------------------------------------
 
     // Memory block initialized with test binary. 
     // Wired to code and data buses with no arbitration (virtual 2-port RAM).
@@ -195,13 +194,12 @@ module testbench;
         $readmemh({`SWDIR, `TEST_STR, "/software.hex"}, memory);
     end
 
+
+    //~~ Read port connected to code bus ~~~~~~~~~
+
     integer code_wstate_ctr;
-
-    always @(*) begin
-        code_cycle_start = (code_trans == 2'b10);
-        //code_rdata = memory[(code_addr_reg & `RAM_BLOCK_ADDR_MASK) >> 2];
-    end
-
+    reg [31:0] code_addr_reg;
+    // Wait state counter.
     always @(posedge clk) begin
         if (reset) begin
             code_wstate_ctr <= 0;          
@@ -215,7 +213,7 @@ module testbench;
             end  
         end
     end
-
+    // Address register (code bus is AHB-alike).
     always @(posedge clk) begin
         if (reset) begin
             code_addr_reg <= 32'h0;          
@@ -224,7 +222,7 @@ module testbench;
             code_addr_reg <= code_addr;
         end
     end
-
+    // Actual read port. Drive data bus for a single clock cycle per transfer.
     always @(posedge clk) begin
         # 0.1;
         code_ready = (code_wstate_ctr == 0);
@@ -232,45 +230,54 @@ module testbench;
         code_rdata = code_ready? memory[(code_addr_reg & `RAM_BLOCK_ADDR_MASK) >> 2] :  32'h0; 
     end
 
-    //-- Data memory bus -------------------------------------------------------    
+    //~~ Read/Write port connected to data bus ~~~~~~~~
 
-    // Bogus registers used to simulate bus protocol.
+    integer data_wstate_ctr;
+    reg [31:0] data_addr_reg;
+    // Wait state counter.
     always @(posedge clk) begin
         #0.1;
         if (reset) begin
-            data_ready <= 1'b0;  
-            data_wpending <= 1'b0;
-            data_waddr <= 32'h0;
+            data_wstate_ctr <= 0;
             mem_op_pc <= 32'h0;
-            data_wsize <= 2'b00;          
+            data_addr_reg <= 32'h0;
         end
         else begin
-            if (data_trans == 2'b10) begin
-                data_ready <= 1'b1;
+            if ((data_trans == 2'b10) && (data_wstate_ctr==0)) begin
+                data_wstate_ctr <= DATA_WAIT_STATES;
+                mem_op_pc <= s23r_pc;
                 data_wpending <= data_write;
+                data_rpending <= ~data_write;
                 data_waddr <= data_addr;
                 data_wsize <= data_size;
-                mem_op_pc <= s23r_pc;                
+                mem_op_pc <= s23r_pc; 
+                data_addr_reg <= data_addr; 
+            end
+            else if (data_wstate_ctr > 0) begin
+                data_wstate_ctr <= data_wstate_ctr - 1;
             end  
             else begin
-                data_ready <= 1'b0;
                 data_wpending <= 1'b0;
+                data_rpending <= 1'b0;
+            end
+        end
+    end
+    // Actual read port. Drive data bus for a single clock cycle per transfer.
+    always @(posedge clk) begin
+        # 0.1;
+        data_ready = (data_wstate_ctr == 0);
+        data_resp = 2'b00;
+        if (data_wstate_ctr==0) begin
+            if (data_wpending) begin
+                write_data_task(data_waddr, data_wsize, data_wdata);
+            end
+            else if (data_rpending) begin
+                read_data_task(data_waddr, data_wsize, data_rdata);
             end
         end
     end
 
-    // Data phase of bus protocol, both read and write cycles.
-    always @(posedge clk) begin
-        #0.1;
-        if (data_wpending) begin
-            write_data_task(data_waddr, data_wsize, data_wdata);        
-        end
-        if (data_ready & ~data_wpending) begin
-            read_data_task(data_waddr, data_wsize, data_rdata);
-        end
-    end
-
-    // Simulated I/O on data bus.
+    //~~ Simulated I/O on data bus ~~~~~~~~
     always @(posedge clk) begin
         if (data_trans == 2'b10 && data_write==1'b1) begin
             // Simulated console output register.
