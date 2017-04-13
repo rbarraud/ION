@@ -94,6 +94,7 @@ module testbench;
     reg         code_ready;
     reg  [ 1:0] code_resp;
     reg  [31:0] code_rdata;
+    reg         code_rpending;
 
     wire [31:0] data_addr;
     wire [ 1:0] data_trans;
@@ -124,7 +125,7 @@ module testbench;
         .CRDATA_I       (code_rdata),
         .CREADY_I       (code_ready),
         .CRESP_I        (code_resp),
-
+        /* Data AHB interface. */
         .DADDR_O        (data_addr),
         .DTRANS_O       (data_trans),
         .DSIZE_O        (data_size),
@@ -133,13 +134,20 @@ module testbench;
         .DWRITE_O       (data_write),
         .DREADY_I       (data_ready),
         .DRESP_I        (data_resp),
-
+        /* External HW interrupt request lines. High-level active. */
         .HWIRQ_I        (hw_irq)
     );
 
 
 
     //-- Logs ------------------------------------------------------------------
+
+
+    reg [31:0] mem_log_addr;
+    reg [31:0] mem_log_rdata;
+    reg [1:0] mem_log_size;
+    reg mem_log_done = 1'b0;
+
 
     // Make our logging life easier by zeroing the regbank before the test.
     initial
@@ -149,11 +157,22 @@ module testbench;
         end        
     end 
 
-    // CPU register bank delta log.
+    // CPU register bank & memory access.
     reg [31:0] s23r_pc;
     reg [31:0] s34r_pc;
     always @(posedge clk) begin
         #1;
+        // Log memory read cycle. Write cycle logged separately because it 
+        // does not 'happen' on the writeback stage.
+        if (uut.s4_en & uut.s34r_wb_en & ~uut.s4_st & uut.s34r_load_en) begin
+            if (~mem_log_done) begin 
+                $fwrite(logfile,
+                    "(%08h) [%08h] <%1d>=%08h RD\n", 
+                    s34r_pc, mem_log_addr, 2**mem_log_size, mem_log_rdata);   
+                mem_log_done = 1'b1;
+            end 
+        end
+        // Log change to reg bank caused by writeback, if any.
         if (uut.s4_en & uut.s34r_wb_en & ~uut.s4_st) begin
             if ((uut.s34r_rd_index != 0) && 
                 (uut.s42r_rbank[uut.s34r_rd_index] !== uut.s4_wb_data)) begin
@@ -161,6 +180,7 @@ module testbench;
                     "(%08H) [%02h]=%08h\n", s34r_pc, uut.s34r_rd_index, uut.s4_wb_data); 
             end   
         end
+        // Log change to COP0 CSR caused by writeback, if any.
         if (uut.s4_en & uut.s34r_wb_csr_en & ~uut.s4_st) begin
             if ((uut.s34r_csr_xindex != 4'hf)) begin
                 $fwrite(logfile,
@@ -216,18 +236,25 @@ module testbench;
     // Address register (code bus is AHB-alike).
     always @(posedge clk) begin
         if (reset) begin
-            code_addr_reg <= 32'h0;          
+            code_addr_reg <= 32'h0;
+            code_rpending <= 1'b0;
         end
         else if ((code_trans == 2'b10) && (code_wstate_ctr==0)) begin
             code_addr_reg <= code_addr;
+            code_rpending <= 1'b1;
+        end
+        else if ((code_trans == 2'b00) && (code_wstate_ctr==0)) begin
+            code_rpending <= 1'b0;
         end
     end
     // Actual read port. Drive data bus for a single clock cycle per transfer.
+    reg [31:0] code_word;
     always @(posedge clk) begin
         # 0.1;
-        code_ready = (code_wstate_ctr == 0);
-        code_resp = 2'b00;         
-        code_rdata = code_ready? memory[(code_addr_reg & `RAM_BLOCK_ADDR_MASK) >> 2] :  32'h0; 
+        code_ready = code_rpending & (code_wstate_ctr == 0);
+        code_resp = 2'b00;
+        code_word = memory[(code_addr_reg & `RAM_BLOCK_ADDR_MASK) >> 2];
+        code_rdata = (code_ready & code_rpending)? code_word : 32'h0; 
     end
 
     //~~ Read/Write port connected to data bus ~~~~~~~~
@@ -265,9 +292,9 @@ module testbench;
     // Actual read port. Drive data bus for a single clock cycle per transfer.
     always @(posedge clk) begin
         # 0.1;
-        data_ready = (data_wstate_ctr == 0);
+        data_ready = data_rpending & (data_wstate_ctr == 0);
         data_resp = 2'b00;
-        if (data_wstate_ctr==0) begin
+        if (data_wstate_ctr==0)begin
             if (data_wpending) begin
                 write_data_task(data_waddr, data_wsize, data_wdata);
             end
@@ -295,6 +322,9 @@ module testbench;
             end
         end 
     end 
+
+
+    //-- Stop controls ---------------------------------------------------------
 
 
     //-- Interrupts ------------------------------------------------------------
@@ -339,8 +369,7 @@ module testbench;
         // Data from memory block goes straight into AHB bus.
         rdata = memory[(addr & `RAM_BLOCK_ADDR_MASK) >> 2];
 
-        // Now log the memory load with the non-used byte lanes zeroed.
-        //mem_rdata = read_data_mux(data_wsize, data_waddr[1:0], data_rdata);
+        // Zero the byte lanes not affected by the load.
         mem_rdata = 32'h0;
         case ({size, addr[1:0]})
         4'b0000: mem_rdata[7:0]  = rdata[31:24];   
@@ -351,9 +380,11 @@ module testbench;
         4'b0110: mem_rdata[15:0] = rdata[15: 0];
         default: mem_rdata       = rdata;            
         endcase
-        $fwrite(logfile, 
-            "(%08h) [%08h] <%1d>=%08h RD\n", 
-            mem_op_pc, addr, 2**size, mem_rdata);
+        // Save mem access info to be logged at the WBack stage.
+        mem_log_addr = addr;
+        mem_log_size = size;
+        mem_log_rdata = mem_rdata;
+        mem_log_done = 1'b0;
     end 
     endtask
 
@@ -383,7 +414,8 @@ module testbench;
         4'b0110: wdata[15: 0] = data[15: 0];
         4'b0100: wdata[31:16] = data[31:16];
         default: wdata        = data;
-        endcase        $fwrite(logfile,
+        endcase
+        $fwrite(logfile,
             "(%08h) [%08h] <%1d>=%08h WR\n", mem_op_pc, addr, 2**size, wdata);
     end
     endtask
