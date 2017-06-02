@@ -294,6 +294,7 @@ module testbench;
         # 0.1;
         data_ready = data_rpending & (data_wstate_ctr == 0);
         data_resp = 2'b00;
+        data_rdata = 32'h0;
         if (data_wstate_ctr==0)begin
             if (data_wpending) begin
                 write_data_task(data_waddr, data_wsize, data_wdata);
