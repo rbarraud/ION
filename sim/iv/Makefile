@@ -42,7 +42,7 @@ CC_NORMAL = "\033[0m"
 # source files for CPU and CPU+cache+TCM.
 RTL_SOURCES = $(RTLDIR)/testbench/tb_cpu.v $(RTLDIR)/rtl/cpu.v
 
-# MAcros passed on to the TB.
+# Macros passed on to the TB.
 RTL_MACROS = -D WAIT_STATES=$(WAITS)
 
 #-------------------------------------------------------------------------------
