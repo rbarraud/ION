@@ -18,6 +18,56 @@ In this project I'm aiming at a brand new MIPS32r1 implementation which will sha
 This is a work in progress. There's only a basic Verilog implementation of a canonic 5-stage pipeline, along with a crude test bench and a similarly basic 'opcode tester' program. Development will advance as leisure time permits and will be tracked in the [wiki page](https://github.com/jaruiz/ION/wiki).
 
 
+Quick Start
+-----------
+
+There's a makefile that will run tests on the RTL core and/or on a software simulator or 'iss' which is part of this project.  
+I'm sure it all will be self-evident to you as you look at the makefile but let me explain how the test scheme is meant to work -- it's the only piece of the project that actually does anything at this moment.
+
+### 1. Build the ISS that comes with this project.
+
+
+This project ships with an Instruction Set Simulator (ISS) meant to be used as a golden model in the tests. It's a simple application with few dependencies and with any luck will build as-is in any machine that has gcc:
+
+```
+cd ./tools/ionsim32
+make all
+```
+
+Except for a few warnings, that's should do it. The executable should be at `./tools/ionsim32/ionsim32` ready for use.
+
+### 2. Run the main test case 'cputest'.
+
+Just `cd` to directory `./sim/iv` and run `make all TEST=cputest`. 
+
+The name of the test must be one of the directories within `./sw` and by default `TEST=cputest`.  Test `cputest` is the main test case, an opcode tester.
+
+_As it happens, that's the only test that works right now. Please ignore the others!_
+
+Now, for that to work you will need Icarus Verilog on your path. And you will also have to edit the makefile a bit: you need to put in makefile fragment `./sw/Toolchain.mk` the path to a MIPS toolchain which will be invoked to build the test programs.
+
+As you can see in my makefile, I am using a recent-ish version of Buildroot's toolchain. I haven't tried any other recently  but any gcc-based toolchain that's not too old should work, the tests use no feature out of the ordinary.
+
+### 3. Take a look at the console output and the execution log files.
+
+The test makefile will do all of this for a given test program:
+
+1. Build the test program, in this case `./sw/cputest`, by invoking its makefile.
+2. Run the program on the ISS.
+3. Run the program on the simulated RTL using a simplistic TB that looks like the ISS to the SW.
+
+Now, both the ISS and the RTL simulation will output what I have called _execution logs_: a text file that contains a line for each change to the CPU state. Both files end up in the simulation directory:
+
+* `/sim/iv/rtl_sim_log.txt`
+* `/sim/iv/sw_sim_log.txt`
+
+You see where I'm going here. The makefile will compare the log files and declare the test `PASSED` only if the logs match.
+
+The opcode tester program `cputest` also has a minimal self-checking ability so it would be able to catch some errors even without the ISS. But the idea here is that we'll run every test against both platforms.
+
+Of course, this means the RTL will only be as good as the golden model. But given that the code for the ISS is a modified version of the ISS supplied with the PLASMA project that I lifted whole, I have a lot of confidence in it.
+
+
 Status
 ------
 
