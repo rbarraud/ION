@@ -40,9 +40,9 @@ Except for a few warnings, that's should do it. The executable should be at `./t
 
 Just `cd` to directory `./sim/iv` and run `make all TEST=cputest`. 
 
-The name of the test must be one of the directories within `./sw` and by default `TEST=cputest`.  Test `cputest` is the main test case, an opcode tester.
+The name of the test must be one of the directories within `./sw` and by default `TEST=cputest`.  Test `cputest` is the main test case, an opcode tester; or the _skeleton_ of what will some day be an opcode tester. Instructions are tested by instantiating them and having their output checked with the help of a bunch of macros, as usual, but right now most instructions are 'tested' with a single instruction instance...
 
-_As it happens, that's the only test that works right now. Please ignore the others!_
+_Anyway, the opcode tester is the only test that builds and runs right now. Please ignore the others!_
 
 Now, for that to work you will need Icarus Verilog on your path. And you will also have to edit the makefile a bit: you need to put in makefile fragment `./sw/Toolchain.mk` the path to a MIPS toolchain which will be invoked to build the test programs.
 
