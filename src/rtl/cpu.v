@@ -16,7 +16,8 @@
         - COP0 & supervisor mode stuff partially implemented.
         - Interrupt logic partially implemented.
         - Many instructions missing.
-        - No support for wait states in code or data buses.
+        - Buggy support for wait states in data bus...
+        - ...and support for code waits is shaky.
 
     I started this module as a minimal riscv implementation. I've morphed it
     into a MIPS32 but many riscv traces remain, mostly around COP0 registers
