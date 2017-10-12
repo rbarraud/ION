@@ -107,20 +107,20 @@ module cpu
 
     //==== Register macros -- all DFFs inferred using these ====================
 
-    // Pipeline reg. Has enable for stalls.
+    // Pipeline reg. Input st is load enable for stalls.
     `define PREG(st, name, resval, enable, loadval) \
         always @(posedge CLK) \
-            if (RESET_I) \
+            if (RESET_I) /* enable ignored. */ \ 
                 name <= resval; \
-            else if(enable & ~st) \
+            else if(~st) \
                 name <= loadval;
 
-    // Same as PREG but gets RESET when the stage is bubbled.
+    // Same as PREG but gets RESET when the stage is bubbled -- even if stalled.
     `define PREGC(st, name, resval, enable, loadval) \
         always @(posedge CLK) \
             if (RESET_I || ~enable) \
                 name <= resval; \
-            else if(enable & ~st) \
+            else if(~st) \
                 name <= loadval;
 
     // COP0 reg. Load ports for MTC0 writebacks AND traps.
@@ -199,7 +199,7 @@ module cpu
 
     // Fetch address mux: sequential or non sequential.
     always @(*) begin
-        s0_en = ~RESET_I & ~co_s0_bubble;
+        s0_en = ~RESET_I & ~co_s0_bubble; // See @note11.
         s0_pc_fetch = s2_go_seq? s01r_pc_seq : s2_pc_nonseq;
         // A new cycle is started whenever this stage is enabled and it is 
         // terminated whenever CREADY comes high.
@@ -214,7 +214,7 @@ module cpu
     `PREG (s0_st, s01r_pending, 0, 1, s0_pending)
 
     // FA-FD pipeline registers.
-    `PREG (s0_st,  s01r_en, 1'b1, 1'b1, s0_en)
+    `PREG (s0_st, s01r_en, 1'b1, 1'b1, s0_en)
     `PREG (s0_st, s01r_pc, OPTION_RESET_ADDR-4, s0_en, s0_pc_fetch)
     `PREG (s0_st, s01r_pc_seq, OPTION_RESET_ADDR, s0_en, s0_pc_fetch + 4)
 
@@ -685,6 +685,8 @@ module cpu
     reg [31:0] s3_alu_logic;    // Logic intermediate result.
     reg [31:0] s3_alu_shift;    // Shift intermediate result.
     reg [31:0] s3_alu_noarith;  // Mux for shift/logic interm-results.
+    reg s3_mem_pending;         // Data bus cycle pending. 
+    reg s34r_mem_pending;       // Data bus cycle pending.
 
     // DATA AHB outputs driven directly by S2/3 pipeline registers.
     assign DADDR_O = s23r_mem_addr;
@@ -695,7 +697,10 @@ module cpu
     // Stage bubble logic.
     always @(*) begin
         s3_en = s23r_en;
+        s3_mem_pending = (s23r_load_en | s23r_store_en) | (s34r_mem_pending & ~DREADY_I);
     end
+    // Remember if there's a bus cycle in progress. 
+    `PREG (1'b0, s34r_mem_pending, 0, 1, s3_mem_pending)
 
     // ALU.
     always @(*) begin
@@ -759,19 +764,30 @@ module cpu
     reg [4:0] s4_excode;        // Cause code to load in MCAUSE CSR.
     reg [16:0] s4_cause_trap;   // Value to load on packed CAUSE reg on traps.
     reg [12:0] s4_status_trap;  // Value to load on MSTATUS CSR on trap.
+    reg [31:0] s4r_drdata;
+    reg s4_mem_truncated;
+    reg s42r_mem_truncated;
 
     assign DWDATA_O = s34r_mem_wdata;
+
+    always @(*) begin
+        s4_mem_truncated = s4_st & DREADY_I; 
+        s4r_drdata = s42r_mem_truncated? s12r_irs : DRDATA_I;
+    end
+
+    `PREG (1'b0, s4r_drdata, 32'h0, s4_mem_truncated & ~s42r_mem_truncated, DRDATA_I)
+    `PREG (1'b0, s42r_mem_truncated, 1'b0, 1'b1, s4_mem_truncated)
 
     // Mux for load data byte lanes.
     always @(*) begin
         case ({s34r_mem_size, s34r_mem_addr})
-        4'b0011: s4_load_data = DRDATA_I[7:0];
-        4'b0010: s4_load_data = DRDATA_I[15:8];
-        4'b0001: s4_load_data = DRDATA_I[23:16];
-        4'b0000: s4_load_data = DRDATA_I[31:24];
-        4'b0110: s4_load_data = DRDATA_I[15:0];
-        4'b0100: s4_load_data = DRDATA_I[31:16];
-        default: s4_load_data = DRDATA_I;
+        4'b0011: s4_load_data = s4r_drdata[7:0];
+        4'b0010: s4_load_data = s4r_drdata[15:8];
+        4'b0001: s4_load_data = s4r_drdata[23:16];
+        4'b0000: s4_load_data = s4r_drdata[31:24];
+        4'b0110: s4_load_data = s4r_drdata[15:0];
+        4'b0100: s4_load_data = s4r_drdata[31:16];
+        default: s4_load_data = s4r_drdata;
         endcase
         if (~s34r_load_exz) begin
             case (s34r_mem_size)
@@ -785,7 +801,7 @@ module cpu
         s4_en = s34r_en;
         // FIXME ready/split ignored
         s4_wb_data = s34r_load_en? s4_load_data : s34r_alu_res;
-        // FIXME traps caught in WB stage missing.
+        // TODO traps caught in WB stage missing.
         s4_excode = s34r_excode;
     end
 
@@ -841,7 +857,8 @@ module cpu
     reg co_s2_stall_load;       // Decode stage stall, by load hazard.
     reg co_s2_stall_trap;       // Decode stage stall, SW trap.
     reg co_s012_stall_eret;     // Stages 0..2 stall, ERET.
-    reg co_sx_code_wait;
+    reg co_sx_code_wait;        // Code fetch stall.
+    reg co_sx_data_wait;        // Data cycle stall.
 
 
     // TODO this block will be tidied up when the logic is done.
@@ -860,23 +877,25 @@ module cpu
         co_s2_stall_load = (co_dhaz_rs1_ld | co_dhaz_rs2_ld);
         // Stall S0..2 until trap bubble propagates from to S4. @note3.
         co_s2_stall_trap = s23r_trap & s4_en;
-        // Stall & bubble S0..2 until eret bubble propagates to S4. @note4.
+        // Stall S0..2 & bubble S3..4 until eret bubble propagates to S4. @note4.
         co_s012_stall_eret = s23r_eret & s4_en;
-
+        // Stall S0..2 & bubble S3..4 while code bus is waited.
         co_sx_code_wait = s01r_pending & ~CREADY_I;
 
+        co_sx_data_wait = s34r_mem_pending & ~DREADY_I;
 
-        // S2 will bubble on load, trap and eret stalls.
+        // See @note11 on bubbles vs. stalls.
+        // S2 will bubble on load, trap and eret stalls, and on fetch waits.
         co_s2_bubble = co_s2_stall_load | co_s2_stall_trap | co_s012_stall_eret | co_sx_code_wait;
         // S1 will bubble on eret and trap stalls AND when the next seq instruction
-        // needs to be skipped for other reasons. @note8;
+        // needs to be skipped for other reasons. @note8.
         co_s1_bubble = co_s2_stall_trap | co_s012_stall_eret | s2_skip_seq_instr;
-        // S0 does not bubble for now.
-        co_s0_bubble = 1'b0;
+        // S0 bubbles (won't initiate new code fetches) on data waits only. 
+        co_s0_bubble = co_sx_data_wait; // @@@ IN-PROGRESS
 
         // Stall logic. A bunch of OR gates whose truth table is declared 
-        // procedurally, please note the order of the assignments.
-        s4_st = 1'b0;
+        // procedurally, please note the order of the assignments. See @note10.
+        s4_st = 1'b0  | co_sx_data_wait;
         s3_st = s4_st;
         s2_st = s3_st | co_s012_stall_eret | co_s2_stall_load | co_s2_stall_trap | co_sx_code_wait;
         s1_st = s2_st;
@@ -886,7 +905,7 @@ module cpu
 
 endmodule // cpu
 
-// FIXME extract notes
+// FIXME extract notes to documentation & elaborate.
 // @note1 -- The cycle after a load-hazard-stall we load IR with the value we
 //           saved during the stall cycle, NOT from the code bus.
 // @note2 -- No traps on arith overflow implemented so ADD==ADDU.
@@ -906,3 +925,9 @@ endmodule // cpu
 // @note8 -- Which bubbles the instruction after ERET, SYSCALL or BREAK. 
 // @note9 -- Relies on the fact that 0x0 is a NOP opcode. So when stage 1 is 
 //           bubbled, IR is cleared to NOP.
+// @note10-- If stage N is stalled (sN_st==1), pipeline registers between N 
+//           and N+1 are prevented from changing -- the stage keeps its state. 
+//           Some regs are excepted, e.g. those dealing with AHB reads.
+// @note11-- If stage N is disabled (sN_en==0) it work as if it had a NOP 
+//           in it -- a bubble. AHB control signals are deasserted too. 
+//           A stage can be stalled and not disabled and viceversa.
