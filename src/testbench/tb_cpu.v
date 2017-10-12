@@ -31,8 +31,10 @@
     0xffff8018      Test outcome. Write anything to end test.
 
 
-    TODO Interrupt simulation register missing.
+    TODO Interrupt simulation register missing. Interrupts not simulated at all.
     TODO Test outcome criteria & console output explanation missing.
+    TODO AHB models needed.
+    TODO Very messy code.
 */
 
 `timescale 1 ns / 1 ps
@@ -75,9 +77,10 @@ module testbench;
 
     // TODO For the time being, both buses will have the same wait state config
     // and both will have the same # of ws in all cycles.
-    localparam CODE_WAIT_STATES = `WAIT_STATES;
-    // TODO And data bus does not have any wait states.
-    localparam DATA_WAIT_STATES = 0;//`WAIT_STATES;
+    // TODO code waits work in isolation; disabled while working on data waits.
+    localparam CODE_WAIT_STATES = 0;//`WAIT_STATES;
+    // FIXME data waits broken, will work only with WAIT_STATES==0
+    localparam DATA_WAIT_STATES = `WAIT_STATES;
 
 
     reg clk = 1;
@@ -217,9 +220,8 @@ module testbench;
 
     //~~ Read port connected to code bus ~~~~~~~~~
 
-    integer code_wstate_ctr;
-    reg [31:0] code_addr_reg;
     // Wait state counter.
+    integer code_wstate_ctr;
     always @(posedge clk) begin
         if (reset) begin
             code_wstate_ctr <= 0;          
@@ -234,6 +236,7 @@ module testbench;
         end
     end
     // Address register (code bus is AHB-alike).
+    reg [31:0] code_addr_reg;
     always @(posedge clk) begin
         if (reset) begin
             code_addr_reg <= 32'h0;
@@ -259,73 +262,122 @@ module testbench;
 
     //~~ Read/Write port connected to data bus ~~~~~~~~
 
+    // TODO This is veramente orrendo, maybe use some regular AHB models here.
+
     integer data_wstate_ctr;
-    reg [31:0] data_addr_reg;
-    // Wait state counter.
+    reg data_write_valid;
+
+    // Register state of AHB master port and relevant CPU internal signals at 
+    // the time a cycle is initiated. 
+    // We need to log data cycles so this bus will need extra cruft.
     always @(posedge clk) begin
-        #0.1;
         if (reset) begin
-            data_wstate_ctr <= 0;
             mem_op_pc <= 32'h0;
-            data_addr_reg <= 32'h0;
+            data_ready <= 1'b1;
+            data_wpending <= 1'b0;
+            data_rpending <= 1'b0;
+            data_rdata <= 32'h0;
         end
         else begin
-            if ((data_trans == 2'b10) && (data_wstate_ctr==0)) begin
-                data_wstate_ctr <= DATA_WAIT_STATES;
-                mem_op_pc <= s23r_pc;
-                data_wpending <= data_write;
-                data_rpending <= ~data_write;
+            if ((data_trans == 2'b10) && (data_ready == 1'b1)) begin
+                mem_op_pc <= data_write? s34r_pc : s23r_pc;
+                data_wpending <= (DATA_WAIT_STATES != 0) & data_write;
+                data_rpending <= (DATA_WAIT_STATES != 0) & ~data_write;
                 data_waddr <= data_addr;
                 data_wsize <= data_size;
-                mem_op_pc <= s23r_pc; 
-                data_addr_reg <= data_addr; 
+                // Ready next cycle unless wait states.
+                data_ready <= (DATA_WAIT_STATES == 0);
+                // If no wait states then let data come on the next clock cycle.
+                if (DATA_WAIT_STATES == 0) begin
+                    if (~data_write) begin
+                        if (data_write_valid && data_waddr==data_addr) begin
+                            // The memory word we're reading is about to be 
+                            // written by the previous write cycle. 
+                            // So just read the new data for simplicity.
+                            // A real memory interconnect would insert wait 
+                            // states here but we don't need to and we deal with 
+                            // waits separately anyway.
+                            data_rdata = data_wdata;
+                        end
+                        else begin 
+                            // Otherwise data goes straight from array to AHB.
+                            // Block mirrored like you do.
+                            data_rdata = memory[(data_addr & `RAM_BLOCK_ADDR_MASK) >> 2];
+                        end 
+                        log_read_data_task(data_addr, data_size, data_rdata);
+                    end
+                end
             end
-            else if (data_wstate_ctr > 0) begin
-                data_wstate_ctr <= data_wstate_ctr - 1;
-            end  
-            else begin
+            else if (data_wstate_ctr == 1) begin
+                // Last clock cycle of wait. Wind down wait state signals.
+                data_ready <= 1'b1;
                 data_wpending <= 1'b0;
                 data_rpending <= 1'b0;
+                // Read data to arrive next cycle.
+                if (data_rpending) begin
+                    data_rdata = memory[(data_waddr & `RAM_BLOCK_ADDR_MASK) >> 2];
+                    log_read_data_task(data_waddr, data_wsize, data_rdata);
+                end
             end
-        end
-    end
-    // Actual read port. Drive data bus for a single clock cycle per transfer.
-    always @(posedge clk) begin
-        # 0.1;
-        data_ready = data_rpending & (data_wstate_ctr == 0);
-        data_resp = 2'b00;
-        data_rdata = 32'h0;
-        if (data_wstate_ctr==0)begin
-            if (data_wpending) begin
-                write_data_task(data_waddr, data_wsize, data_wdata);
-            end
-            else if (data_rpending) begin
-                read_data_task(data_waddr, data_wsize, data_rdata);
+            else begin
+                // Only drive read bys one clock cycle per memory cycle.
+                // Idle bus state is all zeros.
+                data_rdata <= 32'h0;
             end
         end
     end
 
-    //~~ Simulated I/O on data bus ~~~~~~~~
+    // Write port.
     always @(posedge clk) begin
-        if (data_trans == 2'b10 && data_write==1'b1) begin
-            // Simulated console output register.
-            if (data_addr == `IO_CON_OUT) begin
-                #1;
-                $fwrite(confile, "%c", data_wdata[31:24]);    
-                $write("%c", data_wdata[31:24]);
-                $fflush();
+        if (reset) begin
+            data_write_valid <= 1'b0;
+        end
+        else begin
+            if ((data_trans == 2'b10) && (data_ready == 1'b1)) begin
+                data_write_valid <= data_write;
+            end 
+            else begin
+                data_write_valid <= 1'b0;
             end
-            // Simulated test outcome register.
-            if (data_addr == `IO_TERMINATE) begin
-                #1;
-                $display("Simulation terminated by SW command.");
-                $finish;
+            if (data_write_valid) begin
+                // Perform the write right now regardless of wait states.
+                // We'll still wait the cycle but we need not simulate the 
+                // delay in actually putting the data on the memory array.
+                write_data_task(data_waddr, data_wsize, data_wdata);
+
+                // Simulate writes to TB output registers.
+                // TODO move this stuff to a task.
+                // Simulated console output register.
+                if (data_waddr == `IO_CON_OUT) begin
+                    $fwrite(confile, "%c", data_wdata[31:24]);    
+                    $write("%c", data_wdata[31:24]);
+                    $fflush();
+                end
+                // Simulated test outcome register.
+                if (data_waddr == `IO_TERMINATE) begin
+                    $display("Simulation terminated by SW command.");
+                    $finish;
+                end
+
             end
         end 
     end 
 
-
-    //-- Stop controls ---------------------------------------------------------
+    // Wait state counter for data bus.
+    always @(posedge clk) begin
+        if (reset) begin
+            data_wstate_ctr <= 0;
+        end
+        else begin
+            if ((data_trans == 2'b10) && (data_ready == 1'b1)) begin
+                // Reload counter at start of new cycle.
+                data_wstate_ctr <= DATA_WAIT_STATES;
+            end
+            else if (data_wstate_ctr > 0) begin
+                data_wstate_ctr <= data_wstate_ctr - 1;
+            end  
+        end
+    end
 
 
     //-- Interrupts ------------------------------------------------------------
@@ -364,13 +416,10 @@ module testbench;
 
     //-- Utility tasks ---------------------------------------------------------
 
-    task read_data_task([31:0] addr, [1:0] size, output [31:0] rdata);
+    task log_read_data_task([31:0] addr, [1:0] size, [31:0] rdata);
     reg [31:0] mem_rdata;
     begin
-        // Data from memory block goes straight into AHB bus.
-        rdata = memory[(addr & `RAM_BLOCK_ADDR_MASK) >> 2];
-
-        // Zero the byte lanes not affected by the load.
+        // In the log file, zero the byte lanes not affected by the load.
         mem_rdata = 32'h0;
         case ({size, addr[1:0]})
         4'b0000: mem_rdata[7:0]  = rdata[31:24];   
