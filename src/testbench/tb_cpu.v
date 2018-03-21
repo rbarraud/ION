@@ -69,6 +69,10 @@
 `ifndef WAIT_STATES
 `define WAIT_STATES 0
 `endif
+// Visual 'mark' address defaults to default exception address.
+`ifndef MARK
+`define MARK (32'hbfc00180)
+`endif
 
 
 //------------------------------------------------------------------------------
@@ -78,9 +82,9 @@ module testbench;
     // TODO For the time being, both buses will have the same wait state config
     // and both will have the same # of ws in all cycles.
     // TODO code waits work in isolation; disabled while working on data waits.
-    localparam CODE_WAIT_STATES = 0;//`WAIT_STATES;
+    localparam CODE_WAIT_STATES = `WAIT_STATES;
     // FIXME data waits broken, will work only with WAIT_STATES==0
-    localparam DATA_WAIT_STATES = `WAIT_STATES;
+    localparam DATA_WAIT_STATES = 0;//`WAIT_STATES;
 
 
     reg clk = 1;
@@ -197,7 +201,7 @@ module testbench;
     // Waveform display visual aid: mark passage over some address.
     reg mark;
     always @(*) begin
-        mark = uut.s01r_pc == 32'hbfc001e4;
+        mark = uut.s01r_pc == `MARK;
     end
 
     // Waveform display visual aid: cycle count reference.

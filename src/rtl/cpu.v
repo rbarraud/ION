@@ -60,7 +60,8 @@ module cpu
         input               DREADY_I,
         input       [1:0]   DRESP_I,
 
-        input       [4:0]   HWIRQ_I
+        input       [4:0]   HWIRQ_I,
+        input               STALL_I
     );
 
     //==== Local parameters ====================================================
@@ -111,7 +112,7 @@ module cpu
     // Pipeline reg. Input st is load enable for stalls.
     `define PREG(st, name, resval, enable, loadval) \
         always @(posedge CLK) \
-            if (RESET_I) /* enable ignored. */ \ 
+            if (RESET_I) /* enable ignored. */ \
                 name <= resval; \
             else if(~st) \
                 name <= loadval;
@@ -773,7 +774,7 @@ module cpu
 
     always @(*) begin
         s4_mem_truncated = s4_st & DREADY_I; 
-        s4r_drdata = s42r_mem_truncated? s12r_irs : DRDATA_I;
+        //s4r_drdata = s42r_mem_truncated? s12r_irs : DRDATA_I;
     end
 
     `PREG (1'b0, s4r_drdata, 32'h0, s4_mem_truncated & ~s42r_mem_truncated, DRDATA_I)
