@@ -1,0 +1,17 @@
+*.o
+*.lst
+*.hex
+*.ghw
+*.csv
+*.bin
+*.elf
+*.exe
+*.vcd
+*.gtkw
+*.map
+*.sublime*
+tools/ion32sim/bin
+sim/iv/*.txt
+local/*
+*.cf
+syn/generic_vivado/zynq_demo
