@@ -42,8 +42,6 @@ Just `cd` to directory `./sim/iv` and run `make all TEST=cputest`.
 
 The name of the test must be one of the directories within `./sw` and by default `TEST=cputest`.  Test `cputest` is the main test case, an opcode tester; or the _skeleton_ of what will some day be an opcode tester. Instructions are tested by instantiating them and having their output checked with the help of a bunch of macros, as usual, but right now most instructions are 'tested' with a single instruction instance...
 
-_Anyway, the opcode tester is the only test that builds and runs right now. Please ignore the others!_
-
 Now, for that to work you will need Icarus Verilog on your path. And you will also have to edit the makefile a bit: you need to put in makefile fragment `./sw/Toolchain.mk` the path to a MIPS toolchain which will be invoked to build the test programs.
 
 As you can see in my makefile, I am using a recent-ish version of Buildroot's toolchain. I haven't tried any other recently  but any gcc-based toolchain that's not too old should work, the tests use no feature out of the ordinary.
@@ -71,10 +69,9 @@ Of course, this means the RTL will only be as good as the golden model. But give
 Status
 ------
 
-While the project is a work in progress in a very early stage of development, there's already a basic version of the CPU capable of passing an equally basic CPU opcode test (`sw/cputest`).
+While the project is a work in progress in a very early stage of development, there's already a basic version of the CPU capable of passing an equally basic CPU opcode test (`sw/cputest`) -- _or not; I've been tinkering with the stall/FFWD logic and it may be broken_.
 
 There's a _test driver makefile_ in `sim/iv` that makes use of Icarus Verilog to simulate the RTL. It'll run a given SW test on the RTL simulation and on the ISS (`tools/ion32sim`, part of this project) and match the execution logs. This makes for a very easy development flow.
 
 Apart from Icarus Verilog, youl'll need a MIPS32r1 toolchain to play with this _unmodified_ testbench. I'm using a recent version of [BuildRoot](https://buildroot.org/)'s.
 
-Note that while the old RTL from a previous, abandoned version of this project has been deleted from the repo I still haven't deleted the old test SW and other bits and pieces. The only sw test useable right now is `sw/cputest`.
